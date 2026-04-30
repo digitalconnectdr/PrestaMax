@@ -22,8 +22,7 @@ import {
 initializeDatabase();
 
 // Auto-seed if database is empty (first run on a new machine)
-// SOLO en desarrollo. En producción la DB nueva debe quedar vacía y los
-// usuarios reales se registran via /api/auth/register-tenant.
+// SOLO en desarrollo. En produccion la DB nueva debe quedar vacia.
 async function autoSeedIfEmpty() {
   if (process.env.NODE_ENV === 'production') {
     return;
@@ -48,10 +47,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// Trust proxy (Render / reverse proxies)
 app.set('trust proxy', 1);
 
-// ── HELMET: Security headers ─────────────────────────────────────────────────
 const FRONTEND_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 app.use(helmet({
@@ -75,7 +72,6 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
-// ── CORS: strict origin whitelist ────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
   FRONTEND_ORIGIN,
   'https://prestamax.com',
@@ -95,10 +91,8 @@ app.use(cors({
   exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
 }));
 
-// ── RATE LIMITING: tiered per endpoint type ──────────────────────────────────
 const rateLimitMsg = { error: 'Demasiadas solicitudes. Intenta mas tarde.' };
 
-// Global: 300 req / 15 min per IP  (down from 1000 — stops DDoS / bulk scraping)
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -108,7 +102,6 @@ const globalLimiter = rateLimit({
   skip: (req) => req.path === '/health',
 });
 
-// Auth: 15 attempts / 15 min  (stops brute-force on login)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 15,
@@ -117,7 +110,6 @@ const authLimiter = rateLimit({
   message: { error: 'Demasiados intentos de acceso. Espera 15 minutos e intenta de nuevo.' },
 });
 
-// Register: 5 new accounts / hour  (stops mass account creation)
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -126,7 +118,6 @@ const registerLimiter = rateLimit({
   message: { error: 'Limite de registros alcanzado. Intenta en 1 hora.' },
 });
 
-// Admin panel: 100 req / 15 min
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -135,7 +126,6 @@ const adminLimiter = rateLimit({
   message: rateLimitMsg,
 });
 
-// Bulk export / import: 20 req / 15 min  (stops data harvesting)
 const bulkLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -144,7 +134,6 @@ const bulkLimiter = rateLimit({
   message: { error: 'Limite de exportacion alcanzado. Intenta en 15 minutos.' },
 });
 
-// Apply tiered limits BEFORE routes
 app.use('/api/auth/login',           authLimiter);
 app.use('/api/auth/register-tenant', registerLimiter);
 app.use('/api/auth/change-password', authLimiter);
@@ -152,29 +141,27 @@ app.use('/api/admin',                adminLimiter);
 app.use('/api/loans/import',         bulkLimiter);
 app.use('/api/',                     globalLimiter);
 
-// ── REQUEST PARSING (strict size limits) ─────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// ── SECURITY MIDDLEWARE STACK ─────────────────────────────────────────────────
-app.use(auditLogger);            // Log unusual HTTP methods
-app.use(blockKnownBots);         // Block scanning tools & known bad UAs
-app.use(sanitizeInputs);         // Strip null bytes, prototype pollution
-app.use(detectMaliciousPayload); // Flag SQL injection / XSS patterns
+app.use(auditLogger);
+app.use(blockKnownBots);
+app.use(sanitizeInputs);
+app.use(detectMaliciousPayload);
 
-// ── HTTP LOGGING ──────────────────────────────────────────────────────────────
 app.use(morgan(IS_PROD ? 'combined' : 'dev'));
 
-// ── ROUTES ────────────────────────────────────────────────────────────────────
 app.use('/api', router);
 
-// ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// ── ERROR HANDLER ─────────────────────────────────────────────────────────────
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`Pre
+  console.log(`PrestaMax API running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'development'}]`);
+  console.log('Security: Helmet + Rate limits + Bot blocking + Payload sanitization active');
+});
+
+export default app;
