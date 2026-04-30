@@ -1,0 +1,14 @@
+Este archivo esta en la carpeta correcta del proyecto PestaMax.
+
+Para encontrar la ruta completa en Windows:
+1. Haz clic derecho sobre esta carpeta en el Explorador de Windows
+2. Selecciona "Propiedades"
+3. Copia la ruta que aparece en "Ubicacion"
+
+La estructura del proyecto es:
+[Esta carpeta - Proyecto Sistema de Prestamos]
+   └── prestamax\
+         ├── backend\     <-- API Node.js
+         ├── frontend\    <-- App React
+         ├── 1-INSTALAR.bat
+         └── 2-INICIAR-WINDOWS.bat

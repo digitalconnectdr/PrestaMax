@@ -1,0 +1,20 @@
+
+
+# Terminal 1 - Instalar y arrancar backend
+cd backend
+npm install
+npx ts-node-dev --respawn --transpile-only src/index.ts
+
+
+
+# Terminal 2 (nueva terminal con el botón +)
+cd frontend
+npm install --legacy-peer-deps
+npx vite --port 5173
+
+
+
+bre PestaMax en tu navegador: → http://localhost:5173
+Email: admin@prestamax.com
+Contraseña: Admin123!
+

@@ -1,0 +1,465 @@
+
+quiero que me ayudes en un nuevo proyecto, necesito crear un software, puede ser una pagina web, optimizada para usarse tambien desde telefonos android y Apple donde se puedan manejar prestamos personales, prestamos tipo san, prestamos comerciales, prestamos con garantia. quiero que el sistema tenga diferentes modulos para el manejo de cada proceso, donde tambin se puedan registrar pagos, emitir recibos, emision de contrato de prestamos, cartas de saldos automaticas, envios de mensajes por whatsapp, captura de datos del cliente, y todos los detalles que impliquen el proceso. tambien quiero que tomes en cuenta, que el sistema debe estar preparado, para yo poderlo vender por suscripcion a prestamistas, integrarlo con stripe para cobrarles y que ellos manejen sus datos de forma separada a otros prestamistas y que ellos tambien puedan agregar a sus crobradores, para que realicen las funciones dentro del sistema que ellos les asignen, como emision de comprobantes de pago, realizar pagos y demas funciones. | Quiero que el sistema tenga un score donde se clasifique al cliente en funcion de sus pagos, puede ser una categoria del 1 al 5, donde 1 sea lo menos y 5 el puntaje mas alto. | Tambien quiero que tomes en cuenta prestamos por reditos, y que se calcule la mora en funcion de los dias que hayan pasado segun su fecha de corte o su fecha de pago | tambien considerar rebajas al prestamo si el cliente paga su totalidad del prestamo antes de la fecha acordada | Antes de empezar a poner un solo codigo, quiero que me diseñes el sistema, para ir viendo como va quedando, y asi cualquier mejora la modificamos, y ya cuando tengamos todo el diseño listo, entonces trabajamos en el software. Ten en cuenta que quiero que lo trabajemos con supabase + render. | Quiero que el sistema sea seguro a nivel de ciberseguridad para evitar hakeos. | tambien quiero que me des sugerencia de 5 nombres para colocarle al sistema, que sean cortos, llamativos y facil de recordar | Tomar en cuenta estos puntos tambien: 
+1- El score debe tener dos opciones elegibles por el prestamista (global o configurable por prestamista).
+2- El recibo solo es para tener validez operativa.
+3- El contrato debe tener dos opciones de firma (físicamente y digitalmente), que sea seleccionable por el prestamista. 
+4- Un usuario puede pertenecer a más de un prestamista. ya que los prestamistas funcionan como empresas separadas aun dentro de la aplicacion. 
+5- Cada prestamista tendrá una sucursal o suscripcion, donde en ella podra agregar los cobradores y asignarles clientes para la gestion individual. 
+6- Tomar en cuenta que quiero que el sistema tengra 4 planes para poder venderlos a los prestamistas, estos deben ser configurables por capacidad de accesos del sistema, cantidad de cobradores que se le permita tener, y cantidad de clientes. 
+7- Calcular el exceso de tiempo que tenga un prestamo, ejemplo si al cliente Juan, se le otorgo un prestamo para finalizar en 11 meses, pero Juan no ha pagado su totalidad de cuotas, y solo ha pagado intereses, y pasan 5 meses, luego de la fecha final calculada, se debe colocar un recargo por el tiempo en atraso que se tenga, puede ser calculado por dias. 
+
+|||| 
+
+quiero que trabajes en el proyecto, lo desarrolles pero hazlo en un entorno local primero para verlo y comprobar su funcionamiento y luego lo pasamos a supabase y render. Quiero que lo desarrolles completo. tambien te voy a pasar una estructura, para que la revises y compares con la que tienes y hagas el mejor trabajo posible. cuida cada detalle y quiero que el sistema se vea muy profesional e impecable. Me gusta como nombre del sistema "PestaMax"
+
+Nivel de separación
+Cada registro de negocio llevará un tenant_id.
+
+Ejemplo:
+
+clientes
+préstamos
+pagos
+contratos
+recibos
+cobradores
+sucursales
+reportes
+plantillas
+
+Todo lo financiero y documental estará filtrado por tenant_id.
+
+---------------------------
+
+Tipos de usuario de plataforma
+
+Plataforma
+platform_owner: dueño del SaaS
+platform_admin: administración global
+platform_support: soporte con acceso restringido y auditado
+
+Dentro de cada prestamista
+tenant_owner: dueño del prestamista
+tenant_admin: administrador general
+branch_manager: responsable de sucursal
+loan_officer: crea y gestiona préstamos
+cashier: registra pagos y emite recibos
+collector: cobrador
+collections_supervisor: supervisor de cobranzas
+viewer_auditor: solo lectura / auditoría
+Tener la opcion de agregar mas de una funcion a un usuario, ejemplo, loan_officer+cashier. Que sea el platform_admin quien asigne los roles de su equipo. 
+
+Regla organizacional clave
+Un mismo usuario puede pertenecer a más de un prestamista.
+La relación usuario-empresa debe manejarse mediante una tabla de membresías.
+Cada membresía define: empresa, sucursal, rol, permisos y estado.
+Un usuario puede tener rol distinto en cada empresa.
+
+-----------------------------
+
+Permisos granulares
+Además del rol base, cada empresa podrá activar permisos por módulo:
+
+ver clientes
+crear clientes
+aprobar préstamos
+desembolsar
+registrar pagos
+anular pagos
+emitir recibos
+generar contratos
+ver reportes
+administrar cobradores
+enviar WhatsApp
+editar configuración
+aplicar rebajas
+aprobar liquidación anticipada
+
+--------------------------------
+
+Módulo de configuración del prestamista
+
+Datos de empresa
+Logo
+Moneda
+Series de recibos
+Sucursales
+Cuentas de cobro
+Métodos de pago admitidos
+Políticas de mora
+Políticas de rebaja por pago anticipado
+Plantillas de contrato
+Plantillas de WhatsApp
+Categorías de garantía
+Productos de préstamo
+
+---------------------------------
+
+Módulo de clientes
+
+Ficha completa del cliente:
+datos personales
+documento de identidad
+teléfonos
+WhatsApp
+dirección
+referencias personales
+referencias laborales o comerciales
+ingresos
+actividad económica
+fotos y documentos
+consentimientos
+observaciones
+historial de préstamos
+score interno
+
+Submódulos:
+
+garantes / codeudores
+beneficiarios
+contactos alternos
+direcciones múltiples
+documentos adjuntos
+
+----------------------------------
+
+Módulo de productos de préstamo
+Aquí se define cómo funciona cada tipo de préstamo.
+
+Cada producto podrá configurar:
+
+tipo de préstamo
+monto mínimo y máximo
+tasa o rédito
+frecuencia de cobro
+plazo
+forma de amortización
+cálculo de intereses
+cálculo de mora
+días de gracia
+comisión de desembolso
+seguros / cargos opcionales
+si acepta garantía
+si requiere aprobación
+si permite pago anticipado
+política de rebaja
+
+Tipos de producto soportados:
+
+personal
+SAN configurable
+comercial
+con garantía
+por réditos
+
+Nota de diseño sobre “tipo SAN”
+
+Como este tipo puede variar entre una operación y otra, se diseñará como un producto configurable con frecuencia diaria/semanal, fórmula de cobro flexible, asignación de ruta/cobrador y reglas operativas propias.
+
+----------------------------------------
+
+Módulo de solicitud y originación
+
+Flujo:
+
+Crear solicitud
+Evaluar cliente
+Adjuntar documentos
+Validar referencias
+Definir garantía si aplica
+Calcular propuesta
+Aprobar / rechazar
+Generar contrato
+Desembolsar
+Crear plan de pagos
+
+Estados:
+
+borrador
+en revisión
+pendiente documentos
+aprobado
+rechazado
+desembolsado
+cancelado
+
+--------------------------------------
+
+Módulo de préstamos activos
+Vista del préstamo:
+
+cliente
+producto
+monto desembolsado
+saldo capital
+saldo interés
+saldo mora
+saldo total
+próxima cuota
+días de atraso
+cobrador asignado
+garantía
+historial de movimientos
+promesas de pago
+score actualizado
+
+Estados del préstamo:
+
+activo
+al día
+vencido
+en mora
+reestructurado
+liquidado
+castigado
+anulado
+
+--------------------------------------
+
+Módulo de calendario / cuotas / réditos
+
+Debe soportar distintos calendarios:
+
+diario
+semanal
+quincenal
+mensual
+personalizado
+
+Modalidades:
+
+cuota fija
+interés sobre saldo
+interés flat
+solo réditos periódicos
+réditos + capital al vencimiento
+cuota variable
+
+Para préstamos por réditos:
+
+el sistema debe permitir cobrar intereses periódicos
+el capital puede vencer al final o según regla configurable
+puede existir renovación o prórroga
+debe recalcular mora según vencimiento real del interés o del capital
+
+--------------------------------------
+
+Módulo de pagos y caja
+
+Funciones:
+
+registrar pago
+pago parcial
+pago total
+pago adelantado
+liquidación anticipada
+anular pago con autorización
+emitir comprobante / recibo
+reimprimir recibo
+dividir pago por conceptos
+registrar método de pago
+asociar cobrador / caja / sucursal
+
+Orden sugerido de aplicación del pago:
+
+mora
+cargos
+interés
+capital
+
+Este orden debe ser configurable por prestamista.
+
+Métodos de pago:
+
+efectivo
+transferencia
+depósito
+tarjeta
+link de pago (futuro)
+ajuste administrativo
+
+
+--------------------------------------
+
+Módulo de recibos
+numeración por serie
+diseño imprimible
+PDF
+envío por WhatsApp
+reimpresión
+historial
+
+Campos sugeridos:
+
+número de recibo
+fecha y hora
+cliente
+préstamo
+monto pagado
+detalle por conceptos
+usuario que registró
+cobrador
+sucursal
+observaciones
+
+--------------------------------------
+
+0 Módulo de contratos
+plantillas por producto
+variables dinámicas
+generación automática PDF
+firma física o firma digital
+opción seleccionable por prestamista
+almacenamiento en expediente del cliente
+versión de contrato emitido
+
+Modalidades de firma:
+
+firma física: contrato generado para imprimir y firmar manualmente
+firma digital: flujo electrónico con evidencia de aceptación y trazabilidad
+
+Campos sugeridos:
+
+signature_mode = physical | digital
+signed_at
+signed_by
+signature_evidence_url
+contract_version
+
+Variables típicas:
+
+nombre cliente
+identificación
+monto
+tasa
+plazo
+calendario
+garantía
+mora
+condiciones de pago anticipado
+
+--------------------------------------
+
+Módulo de cartas automáticas
+
+Tipos iniciales:
+
+carta de saldo pendiente
+carta de saldo al día
+carta de cancelación / saldo en cero
+estado de cuenta
+carta de mora
+
+Disparadores:
+
+solicitud manual
+pago total
+cierre del préstamo
+fecha programada
+
+--------------------------------------
+
+Módulo de cobranzas
+asignación de cartera por cobrador
+rutas de cobro
+promesas de pago
+notas de gestión
+pagos en calle
+historial de contacto
+alertas de mora
+vista móvil optimizada
+
+Funciones para cobrador:
+
+ver clientes asignados
+ver cuotas vencidas y próximas
+registrar pago
+emitir recibo
+registrar visita
+registrar promesa de pago
+registrar incidencia
+
+----------------------------------
+
+Módulo de WhatsApp
+
+Eventos automáticos:
+
+recordatorio antes del vencimiento
+aviso de cuota vencida
+confirmación de pago
+envío de recibo
+aviso de mora
+aviso de liquidación disponible
+envío de carta de saldo
+
+El módulo debe guardar:
+
+plantilla usada
+destinatario
+fecha/hora
+estado de envío
+respuesta del proveedor
+usuario/disparador
+
+----------------------------------
+
+Módulo de score del cliente
+Modos de score
+
+El prestamista podrá elegir entre:
+
+modo global: usa una fórmula estándar definida por la plataforma
+modo configurable por prestamista: cada empresa ajusta pesos, reglas y umbrales
+
+------------------------------------
+
+Módulo de reportes y dashboards
+cartera total
+cartera activa
+cartera vencida
+mora por rango de días
+cobros del día
+recaudación por cobrador
+préstamos colocados
+renovaciones
+clientes nuevos
+préstamos liquidados
+ingresos por intereses
+pérdidas / castigos
+productividad por usuario
+
+Filtros:
+
+fecha
+sucursal
+cobrador
+producto
+estado
+cliente
+
+-------------------------------------
+
+Módulo de auditoría
+
+Debe registrar eventos críticos:
+
+creación y edición de clientes
+aprobación de préstamo
+desembolso
+registro/anulación de pago
+emisión de recibo
+cambios de plan
+cambios de permisos
+recalculo manual
+envío de mensajes
+modificación de mora o rebaja
+
+No se deben borrar movimientos financieros: se deben reversar o anular con trazabilidad.
+
+||||
+
+
+
+
+

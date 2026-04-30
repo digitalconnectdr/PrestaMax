@@ -1,0 +1,43 @@
+import { Router } from 'express';
+import { router as authRoutes } from './auth';
+import { router as clientRoutes } from './clients';
+import loanRoutes from './loans';
+import { router as paymentRoutes } from './payments';
+import loanProductRoutes from './loanProducts';
+import { router as reportRoutes } from './reports';
+import { router as settingsRoutes } from './settings';
+import { router as receiptRoutes } from './receipts';
+import contractRoutes from './contracts';
+import collectionRoutes from './collections';
+import whatsappRoutes from './whatsapp';
+import platformRoutes from './platform';
+import incomeRoutes from './income';
+import { router as adminRoutes } from './admin';
+import loanRequestRoutes from './loanRequests';
+import publicRoutes from './public';
+import collectionTaskRoutes from './collection_tasks';
+import notificationRoutes from './notifications';
+
+export const router = Router();
+
+// Stub for external tools/extensions that poll /api/bot/state
+router.get('/bot/state', (_req, res) => res.json({ active: false }));
+
+router.use('/auth', authRoutes);
+router.use('/platform', platformRoutes);
+router.use('/clients', clientRoutes);
+router.use('/loans', loanRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/products', loanProductRoutes);
+router.use('/reports', reportRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/receipts', receiptRoutes);
+router.use('/contracts', contractRoutes);
+router.use('/collections', collectionRoutes);
+router.use('/whatsapp', whatsappRoutes);
+router.use('/income', incomeRoutes);
+router.use('/admin', adminRoutes);
+router.use('/loan-requests', loanRequestRoutes);
+router.use('/public', publicRoutes);
+router.use('/collection-tasks', collectionTaskRoutes);
+router.use('/notifications', notificationRoutes);

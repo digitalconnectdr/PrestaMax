@@ -1,0 +1,1059 @@
+================================================================================
+                    PRESTAMAX — CONTEXTO COMPLETO DEL PROYECTO
+                    Sistema SaaS de Gestión de Préstamos
+                    Fecha de actualización: Abril 2026
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+1. VISIÓN GENERAL
+────────────────────────────────────────────────────────────────────────────────
+
+PrestaMax es una plataforma web/móvil multi-tenant SaaS para la gestión integral
+de préstamos personales. Está diseñada para ser vendida por suscripción a
+prestamistas independientes (tenants), quienes gestionan su propia cartera de
+clientes y préstamos de forma aislada de los demás prestamistas dentro de la
+misma plataforma.
+
+El sistema cubre todo el ciclo de vida de un préstamo: desde la solicitud del
+cliente, pasando por aprobación, desembolso, cobro de cuotas, mora, refinan-
+ciamiento, contratos, recibos, hasta el proceso legal de intimidación por
+incumplimiento.
+
+Nombre: PrestaMax
+Stack: Node.js 22 + Express + TypeScript (backend), React 18 + Vite +
+       TypeScript + Tailwind CSS (frontend)
+Base de datos (producción objetivo): Supabase (PostgreSQL) con Row-Level Security
+Base de datos (desarrollo local): SQLite vía node:sqlite nativo (Node.js 22)
+Hosting objetivo: Render (backend + frontend como static site)
+Pagos de suscripción: Stripe
+Mensajería: WhatsApp Business API / Twilio
+Almacenamiento de archivos: Supabase Storage
+
+Puertos de desarrollo:
+  - Frontend: http://localhost:5173
+  - Backend:  http://localhost:3001
+  - API base: http://localhost:3001/api
+
+Comando de inicio: cd prestamax && ./start.sh
+Script de instalación: 1-INSTALAR.bat (Windows)
+Script de inicio Windows: 2-INICIAR-WINDOWS.bat
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. ARQUITECTURA MULTI-TENANT
+────────────────────────────────────────────────────────────────────────────────
+
+CONCEPTO DE TENANT (PRESTAMISTA):
+Cada prestamista es un "tenant" completamente aislado dentro de la plataforma.
+Sus datos nunca se mezclan con los de otro prestamista. El aislamiento se
+implementa mediante:
+  - Columna tenant_id en prácticamente todas las tablas
+  - Header HTTP X-Tenant-Id en cada request del frontend
+  - Middleware requireTenant que valida membresía activa del usuario en ese tenant
+  - (En producción) Row-Level Security (RLS) en Supabase para aislamiento a
+    nivel de base de datos
+
+RELACIÓN USUARIO - TENANT:
+Un usuario puede pertenecer a múltiples prestamistas simultáneamente. Cada
+membresía (tabla tenant_memberships) tiene sus propios roles y permisos
+independientes por tenant. Esto permite que, por ejemplo, una persona sea
+"cobrador" en una empresa y "admin" en otra.
+
+ESTRUCTURA JERÁRQUICA DENTRO DE UN TENANT:
+  Tenant (Prestamista/Empresa)
+    └── Branches (Sucursales) — un tenant puede tener múltiples sucursales
+          └── Users (Usuarios con membresía en ese tenant)
+          └── Clients (Clientes del tenant)
+          └── Loans (Préstamos del tenant)
+
+ROLES DENTRO DE UN TENANT:
+  - tenant_owner:  Dueño, tiene TODOS los permisos sin excepción
+  - admin:         Acceso completo excepto ciertas operaciones de plataforma
+  - prestamista / oficial / loan_officer: Rol operativo completo (crear/aprobar préstamos)
+  - cashier:       Cajero, solo pagos y cobros
+  - cobrador / collector: Gestión de cobros, puede registrar pagos y notas
+
+ROLES DE PLATAFORMA (nivel superior, gestionan PrestaMax como producto):
+  - platform_owner:  Dueño de la plataforma, acceso total
+  - platform_admin:  Administrador de plataforma
+  - platform_support: Soporte técnico
+
+Los usuarios con rol de plataforma bypasean todos los checks de permisos
+de tenant.
+
+BOOTSTRAP DEL PRIMER ADMIN DE PLATAFORMA:
+  1. Registrar usuario normal en /register
+  2. Ir a /admin → click "Configurar como Administrador de Plataforma"
+  3. POST /api/admin/bootstrap (solo funciona una vez cuando no hay admins)
+  4. Cerrar sesión y volver a entrar
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. SISTEMA DE AUTENTICACIÓN Y PERMISOS
+────────────────────────────────────────────────────────────────────────────────
+
+AUTENTICACIÓN:
+  - JWT (JSON Web Tokens) con secret configurable via JWT_SECRET
+  - Token enviado en header: Authorization: Bearer <token>
+  - Tenant activo enviado en header: X-Tenant-Id: <tenantId>
+  - Token y tenant_id se almacenan en localStorage del browser:
+      localStorage.prestamax_token
+      localStorage.prestamax_tenant_id
+  - Al recibir 401, el interceptor de axios borra localStorage y redirige a /login
+
+FLUJO DE VALIDACIÓN POR ENDPOINT:
+  authenticate → requireTenant → requirePermission('modulo.accion')
+
+SISTEMA DE PERMISOS (dot-namespaced):
+Los permisos se almacenan en tenant_memberships.permissions como JSON.
+Los roles tienen defaults predefinidos. Los permisos explícitos
+pueden sobreescribir (grant o revoke) los defaults del rol.
+
+Lista completa de permisos:
+  Clientes:      clients.view, clients.create, clients.edit, clients.delete
+  Préstamos:     loans.view, loans.create, loans.edit, loans.approve,
+                 loans.reject, loans.disburse, loans.write_off, loans.void,
+                 loans.import
+  Pagos:         payments.view, payments.create, payments.void, payments.edit
+  Recibos:       receipts.view, receipts.reprint
+  Contratos:     contracts.view, contracts.create, contracts.sign
+  Cobros:        collections.view, collections.notes, collections.promises
+  Solicitudes:   requests.view, requests.approve, requests.reject,
+                 requests.convert
+  Reportes:      reports.dashboard, reports.portfolio, reports.mora,
+                 reports.collections, reports.advanced, reports.income
+  WhatsApp:      whatsapp.view, whatsapp.send, whatsapp.templates
+  Ingresos:      income.view, income.create, income.edit, income.delete
+  Configuración: settings.general, settings.users, settings.branches,
+                 settings.products, settings.bank_accounts, settings.templates
+  Calculadora:   calculator.use
+
+DEFAULTS POR ROL (simplificado):
+  cobrador:    Ver clientes/préstamos, registrar pagos, cobros, WhatsApp send
+  cashier:     Todo lo de cobrador + anular pagos + ver ingresos
+  oficial:     Todo excepto eliminar clientes, write-off, configuración avanzada
+  admin:       TODO
+  tenant_owner: TODO (hardcodeado, no se puede revocar)
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. PLANES DE SUSCRIPCIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+PrestaMax se vende a los prestamistas bajo 4 planes de suscripción mensual.
+Los planes son configurables desde el Panel Admin de Plataforma.
+
+| Plan         | Cobradores | Clientes | Usuarios | Precio/mes | Trial |
+|--------------|------------|----------|----------|------------|-------|
+| Starter      | 1          | 100      | 3        | $29.99     | 10d   |
+| Básico       | 3          | 500      | 8        | $59.99     | 10d   |
+| Profesional  | 10         | 2,000    | 20       | $119.99    | 10d   |
+| Enterprise   | Ilimitado  | Ilimitado| Ilimitado| $249.99    | 10d   |
+
+Valor -1 = ilimitado
+
+Features por plan (stored as JSON array en plans.features):
+  Starter:      loans, payments, receipts, contracts, reports_basic, clients
+  Básico:       + whatsapp, branches
+  Profesional:  + reports_advanced, digital_signature, export_data,
+                  multiple_collectors
+  Enterprise:   + api_access, priority_support, custom_branding,
+                  bulk_notifications
+
+Estado de suscripción del tenant (tenants.subscription_status):
+  trial, active, past_due, cancelled, expired
+
+Integración Stripe:
+  - tenants.stripe_customer_id
+  - tenants.stripe_subscription_id
+  - tenants.billing_cycle (monthly / annual)
+  - tenants.subscription_start / subscription_end
+
+
+────────────────────────────────────────────────────────────────────────────────
+5. MÓDULOS DEL SISTEMA
+────────────────────────────────────────────────────────────────────────────────
+
+5.1 GESTIÓN DE CLIENTES
+─────────────────────────
+Datos capturados por cliente (tabla clients):
+  - Identificación: tipo (cédula/pasaporte/otro), número, nombre completo,
+    primer nombre, apellido
+  - Datos personales: fecha nacimiento, género, estado civil
+  - Contacto: teléfono personal, trabajo, familiar; nombre y parentesco del
+    contacto familiar; WhatsApp, email
+  - Dirección: dirección, ciudad, provincia
+  - Laboral: ocupación, empleador, actividad económica, ingreso mensual,
+    otros ingresos
+  - Multimedia: foto 2x2, cédula frontal (url), cédula trasera (url)
+  - Estado: activo/inactivo, notas internas
+  - Score crediticio: 1-5 (ver sección 9)
+  - Consentimientos: consent_data_processing, consent_whatsapp
+  - Numeración: client_number (autonumérico por tenant)
+
+Tablas relacionadas al cliente:
+  - client_references: referencias personales/comerciales (nombre, teléfono,
+    parentesco, empleador)
+  - guarantors: garantes (nombre, cédula, teléfono, dirección, foto)
+  - client_documents: documentos digitales adjuntos (cualquier tipo)
+
+HISTORIAL DE PRÉSTAMOS DEL CLIENTE:
+En la vista de detalle del cliente, los préstamos se muestran divididos en:
+  - Préstamos Activos (status: active, approved, disbursed, overdue)
+  - Préstamos Terminados (status: paid, cancelled, written_off, refinanced)
+
+Un cliente puede pertenecer a múltiples prestamistas. En cada tenant, el
+cliente tiene su propio expediente independiente.
+
+
+5.2 GESTIÓN DE PRÉSTAMOS
+──────────────────────────
+TIPOS DE PRÉSTAMO:
+  - Personal: préstamo estándar a persona natural
+  - SAN (San): préstamo tipo "San" o tanda, amortización grupal
+  - Comercial: para actividad económica/negocio
+  - Con garantía: requiere activo como garantía (tabla loan_guarantees)
+
+ESTADOS DEL PRÉSTAMO (loans.status):
+  draft → pending → approved → disbursed → active → (overdue) → paid
+  También: rejected, cancelled, written_off, refinanced, voided
+
+FRECUENCIAS DE PAGO:
+  - daily (diaria)
+  - every_2_days (interdiaria)
+  - weekly (semanal)
+  - biweekly (quincenal)
+  - monthly (mensual)
+
+TIPOS DE AMORTIZACIÓN:
+  - fixed_installment: cuota fija (capital + interés variable = cuota constante)
+  - flat_interest: interés plano (capital/n + interés total/n)
+  - interest_only: solo intereses durante el plazo, capital al vencimiento
+    (préstamo por RÉDITOS)
+  - declining_balance: saldo insoluto
+
+CAMPO CLAVE: is_reditos (en loan_products) → activa lógica de pago
+solo de intereses con capital al final (tipo réditos).
+
+CAMPOS FINANCIEROS DEL PRÉSTAMO:
+  - requested_amount, approved_amount, disbursed_amount
+  - rate (tasa), rate_type (daily/weekly/biweekly/monthly/annual)
+  - term (plazo), term_unit (months/weeks/days)
+  - disbursement_fee (comisión de desembolso, monto o porcentaje)
+  - insurance, other_charges
+  - principal_balance, interest_balance, mora_balance, charges_balance,
+    total_balance (saldos actuales)
+  - total_paid, total_paid_principal, total_paid_interest, total_paid_mora
+  - days_overdue (días en mora)
+  - mora_rate_daily (tasa de mora diaria, override por préstamo)
+  - mora_grace_days (días de gracia antes de iniciar mora)
+  - overtime_charge, overtime_days (recargo por exceso de plazo)
+  - is_restructured, original_loan_id (para refinanciamientos)
+  - is_voided, voided_at, void_reason, voided_by
+  - currency, exchange_rate_to_dop (soporte multi-moneda)
+  - disbursement_bank_account_id, collection_bank_account_id
+
+TABLA CUOTAS (installments):
+Cada préstamo genera un cronograma de cuotas al momento del desembolso.
+Campos por cuota:
+  - installment_number, due_date
+  - principal_amount, interest_amount, total_amount (montos programados)
+  - paid_principal, paid_interest, paid_mora, paid_total (montos pagados)
+  - mora_amount, mora_days (mora calculada en esa cuota)
+  - status: pending / partial / paid / overdue / waived
+
+GENERACIÓN DE CUOTAS (loanCalculator.ts):
+La función generateInstallmentSchedule calcula el cronograma dado:
+  - Monto desembolsado, tasa, plazo, frecuencia, tipo de amortización,
+    fecha del primer pago
+  - La tasa siempre se convierte internamente a tasa mensual equivalente
+  - Para cuota fija: usa fórmula francesa PMT = P * (r*(1+r)^n) / ((1+r)^n-1)
+  - Para réditos: cuotas de solo interés + capital total en última cuota
+
+PRODUCTOS DE PRÉSTAMO (loan_products):
+Son plantillas/configuraciones predefinidas por el prestamista para tipos de
+préstamos recurrentes. Definen: montos min/max, tasa, plazo min/max, frecuencia,
+tipo de amortización, mora, garantía requerida, etc.
+
+
+5.3 REFINANCIAMIENTO
+──────────────────────
+Permite renovar un préstamo activo antes de que termine.
+
+REGLA BASE: el préstamo puede refinanciarse si tiene ≤ 2 cuotas pendientes.
+
+EXCEPCIÓN CONFIGURABLE: el prestamista puede permitir hasta ≤ 3 cuotas
+(campo max_pending_for_refi en tenant_settings). Cuando se usa la excepción,
+queda registrado en audit_logs.
+
+PROCESO:
+  1. Se calcula el saldo total (capital + mora + recargos acumulados)
+  2. Se genera un nuevo préstamo unificado con ese saldo como monto
+  3. El préstamo anterior se marca status = 'refinanced'
+  4. El nuevo préstamo tiene is_restructured = true y original_loan_id apuntando
+     al préstamo original
+
+
+5.4 PAGOS
+───────────
+TABLA payments:
+  - loan_id, tenant_id, registered_by (user_id)
+  - amount: monto total del pago
+  - principal_paid, interest_paid, mora_paid: desglose
+  - payment_type: regular / interest_only / capital_only / full_payoff
+  - payment_method: cash / transfer / check / other
+  - payment_date
+  - bank_account_id (cuenta bancaria donde se recibió)
+  - receipt_id (recibo generado automáticamente)
+  - notes, reference
+  - is_voided (anulación de pago)
+
+LÓGICA DE ASIGNACIÓN DE PAGOS (allocatePayment):
+El orden de aplicación del pago es configurable por tenant (payment_order):
+  Default: ["mora", "charges", "interest", "capital"]
+  Se aplica primero mora, luego cargos, luego interés, luego capital.
+
+TIPOS DE PAGO:
+  - regular:       Aplica a cuotas pendientes en orden cronológico
+  - interest_only: Solo paga intereses (para réditos)
+  - capital_only:  Solo abona a capital
+  - full_payoff:   Liquidación total con posible rebaja por prepago
+
+MORA EN PAGOS:
+La mora se calcula en el momento del pago como:
+  mora = max(0, días_vencidos - grace_days) * mora_rate_daily * base_amount
+
+Donde base_amount depende de mora_base:
+  - cuota_vencida:      monto completo de la cuota (principal + interés)
+  - capital_pendiente:  solo el capital pendiente
+  - capital_vencido:    solo el capital de cuotas vencidas
+
+Adicionalmente puede haber mora fija por cuota vencida (mora_fixed_enabled +
+mora_fixed_amount).
+
+PAGO ANTICIPADO (REBAJA):
+Si el cliente paga el total antes del vencimiento:
+  - rebate_policy = 'proportional': rebaja 50% de los intereses no causados
+  - rebate_policy = 'fixed_rate': rebaja rebate_rate% de los intereses no causados
+  - rebate_policy = 'none': no hay rebaja
+Configurado en tenant_settings y por producto de préstamo.
+
+RECARGO POR EXCESO DE PLAZO (overtime):
+Si el préstamo pasa su fecha de vencimiento (maturity_date) sin haberse
+cancelado, se acumula un recargo diario:
+  overtime_charge = días_exceso * tasa_mora * capital_pendiente
+El sistema registra overtime_days y overtime_charge en la tabla loans.
+
+
+5.5 RECIBOS
+─────────────
+Los recibos tienen validez OPERATIVA únicamente (no legal).
+Se generan automáticamente al registrar un pago.
+
+Tabla receipts:
+  - receipt_number (autonumérico por tenant)
+  - loan_id, payment_id, tenant_id
+  - amount, payment_method, payment_date
+  - generated_by (user_id)
+  - is_reprinted (bool), registered_by (quién registró el pago originalmente)
+  - pdf_url (opcional)
+
+Funcionalidad: reimprimir recibo desde la lista de recibos.
+
+
+5.6 CONTRATOS
+──────────────
+El contrato es el documento legal del préstamo.
+
+MODOS DE FIRMA (configurable por prestamista en settings):
+  - physical: el contrato se imprime y se firma a mano
+  - digital:  firma electrónica dentro del sistema
+
+ESTADOS DEL CONTRATO:
+  draft → sent → signed → voided
+
+PLANTILLAS DE CONTRATO:
+Cada tenant puede crear múltiples plantillas de contrato con variables
+sustituibles automáticamente. Variables disponibles en el template:
+
+  {{company_name}}        Nombre del prestamista
+  {{company_address}}     Dirección de la empresa
+  {{company_phone}}       Teléfono de la empresa
+  {{company_email}}       Email de la empresa
+  {{loan_number}}         Número de préstamo
+  {{client_name}}         Nombre completo del cliente
+  {{client_id}}           Cédula del cliente
+  {{client_address}}      Dirección del cliente
+  {{client_city}}         Ciudad del cliente
+  {{amount}}              Monto del préstamo
+  {{start_date}}          Fecha de inicio
+  {{end_date}}            Fecha de vencimiento
+  {{term}}                Plazo
+  {{monthly_payment}}     Frecuencia/cuota
+  {{rate}}                Tasa de interés
+  {{payment_plan}}        Tabla de amortización completa
+  {{print_date}}          Fecha de impresión
+
+Plantilla por defecto: "Pagaré Estándar" (se crea automáticamente para cada
+tenant al inicializar el sistema).
+
+Tabla contract_templates:
+  - tenant_id, name, type, body (texto con variables), is_default, version
+
+Tabla contracts:
+  - tenant_id, loan_id, template_id
+  - contract_number, version
+  - signature_mode (physical / digital)
+  - status (draft / sent / signed / voided)
+  - generated_at, sent_at, signed_at, signed_by
+  - signature_evidence_url (foto/evidencia de firma)
+  - content (contenido renderizado final), pdf_url
+
+
+5.7 SCORE CREDITICIO (1 AL 5)
+───────────────────────────────
+Clasificación del cliente según historial de pagos. 5 = excelente, 1 = muy malo.
+
+PONDERACIÓN (configurable por tenant en tenant_settings):
+  - Puntualidad de pagos:      40% (score_w_punctuality)
+  - Préstamos pagados:         30% (score_w_paid_loans)
+  - Antigüedad como cliente:   20% (score_w_antiquity)
+  - Ausencia de mora:          10% (score_w_no_mora)
+
+MODOS DE SCORE:
+  - Global (score_mode = 'global'): el score del cliente es compartido entre
+    todos los prestamistas que lo tienen registrado. Un buen historial en una
+    empresa beneficia al cliente en otras.
+  - Por Prestamista (score_mode = 'per_tenant'): cada prestamista calcula y
+    mantiene su propio score del cliente de forma independiente.
+
+El score se actualiza automáticamente al registrar pagos. Se guarda en
+clients.score y clients.score_updated_at.
+
+Visualización: componente ScoreBadge.tsx (muestra 1-5 con color indicativo)
+
+
+5.8 GESTIÓN DE MORA
+─────────────────────
+La mora se calcula de forma dinámica en cada consulta de saldo, no se
+persiste estáticamente.
+
+TASA DE MORA:
+  - mora_rate_daily: tasa diaria sobre el saldo base (ej: 0.001 = 0.1% diario)
+  - Configurable a nivel de tenant (tenant_settings.mora_rate_daily)
+  - Puede ser sobreescrita por producto o por préstamo individual
+  - mora_max_rate: tasa máxima acumulada de mora (límite en tenant_settings)
+
+DÍAS DE GRACIA:
+  - mora_grace_days: días después del vencimiento antes de iniciar mora
+  - Default: 3 días. Configurable por tenant y por préstamo.
+
+ESCALAS DE MORA POR DÍAS (para WhatsApp y proceso legal):
+  - 1 día antes de vencer: recordatorio preventivo
+  - Día del vencimiento:   aviso cuota vencida
+  - 1-7 días:              recordatorio cada 2 días
+  - 8-15 días:             aviso formal cada 3 días
+  - 16-30 días:            alerta seria + notif. al cobrador, semanal
+  - +30 días:              escalado a proceso legal, inmediato
+
+
+5.9 WHATSAPP AUTOMÁTICO
+────────────────────────
+Se integra con WhatsApp Business API o Twilio.
+
+EVENTOS AUTOMÁTICOS:
+  - payment_confirmed:     Al registrar un pago (monto, fecha, saldo, próxima cuota)
+  - payment_reminder:      1 día antes del vencimiento
+  - payment_due:           Día del vencimiento
+  - overdue_1_7:           Mora 1-7 días (recordatorio suave)
+  - overdue_8_15:          Mora 8-15 días (tono formal)
+  - overdue_16_30:         Mora 16-30 días (alerta seria)
+  - overdue_30plus:        Más de 30 días (escala legal)
+  - balance_letter:        Carta de saldo automática
+
+CONFIGURACIÓN POR TENANT:
+  - whatsapp_enabled: activar/desactivar (tenant_settings)
+  - whatsapp_api_key, whatsapp_phone: credenciales del proveedor
+  - Tono, frecuencia y contenido de mensajes configurables
+  - Se puede pausar el envío por cliente (consent_whatsapp = 0)
+
+PLANTILLAS DE WHATSAPP (whatsapp_templates):
+  - name, event (tipo de evento), body (texto), is_active
+  - Variables sustituibles: {{client_name}}, {{amount}}, {{due_date}}, etc.
+
+HISTORIAL (whatsapp_messages):
+  - tenant_id, user_id, loan_id, client_phone
+  - event, body, status (pending/sent/failed), provider_response, sent_at
+
+
+5.10 PROCESO DE INTIMIDACIÓN LEGAL
+────────────────────────────────────
+Para clientes con mora severa, el sistema escala automáticamente:
+
+ETAPAS:
+  1. Preventivo (1-15 días mora): gestión amistosa, recordatorios
+  2. Gestión Directa (16-30 días): cobrador asignado, visitas programadas
+  3. Intimación Legal (31-60 días): carta formal de intimidación generada
+  4. Acción Judicial (60+ días): expediente completo para proceso legal
+
+DOCUMENTOS GENERADOS:
+  - Carta formal de intimidación (con datos del préstamo, deuda, plazos)
+  - Exportable como PDF, enviable por WhatsApp o email, imprimible
+
+EXPEDIENTE DIGITAL:
+  - Todas las gestiones de cobro quedan registradas en collection_notes
+  - Promesas de pago registradas en payment_promises (con resultado de visita)
+
+
+5.11 COBROS Y COBRADORES
+──────────────────────────
+Tabla collection_notes: notas de gestión de cobro por préstamo
+  - loan_id, user_id, type (visit/call/whatsapp/email/legal)
+  - note, next_action, next_date
+
+Tabla payment_promises: promesas de pago
+  - loan_id, collector_id
+  - promised_date, promised_amount
+  - status: pending / kept / broken / partial
+  - requires_visit: si requiere visita física
+  - visited_at, visit_notes: registro de la visita realizada
+
+Asignación de cartera: el préstamo tiene collector_id que identifica al
+cobrador responsable. Cada cobrador solo ve los préstamos asignados a él
+(o todos si tiene permisos de colections.view completo).
+
+
+5.12 SOLICITUDES DE PRÉSTAMO (PORTAL PÚBLICO)
+───────────────────────────────────────────────
+Cada tenant tiene un token público único (tenants.public_token) que genera
+una URL de formulario público donde clientes pueden aplicar a un préstamo
+sin necesidad de cuenta en el sistema.
+
+URL pública: /solicitud/:publicToken
+
+El formulario captura todos los datos del cliente (igual que el formulario
+interno) incluyendo: nombre, cédula, teléfono, dirección, datos laborales,
+ingreso, fotos de cédula, monto solicitado, plazo, propósito.
+
+Tabla loan_requests:
+  - Todos los datos del cliente + datos del préstamo solicitado
+  - status: pending / approved / rejected / converted
+  - reviewed_by, reviewed_at, rejection_reason
+  - product_id, rate (asignados al aprobar)
+  - disbursement_bank_account_id
+
+Flujo de aprobación (desde dentro del sistema):
+  pending → approved → (converted to loan) o rejected
+  Al convertir, se crea automáticamente el cliente (si no existe) y el préstamo.
+
+
+5.13 CALCULADORA DE PRÉSTAMOS
+───────────────────────────────
+Módulo independiente accesible desde el menú.
+Permite calcular préstamos sin comprometerse a crearlos.
+Muestra: cuota, total a pagar, interés total, tabla de amortización.
+Permiso: calculator.use
+
+
+5.14 INGRESOS Y GASTOS
+───────────────────────
+Módulo contable auxiliar para registrar movimientos de caja del prestamista
+no relacionados directamente con préstamos (gastos operativos, ingresos varios).
+
+Tabla income_expenses:
+  - tenant_id, branch_id, registered_by
+  - type: income / expense
+  - category: (configurable, ej: "salarios", "alquiler", "comisiones", "otros")
+  - description, amount, transaction_date
+  - payment_method: cash / transfer / check / other
+  - reference, notes
+  - bank_account_id (afecta saldo de la cuenta bancaria)
+
+
+5.15 CUENTAS BANCARIAS
+───────────────────────
+El tenant puede registrar múltiples cuentas bancarias donde recibe/desembolsa.
+
+Tabla bank_accounts:
+  - tenant_id, bank_name, account_number, account_type (checking/savings/other)
+  - account_holder, currency, is_active
+  - initial_balance, current_balance, loaned_balance (saldo destinado a préstamos)
+
+TRANSFERENCIAS ENTRE CUENTAS (account_transfers):
+  - from_account_id, to_account_id, amount, notes, transferred_by
+
+Las cuentas se vinculan a:
+  - Pagos recibidos (payments.bank_account_id)
+  - Desembolsos (loans.disbursement_bank_account_id)
+  - Cobros programados (loans.collection_bank_account_id)
+  - Ingresos/Gastos (income_expenses.bank_account_id)
+
+
+5.16 REPORTES
+──────────────
+Tipos de reportes disponibles:
+  - Dashboard: KPIs generales (cartera total, mora total, pagos del mes, etc.)
+  - Cartera: listado de préstamos activos con envejecimiento y clasificación
+  - Mora: préstamos en mora con días vencidos, monto mora, datos del cliente
+  - Cobros: performance por cobrador (monto cobrado, # pagos, % efectividad)
+  - Avanzado: MoM (Month-over-Month), YTD, tendencias, tabla mensual
+  - Ingresos/Gastos: flujo de caja del período
+
+Exportación: disponible en CSV/Excel desde el módulo de reportes (exportUtils.ts)
+
+
+5.17 PANEL DE ADMINISTRACIÓN DE PLATAFORMA
+───────────────────────────────────────────
+Ruta: /admin (solo accesible con platform_role = platform_owner o platform_admin)
+
+Funciones:
+  - Ver y gestionar todos los tenants (prestamistas)
+  - Cambiar plan de un tenant
+  - Activar/desactivar tenants
+  - Ver y gestionar usuarios de plataforma
+  - Configurar planes de suscripción (precios, límites, features)
+  - Ver métricas globales de la plataforma
+  - Gestionar backups de base de datos
+
+
+────────────────────────────────────────────────────────────────────────────────
+6. ESQUEMA DE BASE DE DATOS
+────────────────────────────────────────────────────────────────────────────────
+
+TABLAS PRINCIPALES:
+
+plans                   — Planes de suscripción
+users                   — Usuarios de la plataforma (todas las empresas)
+tenants                 — Prestamistas/empresas (cada suscripción)
+tenant_settings         — Configuración extendida de mora, score, etc. por tenant
+tenant_memberships      — Relación usuario-tenant con roles y permisos
+branches                — Sucursales de un tenant
+clients                 — Clientes (aislados por tenant_id)
+client_references       — Referencias personales del cliente
+guarantors              — Garantes del cliente
+client_documents        — Documentos adjuntos del cliente
+loan_products           — Plantillas/productos de préstamo por tenant
+loans                   — Préstamos (aislados por tenant_id)
+installments            — Cuotas del préstamo
+loan_guarantors         — Relación préstamo-garante
+loan_guarantees         — Garantías reales (activos) de un préstamo
+payments                — Pagos registrados
+receipts                — Recibos generados
+contracts               — Contratos de préstamo
+contract_templates      — Plantillas de contrato por tenant
+whatsapp_templates      — Plantillas de mensajes WhatsApp por tenant y evento
+whatsapp_messages       — Historial de mensajes WhatsApp enviados
+bank_accounts           — Cuentas bancarias del tenant
+account_transfers       — Transferencias entre cuentas bancarias
+income_expenses         — Ingresos y gastos del tenant
+payment_promises        — Promesas de pago (cobranza)
+collection_notes        — Notas de gestión de cobro
+loan_requests           — Solicitudes de préstamo desde portal público
+audit_logs              — Log de auditoría de todas las acciones
+
+ÍNDICES CLAVE:
+  idx_clients_tenant      ON clients(tenant_id)
+  idx_loans_tenant        ON loans(tenant_id)
+  idx_loans_client        ON loans(client_id)
+  idx_payments_tenant     ON payments(tenant_id)
+  idx_payments_loan       ON payments(loan_id)
+  idx_installments_loan   ON installments(loan_id)
+  idx_audit_tenant        ON audit_logs(tenant_id)
+
+CAMPOS IMPORTANTES DE TENANTS (tabla tenants):
+  name, slug, logo_url, phone, email, address
+  currency (default 'DOP'), timezone
+  plan_id, is_active
+  score_mode: 'global' | 'per_tenant'
+  payment_order: JSON array (orden de aplicación de pagos)
+  signature_mode: 'physical' | 'digital'
+  subscription_status, subscription_start, subscription_end
+  billing_cycle, stripe_customer_id, stripe_subscription_id
+  public_token (para portal público de solicitudes)
+  rnc, representative_name, signature_url
+  notary_name, notary_collegiate_number, notary_office_address
+  acreedor_id_number, city
+  testigo1_nombre, testigo1_id, testigo1_domicilio
+  testigo2_nombre, testigo2_id, testigo2_domicilio
+
+
+────────────────────────────────────────────────────────────────────────────────
+7. API ENDPOINTS (BACKEND)
+────────────────────────────────────────────────────────────────────────────────
+
+Todos los endpoints protegidos requieren:
+  Header: Authorization: Bearer <JWT>
+  Header: X-Tenant-Id: <tenantId>  (excepto /auth y /admin)
+
+RUTAS BASE:
+  /api/auth           — Login, registro, refresh token, perfil
+  /api/platform       — Gestión de tenants y suscripciones
+  /api/clients        — CRUD de clientes, historial, documentos
+  /api/loans          — CRUD de préstamos, aprobar, desembolsar, anular
+  /api/payments       — Registrar pagos, anular, historial
+  /api/products       — Productos de préstamo (plantillas)
+  /api/reports        — Reportes y analítica
+  /api/settings       — Configuración del tenant
+  /api/receipts       — Recibos, reimpresión
+  /api/contracts      — Contratos, firma, generación PDF
+  /api/collections    — Notas de cobro, promesas de pago
+  /api/whatsapp       — Mensajes, plantillas, historial
+  /api/income         — Ingresos y gastos
+  /api/admin          — Panel admin de plataforma
+  /api/loan-requests  — Solicitudes de préstamo (gestión interna)
+  /api/public         — Endpoints públicos (sin auth): portal de solicitudes
+
+
+────────────────────────────────────────────────────────────────────────────────
+8. FRONTEND — ESTRUCTURA DE PÁGINAS
+────────────────────────────────────────────────────────────────────────────────
+
+RUTAS DEL FRONTEND (React Router):
+  /login                          LoginPage
+  /register                       RegisterPage
+  /solicitud/:publicToken         LoanRequestPublicPage (pública, sin auth)
+  /dashboard                      DashboardPage
+  /clients                        ClientsPage
+  /clients/new                    ClientFormPage (crear)
+  /clients/:id                    ClientDetailPage
+  /clients/:id/edit               ClientFormPage (editar)
+  /loans                          LoansPage
+  /loans/new                      LoanCreatePage
+  /loans/:id                      LoanDetailPage
+  /payments                       PaymentsPage
+  /receipts                       ReceiptsPage
+  /contracts                      ContractsPage
+  /collections                    CollectionsPage
+  /collections/promises           PaymentPromisesPage
+  /reports                        ReportsPage
+  /whatsapp                       WhatsAppPage
+  /income                         IncomePage
+  /calculator                     LoanCalculatorPage
+  /requests                       LoanRequestsPage (gestión interna)
+  /settings                       SettingsPage
+  /admin                          PlatformAdminPage
+
+LAYOUT GENERAL:
+  AppLayout (header + sidebar + contenido)
+    Header: logo, nombre del tenant activo, perfil del usuario
+    Sidebar: navegación por módulos según permisos del usuario
+
+CONTEXTOS GLOBALES:
+  AuthContext:   usuario autenticado, token, login/logout
+  TenantContext: tenant activo, cambio de tenant (para usuarios multi-tenant)
+
+HOOKS PERSONALIZADOS:
+  useAuth:       acceso al contexto de autenticación
+  useTenant:     acceso al contexto del tenant activo
+  usePermission: verifica si el usuario tiene un permiso específico
+  useApi:        wrapper sobre axios para llamadas a la API
+
+LIBRERÍA API (api.ts):
+  - Interceptor de REQUEST: agrega Authorization + X-Tenant-Id headers;
+    convierte body camelCase → snake_case automáticamente
+  - Interceptor de RESPONSE: convierte respuesta snake_case → camelCase;
+    en 401 borra localStorage y redirige a /login
+  - IMPORTANTE: los query params deben enviarse ya en snake_case (no pasan
+    por el interceptor de snakify)
+
+COMPONENTES COMPARTIDOS:
+  ScoreBadge:      muestra el score 1-5 del cliente con color
+  MoraIndicator:   indica días y monto de mora
+  LoanStatusBadge: badge con estado del préstamo (color por estado)
+
+COMPONENTES UI BASE:
+  Button, Input, Select, Card, Modal, Badge, Loading, EmptyState, Stat
+
+
+────────────────────────────────────────────────────────────────────────────────
+9. SEGURIDAD CIBERNÉTICA
+────────────────────────────────────────────────────────────────────────────────
+
+MEDIDAS IMPLEMENTADAS:
+  - JWT con secret configurable (env JWT_SECRET), expiración configurada
+  - Contraseñas hasheadas con bcrypt
+  - Rate limiting en endpoints de autenticación
+  - CORS configurado (solo orígenes permitidos)
+  - Protección CSRF
+  - Sanitización de inputs (prevención XSS)
+  - Headers de seguridad (Helmet.js)
+  - Foreign keys y constraints en BD para integridad de datos
+  - Audit log completo de todas las acciones (quién, qué, cuándo, desde qué IP)
+  - Aislamiento de datos por tenant (RLS en producción con Supabase)
+  - Validación de membresía activa en cada request
+  - Encriptación AES-256 para datos sensibles en almacenamiento (objetivo)
+  - 2FA (Two-Factor Authentication) — planificado para producción
+
+AUDITORÍA (audit_logs):
+Registra: tenant_id, user_id, user_name, user_email, action, entity_type,
+entity_id, description, metadata (JSON), ip_address, created_at
+Cobertura: todas las operaciones de creación, modificación, aprobación,
+anulación y cambios de configuración.
+
+
+────────────────────────────────────────────────────────────────────────────────
+10. CONFIGURACIÓN DEL TENANT (SETTINGS)
+────────────────────────────────────────────────────────────────────────────────
+
+La página de Settings tiene múltiples pestañas:
+
+  General:         Datos de la empresa (nombre, logo, dirección, RNC, moneda,
+                   zona horaria, representante, firma, notaría, testigos)
+  Mora:            Tasa mora diaria, días gracia, tasa máxima, base de mora,
+                   mora fija, orden de aplicación de pagos
+  Score:           Ponderaciones del score crediticio, modo (global/per_tenant)
+  Usuarios:        Invitar usuarios, cambiar roles, activar/desactivar
+  Sucursales:      Crear y gestionar sucursales
+  Productos:       Productos de préstamo (plantillas)
+  Cuentas Banc.:   Gestión de cuentas bancarias y transferencias
+  Plantillas:      Editor de plantillas de contrato (Pagaré, etc.)
+  WhatsApp:        Configurar credenciales API, activar/desactivar, templates
+  Refinanc.:       Configurar regla de cuotas pendientes para refinanciamiento
+  Firma:           Modo de firma de contratos (físico o digital)
+
+
+────────────────────────────────────────────────────────────────────────────────
+11. VARIABLES DE ENTORNO (BACKEND)
+────────────────────────────────────────────────────────────────────────────────
+
+  DATABASE_PATH      Ruta al archivo SQLite (desarrollo) o cadena de conexión
+                     PostgreSQL (producción con Supabase)
+  JWT_SECRET         Clave secreta para firmar JWT
+  PORT               Puerto del servidor (default 3001)
+  STRIPE_SECRET_KEY  Clave secreta de Stripe para suscripciones
+  STRIPE_WEBHOOK_SECRET  Secret para verificar webhooks de Stripe
+  WHATSAPP_API_KEY   Clave de WhatsApp Business API / Twilio
+  SUPABASE_URL       URL del proyecto Supabase (producción)
+  SUPABASE_KEY       Service role key de Supabase (producción)
+  CORS_ORIGIN        Origen permitido para CORS
+
+
+────────────────────────────────────────────────────────────────────────────────
+12. DECISIONES TÉCNICAS IMPORTANTES
+────────────────────────────────────────────────────────────────────────────────
+
+1. Se abandonó Prisma y better-sqlite3 en favor de node:sqlite (DatabaseSync)
+   nativo de Node.js 22, por incompatibilidades con el entorno de desarrollo.
+
+2. WAL mode (Write-Ahead Logging) fue removido porque el filesystem montado
+   desde Windows/Mac no lo soporta en el entorno Linux de desarrollo.
+
+3. La ruta de la base de datos en desarrollo apunta a:
+   /sessions/<session>/prestamax.db (fuera de la carpeta del proyecto para
+   evitar problemas con el filesystem montado).
+
+4. El interceptor de API convierte snake_case a camelCase en respuestas y
+   camelCase a snake_case en requests automáticamente. EXCEPCIÓN: los query
+   params de GET deben enviarse manualmente en snake_case.
+
+5. En producción, la migración planificada es:
+   SQLite → PostgreSQL (Supabase) con RLS habilitado para aislamiento real
+   a nivel de base de datos por tenant.
+
+6. Las migraciones de columnas se hacen con ALTER TABLE + try/catch para
+   que sean idempotentes (seguras de ejecutar múltiples veces).
+
+7. Las plantillas de contrato y planes se "sembran" (seed) automáticamente
+   en cada arranque del servidor (INSERT OR IGNORE / verificación previa).
+
+
+────────────────────────────────────────────────────────────────────────────────
+13. CREDENCIALES DE DEMO
+────────────────────────────────────────────────────────────────────────────────
+
+  Admin Plataforma:    admin@prestamax.com       / Admin123!
+  Oficial de Crédito:  oficial@garcia.com        / Demo123!
+  Cobrador:            cobrador@garcia.com       / Demo123!
+  Tenant de demo:      "Préstamos García"
+
+
+────────────────────────────────────────────────────────────────────────────────
+14. ESTADO DE DESARROLLO (ABRIL 2026)
+────────────────────────────────────────────────────────────────────────────────
+
+FASE 1 (COMPLETADA):
+  ✅ Autenticación (login, registro, JWT)
+  ✅ Multi-tenant (tenants, membresías, roles, permisos)
+  ✅ CRUD Clientes (con garantes, referencias, documentos)
+  ✅ Productos de Préstamo
+  ✅ CRUD Préstamos (con cronograma de cuotas)
+  ✅ Registro de Pagos (con asignación automática a cuotas)
+  ✅ Cálculo de Mora (por días, configurable)
+  ✅ Recibos
+  ✅ Contratos (generación desde plantilla)
+  ✅ Score Crediticio (1-5)
+  ✅ Dashboard con KPIs
+  ✅ Reportes básicos
+
+FASE 2 (COMPLETADA):
+  ✅ Cuentas Bancarias (banco, número, titular, moneda, saldos, transferencias)
+  ✅ Plantillas de Contrato (editor con variables, Pagaré estándar por defecto)
+  ✅ Ingresos y Gastos (módulo contable auxiliar)
+  ✅ Reportes Avanzados (MoM, YTD, alertas mora, tabla mensual, performance)
+  ✅ Promesas de Pago (requires_visit, registro de visita con notas y resultado)
+  ✅ Recibos mejorados (reimprimir, columna "registrado por")
+  ✅ Panel Admin de Plataforma (gestión de tenants, planes, usuarios, backups)
+  ✅ Bootstrap de primer admin de plataforma
+  ✅ Planes sembrados automáticamente (Starter/Básico/Profesional/Enterprise)
+  ✅ Gestión de Usuarios en Settings (invitar, cambiar rol, activar/desactivar)
+  ✅ Portal público de solicitudes de préstamo
+  ✅ Refinanciamiento de préstamos
+  ✅ WhatsApp integrado (historial, plantillas)
+  ✅ Cobros (notas, promesas, escalado)
+  ✅ Soporte multi-moneda (DOP + divisas configurables)
+  ✅ Anulación de préstamos (void)
+  ✅ Write-off (marcar como incobrable)
+  ✅ Importación de préstamos por CSV
+  ✅ Calculadora de préstamos
+  ✅ Datos legales/notariales en configuración del tenant
+
+PRÓXIMO PASO (PENDIENTE):
+  ⬜ Migración a Supabase + Render (producción)
+      - Reemplazar node:sqlite con pg (PostgreSQL driver)
+      - Adaptar sintaxis SQL (SQLite → PostgreSQL)
+      - Configurar Row-Level Security (RLS) en Supabase
+      - Configurar Stripe Webhooks para cambios de suscripción
+      - Configurar CI/CD en Render
+      - App móvil con React Native (iOS y Android)
+
+
+────────────────────────────────────────────────────────────────────────────────
+15. FLUJOS DE NEGOCIO PRINCIPALES
+────────────────────────────────────────────────────────────────────────────────
+
+FLUJO COMPLETO DE UN PRÉSTAMO:
+  1. Captura del cliente (datos personales, fotos, documentos, garante)
+  2. Solicitud de préstamo (desde sistema interno o portal público)
+  3. Revisión y aprobación por oficial de crédito
+  4. Generación y firma del contrato (físico o digital)
+  5. Desembolso (se genera cronograma de cuotas automáticamente)
+     → Se descuenta de la cuenta bancaria de desembolso
+  6. Cobro periódico de cuotas (diario/semanal/quincenal/mensual)
+     → WhatsApp automático de confirmación
+     → Generación automática de recibo
+     → Actualización de saldos y score del cliente
+  7. Si hay mora: escalado automático por días
+     → Mensajes WhatsApp progresivos
+     → Notas de cobro por el cobrador
+     → Promesas de pago con seguimiento de visitas
+     → Carta de intimidación legal si supera 30 días
+  8. Opción de refinanciamiento si aplica
+  9. Liquidación total (con rebaja si es prepago)
+  10. Préstamo marcado como PAID → historial del cliente actualizado
+
+FLUJO DE SUSCRIPCIÓN (PRESTAMISTA NUEVO):
+  1. Registro del prestamista en PrestaMax
+  2. Selección del plan (Starter / Básico / Profesional / Enterprise)
+  3. Pago vía Stripe (tarjeta o transferencia)
+  4. Activación del tenant con período de trial de 10 días (si aplica)
+  5. Configuración inicial: datos de empresa, mora, score, cuentas bancarias
+  6. Invitación de cobradores y staff
+  7. Configuración de plantillas de contrato y WhatsApp
+  8. Inicio de operaciones
+
+================================================================================
+                            FIN DEL DOCUMENTO
+================================================================================
+
+oficial@garcia.com
+cGbknjjymT
+
+denny.penalo@gmail.com
+YK4QZkGFDGFD
+
+jcpenalo@gmail.com
+YK4QZkCkCE
+
+jcpenalo2@gmail.com
+xGCHc8C6q6
+
+-----
+
+1. Nuevo campo en el préstamo: prorroga_fee
+Agrego un campo opcional en la tabla loans:
+prorroga_fee REAL DEFAULT 0
+
+Lo configura el prestamista al crear el préstamo (o puede editarlo después)
+Valor 0 = sin cargo personalizado (usa el comportamiento actual)
+Puede ser cualquier monto negociado: RD$1,500, RD$2,000, RD$2,500, etc.
+Se muestra en el formulario de préstamo como "Cargo de Prórroga (opcional)"
+
+2. Lógica en el modal de pago
+Cuando el usuario selecciona "Solo Interés" en el modal:
+Si el préstamo tiene prorroga_fee > 0:
+
+El monto que se muestra NO es el del plan de amortización (RD$3,500)
+Se muestra el prorroga_fee configurado (ej. RD$2,500)
+La etiqueta cambia a "Cargo de Prórroga" con una descripción clara
+El aviso dice: "Al pagar RD$2,500 (cargo de prórroga configurado), la fecha de vencimiento se moverá un período. El saldo del préstamo no cambia."
+
+Si el préstamo tiene prorroga_fee = 0:
+
+Comportamiento actual: usa el interés del plan de amortización
+
+3. Qué pasa con el saldo del préstamo
+Aquí está la parte más importante: el prorroga_fee NO se aplica al saldo del préstamo. No reduce capital ni intereses acumulados. Es un cobro de servicio por la extensión.
+Lo que sí ocurre:
+
+Las cuotas pendientes se desplazan hacia adelante un período (igual que ahora)
+El capital: RD$35,000 → sigue igual
+Los intereses de la cuota que se "saltó": quedan como pendientes en la cuota que se corrió
+Se registra un pago de tipo prorroga en el historial de pagos, por el monto del cargo
+
+4. Registro contable
+El pago de prórroga se registra en el historial como:
+
+Tipo: prorroga
+Monto: el prorroga_fee (ej. RD$2,500)
+Este ingreso va al prestamista igual que cualquier otro cobro
+Es visible en los reportes de ingresos
+
+5. Qué pasa si el cliente hace múltiples prórrogas seguidas
+El sistema debe poder procesarlas consecutivamente. Cada prórroga:
+
+Cobra el prorroga_fee
+Mueve todas las fechas restantes un período
+No hay límite por defecto (el prestamista decide)
+
+Diferencia con Mora
+Concepto Cuándo aplicaQuién lo defineAfecta al saldoMoraCuando ya pasó la fecha de pago sin pagarCalculado por días de atrasoSí, suma al totalCargo de PrórrogaAntes de vencer, como "acuerdo"El prestamista por préstamoNoInterés de cuotaParte del plan de amortizaciónCalculado por la tasaSí, parte del pago
+
+
+-------------------------------
+
+Crea un agente y asegurate que todos los calculos esten correctos. | 
+
+
+
+# Terminal 1 - Instalar y arrancar backend
+cd backend
+npm install
+npx ts-node-dev --respawn --transpile-only src/index.ts
+
+
+
+# Terminal 2 (nueva terminal con el botón +)
+cd frontend
+npm install --legacy-peer-deps
+npx vite --port 5173
+
+
+
+bre PestaMax en tu navegador: → http://localhost:5173
+Email: admin@prestamax.com
+Contraseña: Admin123!
+
+
+||||||||||||||||
+
+Nuevas funciones: 
+
+1- proyeccion de ingresos segun los prestamos, donde se pueda ver couta, intereses, mora, 
+3- modulo de seguimiento y asignacion mensajeros - completado
+
+
+
+
+
+
+

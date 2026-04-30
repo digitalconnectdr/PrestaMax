@@ -1,0 +1,534 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password_hash String
+  full_name     String
+  phone         String?
+  avatar_url    String?
+  is_active     Boolean  @default(true)
+  platform_role String   @default("none")
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  last_login    DateTime?
+
+  memberships   TenantMembership[]
+  audit_logs    AuditLog[]
+  payments      Payment[]
+  receipts      Receipt[]
+  whatsapp_msgs WhatsAppMessage[]
+}
+
+model Tenant {
+  id              String   @id @default(uuid())
+  name            String
+  slug            String   @unique
+  logo_url        String?
+  phone           String?
+  email           String?
+  address         String?
+  currency        String   @default("DOP")
+  timezone        String   @default("America/Santo_Domingo")
+  plan_id         String?
+  is_active       Boolean  @default(true)
+  score_mode      String   @default("global")
+  payment_order   String   @default("[\"mora\",\"charges\",\"interest\",\"capital\"]")
+  signature_mode  String   @default("physical")
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  memberships        TenantMembership[]
+  branches           Branch[]
+  clients            Client[]
+  loan_products      LoanProduct[]
+  loans              Loan[]
+  payments           Payment[]
+  receipts           Receipt[]
+  contracts          Contract[]
+  whatsapp_msgs      WhatsAppMessage[]
+  audit_logs         AuditLog[]
+  settings           TenantSettings?
+  receipt_series     ReceiptSeries[]
+  contract_templates ContractTemplate[]
+  whatsapp_templates WhatsAppTemplate[]
+  guarantee_categories GuaranteeCategory[]
+}
+
+model Plan {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  price_monthly  Float
+  max_collectors Int
+  max_clients    Int
+  max_users      Int      @default(-1)
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now())
+}
+
+model TenantMembership {
+  id          String   @id @default(uuid())
+  user_id     String
+  tenant_id   String
+  branch_id   String?
+  roles       String   @default("[]")
+  permissions String   @default("{}")
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user        User     @relation(fields: [user_id], references: [id])
+  tenant      Tenant   @relation(fields: [tenant_id], references: [id])
+  branch      Branch?  @relation(fields: [branch_id], references: [id])
+
+  @@unique([user_id, tenant_id])
+}
+
+model Branch {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  name        String
+  address     String?
+  phone       String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  tenant      Tenant   @relation(fields: [tenant_id], references: [id])
+  memberships TenantMembership[]
+  loans       Loan[]
+  payments    Payment[]
+}
+
+model TenantSettings {
+  id                   String   @id @default(uuid())
+  tenant_id            String   @unique
+  mora_rate_daily      Float    @default(0.001)
+  mora_grace_days      Int      @default(3)
+  mora_max_rate        Float    @default(0.30)
+  rebate_enabled       Boolean  @default(true)
+  rebate_type          String   @default("proportional")
+  rebate_rate          Float    @default(0.0)
+  score_w_punctuality  Float    @default(0.40)
+  score_w_paid_loans   Float    @default(0.30)
+  score_w_antiquity    Float    @default(0.20)
+  score_w_no_mora      Float    @default(0.10)
+  whatsapp_enabled     Boolean  @default(false)
+  whatsapp_api_key     String?
+  whatsapp_phone       String?
+  max_pending_for_refi Int      @default(2)
+  updated_at           DateTime @updatedAt
+
+  tenant               Tenant   @relation(fields: [tenant_id], references: [id])
+}
+
+model Client {
+  id                      String   @id @default(uuid())
+  tenant_id               String
+  client_number           String
+  full_name               String
+  first_name              String
+  last_name               String
+  id_type                 String   @default("cedula")
+  id_number               String
+  birth_date              DateTime?
+  gender                  String?
+  marital_status          String?
+  phone_personal          String?
+  phone_work              String?
+  phone_family            String?
+  family_contact_name     String?
+  family_relationship     String?
+  whatsapp                String?
+  email                   String?
+  address                 String?
+  city                    String?
+  province                String?
+  occupation              String?
+  employer                String?
+  economic_activity       String?
+  monthly_income          Float?
+  other_income            Float?
+  photo_url               String?
+  id_front_url            String?
+  id_back_url             String?
+  is_active               Boolean  @default(true)
+  notes                   String?
+  score                   Int      @default(3)
+  score_updated_at        DateTime @default(now())
+  consent_data_processing Boolean  @default(false)
+  consent_whatsapp        Boolean  @default(false)
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenant_id], references: [id])
+  references  ClientReference[]
+  guarantors  Guarantor[]
+  documents   ClientDocument[]
+  loans       Loan[]
+
+  @@unique([tenant_id, id_number])
+}
+
+model ClientReference {
+  id           String   @id @default(uuid())
+  client_id    String
+  type         String   @default("personal")
+  full_name    String
+  phone        String?
+  relationship String?
+  employer     String?
+  client       Client   @relation(fields: [client_id], references: [id])
+}
+
+model Guarantor {
+  id           String   @id @default(uuid())
+  client_id    String
+  full_name    String
+  id_number    String?
+  phone        String?
+  address      String?
+  photo_url    String?
+  client       Client   @relation(fields: [client_id], references: [id])
+  loan_links   LoanGuarantor[]
+}
+
+model ClientDocument {
+  id          String   @id @default(uuid())
+  client_id   String
+  name        String
+  type        String
+  url         String
+  uploaded_at DateTime @default(now())
+  client      Client   @relation(fields: [client_id], references: [id])
+}
+
+model LoanProduct {
+  id                  String   @id @default(uuid())
+  tenant_id           String
+  name                String
+  type                String
+  description         String?
+  min_amount          Float
+  max_amount          Float
+  rate                Float
+  rate_type           String   @default("monthly")
+  min_term            Int
+  max_term            Int
+  term_unit           String   @default("months")
+  payment_frequency   String   @default("monthly")
+  amortization_type   String   @default("fixed_installment")
+  disbursement_fee    Float    @default(0)
+  disbursement_fee_type String @default("percentage")
+  mora_rate_daily     Float?
+  mora_grace_days     Int?
+  requires_guarantee  Boolean  @default(false)
+  requires_approval   Boolean  @default(true)
+  allows_prepayment   Boolean  @default(true)
+  rebate_policy       String   @default("proportional")
+  is_san_type         Boolean  @default(false)
+  is_reditos          Boolean  @default(false)
+  is_active           Boolean  @default(true)
+  created_at          DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id])
+  loans  Loan[]
+}
+
+model Loan {
+  id                  String   @id @default(uuid())
+  tenant_id           String
+  branch_id           String?
+  client_id           String
+  product_id          String
+  loan_number         String
+  status              String   @default("draft")
+  requested_amount    Float
+  approved_amount     Float?
+  disbursed_amount    Float?
+  rate                Float
+  rate_type           String   @default("monthly")
+  term                Int
+  term_unit           String   @default("months")
+  payment_frequency   String   @default("monthly")
+  amortization_type   String   @default("fixed_installment")
+  application_date    DateTime @default(now())
+  approval_date       DateTime?
+  disbursement_date   DateTime?
+  first_payment_date  DateTime?
+  maturity_date       DateTime?
+  actual_close_date   DateTime?
+  disbursement_fee    Float    @default(0)
+  insurance           Float    @default(0)
+  other_charges       Float    @default(0)
+  principal_balance   Float    @default(0)
+  interest_balance    Float    @default(0)
+  mora_balance        Float    @default(0)
+  charges_balance     Float    @default(0)
+  total_balance       Float    @default(0)
+  total_interest      Float    @default(0)
+  total_paid          Float    @default(0)
+  total_paid_principal Float   @default(0)
+  total_paid_interest Float    @default(0)
+  total_paid_mora     Float    @default(0)
+  days_overdue        Int      @default(0)
+  collector_id        String?
+  purpose             String?
+  notes               String?
+  rejection_reason    String?
+  is_restructured     Boolean  @default(false)
+  original_loan_id    String?
+  mora_rate_daily     Float    @default(0.001)
+  mora_grace_days     Int      @default(3)
+  overtime_charge     Float    @default(0)
+  overtime_days       Int      @default(0)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  tenant       Tenant      @relation(fields: [tenant_id], references: [id])
+  branch       Branch?     @relation(fields: [branch_id], references: [id])
+  client       Client      @relation(fields: [client_id], references: [id])
+  product      LoanProduct @relation(fields: [product_id], references: [id])
+  installments Installment[]
+  payments     Payment[]
+  receipts     Receipt[]
+  contracts    Contract[]
+  guarantors   LoanGuarantor[]
+  guarantees   LoanGuarantee[]
+  promises     PaymentPromise[]
+  notes_coll   CollectionNote[]
+}
+
+model Installment {
+  id                 String   @id @default(uuid())
+  loan_id            String
+  installment_number Int
+  due_date           DateTime
+  principal_amount   Float
+  interest_amount    Float
+  total_amount       Float
+  paid_principal     Float    @default(0)
+  paid_interest      Float    @default(0)
+  paid_mora          Float    @default(0)
+  paid_total         Float    @default(0)
+  mora_amount        Float    @default(0)
+  mora_days          Int      @default(0)
+  status             String   @default("pending")
+  paid_at            DateTime?
+
+  loan  Loan  @relation(fields: [loan_id], references: [id])
+  items PaymentItem[]
+}
+
+model LoanGuarantor {
+  id           String    @id @default(uuid())
+  loan_id      String
+  guarantor_id String
+  loan         Loan      @relation(fields: [loan_id], references: [id])
+  guarantor    Guarantor @relation(fields: [guarantor_id], references: [id])
+}
+
+model LoanGuarantee {
+  id              String   @id @default(uuid())
+  loan_id         String
+  category_id     String?
+  description     String
+  estimated_value Float?
+  loan            Loan     @relation(fields: [loan_id], references: [id])
+  category        GuaranteeCategory? @relation(fields: [category_id], references: [id])
+}
+
+model GuaranteeCategory {
+  id         String   @id @default(uuid())
+  tenant_id  String
+  name       String
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+  guarantees LoanGuarantee[]
+}
+
+model Payment {
+  id               String   @id @default(uuid())
+  tenant_id        String
+  branch_id        String?
+  loan_id          String
+  registered_by    String
+  collector_id     String?
+  payment_number   String
+  payment_date     DateTime @default(now())
+  amount           Float
+  applied_mora     Float    @default(0)
+  applied_charges  Float    @default(0)
+  applied_interest Float    @default(0)
+  applied_capital  Float    @default(0)
+  payment_method   String   @default("cash")
+  reference        String?
+  type             String   @default("regular")
+  is_voided        Boolean  @default(false)
+  voided_at        DateTime?
+  voided_by        String?
+  void_reason      String?
+  rebate_amount    Float    @default(0)
+  notes            String?
+  created_at       DateTime @default(now())
+
+  tenant            Tenant   @relation(fields: [tenant_id], references: [id])
+  branch            Branch?  @relation(fields: [branch_id], references: [id])
+  loan              Loan     @relation(fields: [loan_id], references: [id])
+  registered_by_user User    @relation(fields: [registered_by], references: [id])
+  receipt           Receipt?
+  items             PaymentItem[]
+}
+
+model PaymentItem {
+  id             String      @id @default(uuid())
+  payment_id     String
+  installment_id String?
+  concept        String
+  amount         Float
+  payment        Payment     @relation(fields: [payment_id], references: [id])
+  installment    Installment? @relation(fields: [installment_id], references: [id])
+}
+
+model ReceiptSeries {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  name        String
+  prefix      String
+  last_number Int      @default(0)
+  is_default  Boolean  @default(false)
+  tenant      Tenant   @relation(fields: [tenant_id], references: [id])
+  receipts    Receipt[]
+}
+
+model Receipt {
+  id               String   @id @default(uuid())
+  tenant_id        String
+  payment_id       String   @unique
+  loan_id          String
+  issued_by        String
+  series_id        String?
+  receipt_number   String
+  issued_at        DateTime @default(now())
+  client_name      String
+  client_id_number String?
+  loan_number      String
+  amount           Float
+  concept_detail   String
+  notes            String?
+  is_reprinted     Boolean  @default(false)
+
+  tenant         Tenant        @relation(fields: [tenant_id], references: [id])
+  payment        Payment       @relation(fields: [payment_id], references: [id])
+  loan           Loan          @relation(fields: [loan_id], references: [id])
+  issued_by_user User          @relation(fields: [issued_by], references: [id])
+  series         ReceiptSeries? @relation(fields: [series_id], references: [id])
+}
+
+model ContractTemplate {
+  id         String   @id @default(uuid())
+  tenant_id  String
+  name       String
+  type       String
+  body       String
+  is_default Boolean  @default(false)
+  version    Int      @default(1)
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+  contracts  Contract[]
+}
+
+model Contract {
+  id                     String   @id @default(uuid())
+  tenant_id              String
+  loan_id                String
+  template_id            String?
+  contract_number        String
+  version                Int      @default(1)
+  signature_mode         String   @default("physical")
+  status                 String   @default("draft")
+  generated_at           DateTime @default(now())
+  sent_at                DateTime?
+  signed_at              DateTime?
+  signed_by              String?
+  signature_evidence_url String?
+  content                String?
+  pdf_url                String?
+
+  tenant    Tenant            @relation(fields: [tenant_id], references: [id])
+  loan      Loan              @relation(fields: [loan_id], references: [id])
+  template  ContractTemplate? @relation(fields: [template_id], references: [id])
+}
+
+model WhatsAppTemplate {
+  id        String   @id @default(uuid())
+  tenant_id String
+  name      String
+  event     String
+  body      String
+  is_active Boolean  @default(true)
+  tenant    Tenant   @relation(fields: [tenant_id], references: [id])
+}
+
+model WhatsAppMessage {
+  id                String   @id @default(uuid())
+  tenant_id         String
+  user_id           String?
+  loan_id           String?
+  client_phone      String
+  event             String
+  body              String
+  status            String   @default("pending")
+  provider_response String?
+  sent_at           DateTime?
+  created_at        DateTime @default(now())
+
+  tenant       Tenant @relation(fields: [tenant_id], references: [id])
+  triggered_by User?  @relation(fields: [user_id], references: [id])
+}
+
+model PaymentPromise {
+  id              String   @id @default(uuid())
+  loan_id         String
+  collector_id    String
+  promised_date   DateTime
+  promised_amount Float
+  status          String   @default("pending")
+  notes           String?
+  created_at      DateTime @default(now())
+  loan            Loan     @relation(fields: [loan_id], references: [id])
+}
+
+model CollectionNote {
+  id          String   @id @default(uuid())
+  loan_id     String
+  user_id     String
+  type        String   @default("visit")
+  note        String
+  next_action String?
+  next_date   DateTime?
+  created_at  DateTime @default(now())
+  loan        Loan     @relation(fields: [loan_id], references: [id])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  tenant_id   String?
+  user_id     String?
+  action      String
+  entity_type String
+  entity_id   String?
+  old_values  String?
+  new_values  String?
+  ip_address  String?
+  notes       String?
+  created_at  DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenant_id], references: [id])
+  user   User?   @relation(fields: [user_id], references: [id])
+}

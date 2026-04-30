@@ -1,0 +1,73 @@
+# ─── Dependencies ─────────────────────────────────────────────
+node_modules/
+**/node_modules/
+
+# ─── Build output ─────────────────────────────────────────────
+dist/
+build/
+**/dist/
+**/build/
+
+# ─── Environment & secrets ────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development.local
+
+# ─── Databases (NEVER commit production data) ─────────────────
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+prestamax.db
+dev.db
+backups/
+**/backups/
+
+# ─── Uploads / user content ───────────────────────────────────
+uploads/
+**/uploads/
+
+# ─── Logs ─────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# ─── Vite temp files ──────────────────────────────────────────
+**/vite.config.ts.timestamp-*.mjs
+**/vite.config.js.timestamp-*.mjs
+.vite/
+
+# ─── Editor / OS ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Local Windows scripts (kept locally, no need on server) ──
+*.bat
+Iniciar-PestaMax.ps1
+test_bang.html
+
+# ─── Documents (kept in workspace, not in repo) ───────────────
+*.pptx
+*.docx
+
+# ─── Generated Prisma client ──────────────────────────────────
+**/generated/
+prisma/migrations/
+
+# ─── Coverage / test ──────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── TypeScript build info ────────────────────────────────────
+*.tsbuildinfo

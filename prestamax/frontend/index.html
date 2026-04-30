@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PrestaMax - Gestión Profesional de Préstamos</title>
+
+    <!-- Security meta tags -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Prevent search engines from indexing the app (private SaaS) -->
+    <meta name="robots" content="noindex, nofollow" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <script>
+      (function() {
+        var warned = false;
+        function devtoolsCheck() {
+          var threshold = 160;
+          if (
+            window.outerWidth - window.innerWidth > threshold ||
+            window.outerHeight - window.innerHeight > threshold
+          ) {
+            if (!warned) {
+              warned = true;
+              console.clear();
+              console.log(
+                '%c\u26d4 STOP',
+                'color:#dc2626;font-size:48px;font-weight:bold;'
+              );
+              console.log(
+                '%cEsta es una herramienta para desarrolladores del navegador.\n'
+                + 'Si alguien te indic\u00f3 que escribas o pegues algo aqu\u00ed,\n'
+                + 'es posible que sea un intento de fraude o robo de datos.\n\n'
+                + 'PrestaMax monitorea el uso sospechoso. El acceso no autorizado\n'
+                + 'al c\u00f3digo o la infraestructura est\u00e1 prohibido y puede\n'
+                + 'constituir un delito conforme a las leyes de Rep\u00fablica Dominicana.',
+                'color:#1e3a5f;font-size:14px;font-family:monospace;line-height:1.6;'
+              );
+              console.log(
+                '%c\u00a9 PrestaMax \u2014 JPRS Digital Connect. Todos los derechos reservados.',
+                'color:#64748b;font-size:11px;'
+              );
+            }
+          } else {
+            warned = false;
+          }
+        }
+        setInterval(devtoolsCheck, 1500);
+      })();
+    </script>
+  </body>
+</html>
