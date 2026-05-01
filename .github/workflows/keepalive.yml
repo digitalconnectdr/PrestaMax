@@ -1,0 +1,35 @@
+name: Keep Render Backend Awake
+
+# Pinguea el endpoint /health del backend en Render cada 10 minutos
+# para evitar el "cold start" del plan Starter (15 min de inactividad
+# pone el servicio a dormir).
+#
+# GitHub Actions cron puede tener delays de hasta 30 min en horas pico,
+# pero en promedio mantiene el servicio caliente sin problemas.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # cada 10 minutos
+  workflow_dispatch:          # permite ejecutar manualmente desde la UI
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping backend /health
+        run: |
+          URL="https://prestamax-api.onrender.com/health"
+          echo "Pinging $URL..."
+          response=$(curl -s -o /tmp/body.txt -w "%{http_code}|%{time_total}" --max-time 90 "$URL")
+          http_code="${response%%|*}"
+          duration="${response##*|}"
+          body=$(cat /tmp/body.txt)
+          echo "HTTP: $http_code"
+          echo "Duration: ${duration}s"
+          echo "Body: $body"
+          if [ "$http_code" != "200" ]; then
+            echo "::warning::Backend devolvio status $http_code (esperado 200)"
+            exit 1
+          fi
+          echo "Backend respondio OK"
