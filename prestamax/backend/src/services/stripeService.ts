@@ -10,7 +10,6 @@ export function isStripeConfigured(): boolean {
   return !!STRIPE_KEY;
 }
 
-// Mapping plan slug -> env var with the Stripe Price ID
 const PRICE_ENV_BY_SLUG: Record<string, string> = {
   starter:      'STRIPE_PRICE_STARTER',
   basico:       'STRIPE_PRICE_BASICO',
@@ -60,8 +59,9 @@ export async function createCheckoutSession(input: CreateCheckoutInput) {
   if (input.customerId) {
     params.customer = input.customerId;
   } else {
+    // En mode='subscription' Stripe crea el Customer automaticamente.
+    // customer_creation solo aplica a mode='payment'.
     params.customer_email = input.customerEmail;
-    params.customer_creation = 'always';
   }
   return stripe.checkout.sessions.create(params);
 }
