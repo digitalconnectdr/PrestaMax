@@ -5,7 +5,9 @@ services:
     plan: starter             # Sube a 'standard' si necesitas más RAM
     region: oregon            # Cambia si prefieres otra región
     rootDir: prestamax/backend
-    buildCommand: npm install && npm run build
+    # --include=dev fuerza la instalacion de devDependencies (typescript,
+    # @types/node, etc.) incluso cuando NODE_ENV=production.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
@@ -32,7 +34,4 @@ services:
       - key: JWT_EXPIRES_IN
         value: 7d
 
-      # Configurar manualmente en el dashboard de Render una vez tengas
-      # la URL del frontend en Vercel (ej: https://prestamax.vercel.app)
-      - key: FRONTEND_URL
-        sync: false
+      # Configurar manualmente en el dashb
