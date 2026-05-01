@@ -2,8 +2,8 @@ services:
   - type: web
     name: prestamax-api
     runtime: node
-    plan: starter             # Sube a 'standard' si necesitas más RAM
-    region: oregon            # Cambia si prefieres otra región
+    plan: starter
+    region: oregon
     rootDir: prestamax/backend
     # --include=dev fuerza la instalacion de devDependencies (typescript,
     # @types/node, etc.) incluso cuando NODE_ENV=production.
@@ -12,26 +12,26 @@ services:
     healthCheckPath: /health
     autoDeploy: true
 
-    # ── Disco persistente para SQLite ───────────────────────────────
-    # Sin esto la base de datos se pierde en cada redeploy.
+    # Disco persistente para SQLite. Sin esto la DB se pierde en cada redeploy.
     disk:
       name: prestamax-data
       mountPath: /var/data
-      sizeGB: 1               # Sube si tu DB crece (cuesta ~$0.25/GB/mes)
+      sizeGB: 1
 
     envVars:
       - key: NODE_ENV
         value: production
 
-      # SQLite vive en el disco persistente montado en /var/data
       - key: DATABASE_PATH
         value: /var/data/prestamax.db
 
-      # JWT_SECRET lo genera Render automáticamente (no lo pongas a mano)
       - key: JWT_SECRET
         generateValue: true
 
       - key: JWT_EXPIRES_IN
         value: 7d
 
-      # Configurar manualmente en el dashb
+      # Configurar manualmente en el dashboard de Render con la URL real
+      # del frontend en Vercel (ej: https://prestamax.vercel.app)
+      - key: FRONTEND_URL
+        sync: false
