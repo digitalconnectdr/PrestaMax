@@ -720,8 +720,8 @@ const PlatformAdminPage: React.FC = () => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card className="p-4 text-center bg-emerald-50">
                   <TrendingUp className="w-6 h-6 text-emerald-600 mx-auto mb-1"/>
-                  <p className="text-lg font-bold text-emerald-700">{formatCurrency(stats.estimatedMonthlyRevenue ?? 0)}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Ingresos Est. / Mes</p>
+                  <p className="text-lg font-bold text-emerald-700">${(stats.estimatedMonthlyRevenue ?? 0).toFixed(2)}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Ingresos Est. / Mes (USD)</p>
                 </Card>
                 <Card className="p-4 text-center bg-blue-50">
                   <CheckCircle className="w-6 h-6 text-blue-600 mx-auto mb-1"/>
@@ -762,15 +762,15 @@ const PlatformAdminPage: React.FC = () => {
                               <td className="py-2 px-3 text-center">
                                 <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{row.tenantCount}</span>
                               </td>
-                              <td className="py-2 px-3 text-right text-slate-600">{formatCurrency(row.priceMonthly)}</td>
-                              <td className="py-2 px-3 text-right font-semibold text-emerald-700">{formatCurrency(row.monthlyRevenue)}</td>
+                              <td className="py-2 px-3 text-right text-slate-600">${(row.priceMonthly ?? 0).toFixed(2)}</td>
+                              <td className="py-2 px-3 text-right font-semibold text-emerald-700">${(row.monthlyRevenue ?? 0).toFixed(2)}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
                           <tr className="bg-slate-50">
                             <td colSpan={3} className="py-2 px-3 text-sm font-semibold text-slate-700">Total estimado</td>
-                            <td className="py-2 px-3 text-right font-bold text-emerald-700">{formatCurrency(stats.estimatedMonthlyRevenue ?? 0)}</td>
+                            <td className="py-2 px-3 text-right font-bold text-emerald-700">${(stats.estimatedMonthlyRevenue ?? 0).toFixed(2)}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -1958,4 +1958,4 @@ const PlatformAdminPage: React.FC = () => {
   )
 }
 
-export default PlatformAdminPage
+export default PlatformAdminPage;
