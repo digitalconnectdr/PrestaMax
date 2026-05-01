@@ -277,19 +277,53 @@ router.get('/income-expenses', authenticate, requireTenant, requirePermission('r
     const { from, to } = req.query as any;
     const start = from || new Date(Date.now()-30*86400000).toISOString().slice(0,10);
     const end = to || new Date().toISOString().slice(0,10);
-    const income = db.prepare(`
-      SELECT category, SUM(amount) as total, COUNT(*) as count
+
+    // Totales por categoria (ingresos)
+    const incomeByCat = db.prepare(`
+      SELECT 'income' as type, category, SUM(amount) as total, COUNT(*) as count
       FROM income_expenses WHERE tenant_id=? AND type='income' AND date(transaction_date) BETWEEN ? AND ?
       GROUP BY category ORDER BY total DESC
     `).all(tid, start, end) as any[];
-    const expenses = db.prepare(`
-      SELECT category, SUM(amount) as total, COUNT(*) as count
+
+    // Totales por categoria (gastos)
+    const expenseByCat = db.prepare(`
+      SELECT 'expense' as type, category, SUM(amount) as total, COUNT(*) as count
       FROM income_expenses WHERE tenant_id=? AND type='expense' AND date(transaction_date) BETWEEN ? AND ?
       GROUP BY category ORDER BY total DESC
     `).all(tid, start, end) as any[];
-    const totalIncome = income.reduce((s:number,r:any)=>s+r.total,0);
-    const totalExpenses = expenses.reduce((s:number,r:any)=>s+r.total,0);
-    res.json({ income, expenses, totalIncome, totalExpenses, net: totalIncome-totalExpenses, period: { from: start, to: end } });
+
+    const byCategory = [...incomeByCat, ...expenseByCat];
+
+    // Evolucion mensual (ultimos 12 meses)
+    const monthly = db.prepare(`
+      SELECT strftime('%Y-%m', transaction_date) as month, type, SUM(amount) as total
+      FROM income_expenses
+      WHERE tenant_id=? AND date(transaction_date) >= date('now','-12 months')
+      GROUP BY month, type ORDER BY month ASC
+    `).all(tid) as any[];
+
+    // Transacciones recientes (ultimas 50 en el rango)
+    const recent = db.prepare(`
+      SELECT id, type, category, description, amount, transaction_date, payment_method
+      FROM income_expenses
+      WHERE tenant_id=? AND date(transaction_date) BETWEEN ? AND ?
+      ORDER BY transaction_date DESC LIMIT 50
+    `).all(tid, start, end) as any[];
+
+    const totalIncome = incomeByCat.reduce((s:number,r:any)=>s+(r.total||0),0);
+    const totalExpenses = expenseByCat.reduce((s:number,r:any)=>s+(r.total||0),0);
+
+    res.json({
+      summary: {
+        totalIncome,
+        totalExpenses,
+        netProfit: totalIncome - totalExpenses,
+      },
+      byCategory,
+      monthly,
+      recent,
+      period: { from: start, to: end },
+    });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
