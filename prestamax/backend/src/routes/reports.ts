@@ -279,12 +279,12 @@ router.get('/income-expenses', authenticate, requireTenant, requirePermission('r
     const end = to || new Date().toISOString().slice(0,10);
     const income = db.prepare(`
       SELECT category, SUM(amount) as total, COUNT(*) as count
-      FROM income_expenses WHERE tenant_id=? AND type='income' AND date BETWEEN ? AND ?
+      FROM income_expenses WHERE tenant_id=? AND type='income' AND date(transaction_date) BETWEEN ? AND ?
       GROUP BY category ORDER BY total DESC
     `).all(tid, start, end) as any[];
     const expenses = db.prepare(`
       SELECT category, SUM(amount) as total, COUNT(*) as count
-      FROM income_expenses WHERE tenant_id=? AND type='expense' AND date BETWEEN ? AND ?
+      FROM income_expenses WHERE tenant_id=? AND type='expense' AND date(transaction_date) BETWEEN ? AND ?
       GROUP BY category ORDER BY total DESC
     `).all(tid, start, end) as any[];
     const totalIncome = income.reduce((s:number,r:any)=>s+r.total,0);
