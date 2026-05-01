@@ -4,12 +4,12 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import path from 'path';
 
 dotenv.config();
 
 import { initializeDatabase, getDb } from './db/database';
 import { router } from './routes';
+import { webhookHandler } from './routes/billing';
 import { errorHandler } from './middleware/errorHandler';
 import {
   sanitizeInputs,
@@ -18,15 +18,10 @@ import {
   auditLogger,
 } from './middleware/securityMiddleware';
 
-// Initialize DB schema
 initializeDatabase();
 
-// Auto-seed if database is empty (first run on a new machine)
-// SOLO en desarrollo. En produccion la DB nueva debe quedar vacia.
 async function autoSeedIfEmpty() {
-  if (process.env.NODE_ENV === 'production') {
-    return;
-  }
+  if (process.env.NODE_ENV === 'production') return;
   try {
     const db = getDb();
     const row = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
@@ -34,13 +29,12 @@ async function autoSeedIfEmpty() {
       console.log('Base de datos vacia, cargando datos de demo...');
       const { seedDatabase } = await import('./db/seed');
       seedDatabase();
-      console.log('Datos de demo cargados. Login: admin@prestamax.com / Admin123!');
+      console.log('Datos de demo cargados.');
     }
   } catch (e) {
     console.log('Sin seed:', e);
   }
 }
-
 autoSeedIfEmpty();
 
 const app = express();
@@ -59,7 +53,7 @@ app.use(helmet({
       styleSrc:       ["'self'", "'unsafe-inline'"],
       imgSrc:         ["'self'", 'data:', 'https:'],
       connectSrc:     ["'self'", FRONTEND_ORIGIN, 'https://api.stripe.com'],
-      frameSrc:       ["'none'"],
+      frameSrc:       ["'self'", 'https://js.stripe.com', 'https://hooks.stripe.com'],
       objectSrc:      ["'none'"],
       upgradeInsecureRequests: [],
     },
@@ -87,7 +81,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id', 'Stripe-Signature'],
   exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
 }));
 
@@ -99,7 +93,7 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders:   false,
   message: rateLimitMsg,
-  skip: (req) => req.path === '/health',
+  skip: (req) => req.path === '/health' || req.path === '/api/billing/webhook',
 });
 
 const authLimiter = rateLimit({
@@ -140,6 +134,10 @@ app.use('/api/auth/change-password', authLimiter);
 app.use('/api/admin',                adminLimiter);
 app.use('/api/loans/import',         bulkLimiter);
 app.use('/api/',                     globalLimiter);
+
+// IMPORTANTE: webhook de Stripe ANTES de express.json para preservar raw body
+// (Stripe necesita el body como Buffer para verificar la firma HMAC)
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), webhookHandler);
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));

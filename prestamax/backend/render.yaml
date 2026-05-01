@@ -5,14 +5,11 @@ services:
     plan: starter
     region: oregon
     rootDir: prestamax/backend
-    # --include=dev fuerza la instalacion de devDependencies (typescript,
-    # @types/node, etc.) incluso cuando NODE_ENV=production.
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
 
-    # Disco persistente para SQLite. Sin esto la DB se pierde en cada redeploy.
     disk:
       name: prestamax-data
       mountPath: /var/data
@@ -21,17 +18,24 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-
       - key: DATABASE_PATH
         value: /var/data/prestamax.db
-
       - key: JWT_SECRET
         generateValue: true
-
       - key: JWT_EXPIRES_IN
         value: 7d
-
-      # Configurar manualmente en el dashboard de Render con la URL real
-      # del frontend en Vercel (ej: https://prestamax.vercel.app)
       - key: FRONTEND_URL
+        sync: false
+      # Stripe (configurar manualmente en Render dashboard despues del deploy)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_STARTER
+        sync: false
+      - key: STRIPE_PRICE_BASICO
+        sync: false
+      - key: STRIPE_PRICE_PROFESIONAL
+        sync: false
+      - key: STRIPE_PRICE_ENTERPRISE
         sync: false

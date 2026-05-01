@@ -17,10 +17,10 @@ import loanRequestRoutes from './loanRequests';
 import publicRoutes from './public';
 import collectionTaskRoutes from './collection_tasks';
 import notificationRoutes from './notifications';
+import billingRoutes from './billing';
 
 export const router = Router();
 
-// Stub for external tools/extensions that poll /api/bot/state
 router.get('/bot/state', (_req, res) => res.json({ active: false }));
 
 router.use('/auth', authRoutes);
@@ -41,3 +41,4 @@ router.use('/loan-requests', loanRequestRoutes);
 router.use('/public', publicRoutes);
 router.use('/collection-tasks', collectionTaskRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/billing', billingRoutes);

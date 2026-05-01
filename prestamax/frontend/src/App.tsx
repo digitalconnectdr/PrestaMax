@@ -6,7 +6,6 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
 import type { PermKey } from '@/lib/permissions'
 
-// Pages
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
@@ -32,18 +31,16 @@ import TermsPage from '@/pages/public/TermsPage'
 import PrivacyPage from '@/pages/public/PrivacyPage'
 import LoanRequestsPage from '@/pages/requests/LoanRequestsPage'
 import LoanCalculatorPage from '@/pages/calculator/LoanCalculatorPage'
+import BillingPage from '@/pages/billing/BillingPage'
 
-// Layout
 import AppLayout from '@/components/layout/AppLayout'
 
-// Protected Route
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { state } = useAuth()
   if (!state.isAuthenticated) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
-// Permission-guarded route
 const PermissionRoute: React.FC<{ perm: PermKey; children: React.ReactNode }> = ({ perm, children }) => {
   const { can } = usePermission()
   if (!can(perm)) return <Navigate to="/dashboard" replace />
@@ -132,7 +129,10 @@ const AppRoutes: React.FC = () => {
             <PermissionRoute perm="settings.bank_accounts"><SettingsPage /></PermissionRoute>
           } />
           <Route path="/settings/subscription" element={
-            <PermissionRoute perm="settings.general"><SettingsPage /></PermissionRoute>
+            <PermissionRoute perm="settings.general"><BillingPage /></PermissionRoute>
+          } />
+          <Route path="/billing" element={
+            <PermissionRoute perm="settings.general"><BillingPage /></PermissionRoute>
           } />
 
           <Route path="/whatsapp" element={
