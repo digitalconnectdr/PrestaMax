@@ -50,7 +50,7 @@ const PATH_TO_TAB: Record<string, string> = {
   '/settings/subscription': 'subscription',
 }
 
-const BANKS_DR = ['BHD Banco', 'Banco Popular', 'Banco Qik', 'BanReservas', 'Banco Santa Cruz', 'Banesco', 'Scotiabank', 'Citibank', 'Bancamérica', 'Banco Caribe', 'Otro']
+const BANKS_DR = ['BHD Banco', 'Banco Popular', 'Banco Qik', 'BanReservas', 'Banco Santa Cruz', 'Banesco', 'Scotiabank', 'Citibank', 'Bancamérica', 'Banco Caribe', 'Asociación Cibao', 'Otro']
 
 // ─── Role hierarchy helpers ──────────────────────────────────────────────────
 const ROLE_LEVEL: Record<string, number> = {

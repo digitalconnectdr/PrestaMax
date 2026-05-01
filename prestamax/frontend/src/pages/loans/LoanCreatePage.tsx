@@ -550,6 +550,7 @@ const LoanCreatePage: React.FC = () => {
                     className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="months">Meses</option>
+                    <option value="biweekly">Quincenal</option>
                     <option value="weeks">Semanas</option>
                     <option value="days">Días</option>
                   </select>

@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
-import { Calculator, MessageCircle, Download, RefreshCw } from 'lucide-react'
+import { Calculator, MessageCircle, Download, RefreshCw, Percent, DollarSign } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { usePermission } from '@/hooks/usePermission'
 
@@ -22,33 +22,38 @@ interface CalcResult {
   totalInterest: number
   totalPrincipal: number
   monthlyPayment: number
+  computedRate: number   // Tasa mensual (%) usada para el calculo
 }
 
 function addFreqMonths(date: Date, freq: string, n: number): Date {
   const d = new Date(date)
   if (freq === 'monthly') d.setMonth(d.getMonth() + n)
-  else if (freq === 'biweekly') d.setDate(d.getDate() + n * 15) // 15 days = backend standard
+  else if (freq === 'biweekly') d.setDate(d.getDate() + n * 15) // 15 dias = standard
   else if (freq === 'weekly') d.setDate(d.getDate() + n * 7)
   else if (freq === 'daily') d.setDate(d.getDate() + n)
   return d
 }
 
-function calcSchedule(
-  amount: number,
-  rate: number,       // monthly % (always entered as monthly in the calculator)
-  term: number,
-  termUnit: string,   // months | weeks | days
-  freq: string,       // monthly | biweekly | weekly | daily
-  amortType: string,  // fixed_installment | interest_only | flat_interest
-  firstDate: Date
-): Installment[] {
-  const r = rate / 100  // monthly rate as decimal
-  // Convert term to number of payments based on frequency
+// Periodos por mes segun la frecuencia (factor k para convertir tasa mensual)
+function periodsPerMonth(freq: string): number {
+  if (freq === 'biweekly') return 2
+  if (freq === 'weekly') return 4
+  if (freq === 'daily') return 30
+  return 1 // monthly
+}
+
+// Calcula numero total de pagos basado en termino, unidad y frecuencia
+function getNPay(term: number, termUnit: string, freq: string): number {
   let nPay = term
   if (termUnit === 'months') {
     if (freq === 'biweekly') nPay = term * 2
     else if (freq === 'weekly') nPay = term * 4
     else if (freq === 'daily') nPay = term * 30
+  } else if (termUnit === 'biweekly') {
+    if (freq === 'monthly') nPay = Math.ceil(term / 2)
+    else if (freq === 'biweekly') nPay = term
+    else if (freq === 'weekly') nPay = Math.ceil(term * 2)
+    else if (freq === 'daily') nPay = term * 15
   } else if (termUnit === 'weeks') {
     if (freq === 'monthly') nPay = Math.ceil(term / 4)
     else if (freq === 'biweekly') nPay = Math.ceil(term / 2)
@@ -60,17 +65,84 @@ function calcSchedule(
     else if (freq === 'weekly') nPay = Math.ceil(term / 7)
     else if (freq === 'daily') nPay = term
   }
-  nPay = Math.max(1, nPay)
+  return Math.max(1, nPay)
+}
+
+// Convierte termino a meses (para flat_interest)
+function getTermInMonths(term: number, termUnit: string): number {
+  if (termUnit === 'months') return term
+  if (termUnit === 'biweekly') return term / 2
+  if (termUnit === 'weeks') return term / 4
+  return term / 30 // days
+}
+
+// MODO INVERSO: dada una ganancia deseada (en pesos), calcula la tasa mensual (%)
+// que produce esa ganancia total en intereses para el plan especificado.
+function findRateFromProfit(
+  amount: number,
+  profit: number,
+  term: number,
+  termUnit: string,
+  freq: string,
+  amortType: string,
+): number {
+  if (amount <= 0 || profit <= 0 || term <= 0) return 0
+  const k = periodsPerMonth(freq)
+  const nPay = getNPay(term, termUnit, freq)
+
+  if (amortType === 'flat_interest') {
+    // total_interest = amount * r_monthly * term_in_months
+    const termInMonths = getTermInMonths(term, termUnit)
+    if (termInMonths === 0) return 0
+    return (profit / (amount * termInMonths)) * 100
+  }
+
+  if (amortType === 'interest_only') {
+    // total_interest = nPay * r_period * amount
+    // r_period = r_monthly / k
+    const rPeriod = profit / (nPay * amount)
+    return rPeriod * k * 100
+  }
+
+  // fixed_installment: biseccion para encontrar r_period tal que
+  //   payment = amount * (r * (1+r)^n) / ((1+r)^n - 1)
+  //   total_paid = payment * n
+  //   total_interest = total_paid - amount = profit
+  let lo = 0
+  let hi = 1.0  // 100% por periodo es un techo holgado
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2
+    if (mid === 0) { lo = 0.0001; continue }
+    const payment = amount * (mid * Math.pow(1 + mid, nPay)) / (Math.pow(1 + mid, nPay) - 1)
+    const totalInterest = payment * nPay - amount
+    if (Math.abs(totalInterest - profit) < 0.01) return mid * k * 100
+    if (totalInterest < profit) lo = mid
+    else hi = mid
+  }
+  return ((lo + hi) / 2) * k * 100
+}
+
+function calcSchedule(
+  amount: number,
+  rate: number,       // monthly % (always entered as monthly)
+  term: number,
+  termUnit: string,   // months | biweekly | weeks | days
+  freq: string,       // monthly | biweekly | weekly | daily
+  amortType: string,  // fixed_installment | interest_only | flat_interest
+  firstDate: Date
+): Installment[] {
+  const r = rate / 100  // monthly rate as decimal
+  const nPay = getNPay(term, termUnit, freq)
 
   // Convert monthly rate to per-period rate
-  const rPeriod = freq === 'biweekly' ? r / 2 : freq === 'weekly' ? r / 4 : freq === 'daily' ? r / 30 : r
+  const k = periodsPerMonth(freq)
+  const rPeriod = r / k
 
   const installments: Installment[] = []
   let balance = amount
 
   if (amortType === 'flat_interest') {
-    // Flat interest: total interest = principal × monthly_rate × term_in_months
-    const termInMonths = termUnit === 'months' ? term : termUnit === 'weeks' ? term / 4 : term / 30
+    const termInMonths = getTermInMonths(term, termUnit)
     const totalInterest = amount * r * termInMonths
     const totalPayable = amount + totalInterest
     const payment = totalPayable / nPay
@@ -88,7 +160,6 @@ function calcSchedule(
       })
     }
   } else if (amortType === 'interest_only') {
-    // Interest-only: each period pays rPeriod × principal; last period also pays full principal
     const interestPay = Math.round(amount * rPeriod * 100) / 100
     for (let i = 1; i <= nPay; i++) {
       const isLast = i === nPay
@@ -132,14 +203,16 @@ function calcSchedule(
 }
 
 const FREQ_LABEL: Record<string, string> = { monthly: 'Mensual', biweekly: 'Quincenal', weekly: 'Semanal', daily: 'Diario' }
-const AMORT_LABEL: Record<string, string> = { fixed_installment: 'Cuota Fija', interest_only: 'Solo Interés', flat_interest: 'Interés Plano' }
+const AMORT_LABEL: Record<string, string> = { fixed_installment: 'Cuota Fija', interest_only: 'Solo Interes', flat_interest: 'Interes Plano' }
+const TERM_UNIT_LABEL: Record<string, string> = { months: 'meses', biweekly: 'quincenas', weeks: 'semanas', days: 'dias' }
 
 const LoanCalculatorPage: React.FC = () => {
-  // ── All hooks must be called before any conditional return ────────────────
   const { can } = usePermission()
+  const [mode, setMode] = useState<'rate' | 'profit'>('rate')
   const [form, setForm] = useState({
     amount: '',
     rate: '',
+    profit: '',
     term: '',
     termUnit: 'months',
     freq: 'monthly',
@@ -148,12 +221,18 @@ const LoanCalculatorPage: React.FC = () => {
   })
   const [result, setResult] = useState<CalcResult | null>(null)
 
-  // useCallback must be declared before the permission guard (Rules of Hooks)
   const calculate = useCallback(() => {
     const amount = parseFloat(form.amount)
-    const rate = parseFloat(form.rate)
     const term = parseInt(form.term)
-    if (!amount || !rate || !term) return
+    if (!amount || !term) return
+
+    let rate = parseFloat(form.rate)
+    if (mode === 'profit') {
+      const profit = parseFloat(form.profit)
+      if (!profit) return
+      rate = findRateFromProfit(amount, profit, term, form.termUnit, form.freq, form.amortType)
+    }
+    if (!rate) return
 
     const firstDate = new Date(form.firstDate + 'T12:00:00')
     const installments = calcSchedule(amount, rate, term, form.termUnit, form.freq, form.amortType, firstDate)
@@ -166,28 +245,28 @@ const LoanCalculatorPage: React.FC = () => {
       totalInterest: Math.round(totalInterest * 100) / 100,
       totalPrincipal: amount,
       monthlyPayment: installments[0]?.payment || 0,
+      computedRate: Math.round(rate * 100) / 100,
     })
-  }, [form])
+  }, [form, mode])
 
-  // Permission guard — all hooks declared above, safe to return early now
   if (!can('calculator.use')) return <Navigate to="/dashboard" replace />
 
   const buildWhatsAppText = () => {
     if (!result) return ''
     const lines = [
-      `📊 *SIMULACIÓN DE PRÉSTAMO*`,
+      `*SIMULACION DE PRESTAMO*`,
       ``,
-      `💰 Monto: ${formatCurrency(parseFloat(form.amount))}`,
-      `📈 Tasa: ${form.rate}% mensual`,
-      `📅 Plazo: ${form.term} ${form.termUnit === 'months' ? 'meses' : form.termUnit === 'weeks' ? 'semanas' : 'días'}`,
-      `🔄 Frecuencia: ${FREQ_LABEL[form.freq]}`,
-      `📝 Tipo: ${AMORT_LABEL[form.amortType]}`,
+      `Monto: ${formatCurrency(parseFloat(form.amount))}`,
+      `Tasa: ${result.computedRate.toFixed(2)}% mensual`,
+      `Plazo: ${form.term} ${TERM_UNIT_LABEL[form.termUnit] || form.termUnit}`,
+      `Frecuencia: ${FREQ_LABEL[form.freq]}`,
+      `Tipo: ${AMORT_LABEL[form.amortType]}`,
       ``,
-      `💵 Cuota: ${formatCurrency(result.monthlyPayment)}`,
-      `💳 Total a pagar: ${formatCurrency(result.totalPayment)}`,
-      `🏦 Total intereses: ${formatCurrency(result.totalInterest)}`,
+      `Cuota: ${formatCurrency(result.monthlyPayment)}`,
+      `Total a pagar: ${formatCurrency(result.totalPayment)}`,
+      `Total intereses: ${formatCurrency(result.totalInterest)}`,
       ``,
-      `_Simulación generada por PrestaMax_`,
+      `_Simulacion generada por PrestaMax_`,
     ]
     return encodeURIComponent(lines.join('\n'))
   }
@@ -195,7 +274,7 @@ const LoanCalculatorPage: React.FC = () => {
   const exportCSV = () => {
     if (!result) return
     const rows = [
-      ['#', 'Fecha', 'Cuota', 'Capital', 'Interés', 'Saldo'].join(','),
+      ['#', 'Fecha', 'Cuota', 'Capital', 'Interes', 'Saldo'].join(','),
       ...result.installments.map(i =>
         [i.num, i.dueDate, i.payment.toFixed(2), i.principal.toFixed(2), i.interest.toFixed(2), i.balance.toFixed(2)].join(',')
       ),
@@ -212,19 +291,53 @@ const LoanCalculatorPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="page-title flex items-center gap-2"><Calculator className="w-6 h-6"/>Calculadora de Préstamos</h1>
-        <p className="text-slate-600 text-sm mt-1">Simula cuotas, intereses y plan de pagos antes de crear un préstamo</p>
+        <h1 className="page-title flex items-center gap-2"><Calculator className="w-6 h-6"/>Calculadora de Prestamos</h1>
+        <p className="text-slate-600 text-sm mt-1">Simula cuotas, intereses y plan de pagos antes de crear un prestamo</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Form */}
         <Card className="lg:col-span-1">
-          <h3 className="section-title mb-4">Parámetros</h3>
+          <h3 className="section-title mb-4">Parametros</h3>
+
+          {/* Toggle de modo */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Modo de calculo</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMode('rate')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'rate' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+              >
+                <Percent className="w-4 h-4"/>Por Tasa
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('profit')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${mode === 'profit' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+              >
+                <DollarSign className="w-4 h-4"/>Por Ganancia
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-1.5">
+              {mode === 'rate'
+                ? 'Ingresa la tasa y el sistema calcula las cuotas.'
+                : 'Ingresa cuanto quieres ganar y el sistema calcula la tasa necesaria.'}
+            </p>
+          </div>
+
           <div className="space-y-3">
-            <Input label="Monto del Préstamo *" type="number" step="0.01" value={form.amount}
+            <Input label="Monto del Prestamo *" type="number" step="0.01" value={form.amount}
               onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} placeholder="50,000.00" />
-            <Input label="Tasa de Interés Mensual (%) *" type="number" step="0.01" value={form.rate}
-              onChange={e => setForm(p => ({ ...p, rate: e.target.value }))} placeholder="5.00" />
+
+            {mode === 'rate' ? (
+              <Input label="Tasa de Interes Mensual (%) *" type="number" step="0.01" value={form.rate}
+                onChange={e => setForm(p => ({ ...p, rate: e.target.value }))} placeholder="5.00" />
+            ) : (
+              <Input label="Ganancia Deseada (RD$) *" type="number" step="0.01" value={form.profit}
+                onChange={e => setForm(p => ({ ...p, profit: e.target.value }))} placeholder="5,000.00" />
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               <Input label="Plazo *" type="number" value={form.term}
                 onChange={e => setForm(p => ({ ...p, term: e.target.value }))} placeholder="12" />
@@ -232,8 +345,9 @@ const LoanCalculatorPage: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
                 <select value={form.termUnit} onChange={e => setForm(p => ({ ...p, termUnit: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="months">Meses</option>
+                  <option value="biweekly">Quincenas</option>
                   <option value="weeks">Semanas</option>
-                  <option value="days">Días</option>
+                  <option value="days">Dias</option>
                 </select>
               </div>
             </div>
@@ -247,11 +361,11 @@ const LoanCalculatorPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Amortización</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Amortizacion</label>
               <select value={form.amortType} onChange={e => setForm(p => ({ ...p, amortType: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="fixed_installment">Cuota Fija</option>
-                <option value="interest_only">Solo Interés</option>
-                <option value="flat_interest">Interés Plano</option>
+                <option value="interest_only">Solo Interes</option>
+                <option value="flat_interest">Interes Plano</option>
               </select>
             </div>
             <div>
@@ -268,6 +382,21 @@ const LoanCalculatorPage: React.FC = () => {
         <div className="lg:col-span-2 space-y-4">
           {result ? (
             <>
+              {/* Banner especial cuando se calculo por ganancia */}
+              {mode === 'profit' && (
+                <div className="bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-emerald-100 rounded-full p-2">
+                      <Percent className="w-5 h-5 text-emerald-700"/>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-600 uppercase font-medium">Tasa calculada para tu ganancia</p>
+                      <p className="text-2xl font-bold text-emerald-700">{result.computedRate.toFixed(2)}% <span className="text-base font-normal text-slate-600">mensual</span></p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Summary cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <Card className="p-3 bg-blue-50 border-blue-200">
@@ -281,7 +410,7 @@ const LoanCalculatorPage: React.FC = () => {
                   <p className="text-xs text-slate-400">{result.installments.length} cuotas</p>
                 </Card>
                 <Card className="p-3 bg-amber-50 border-amber-200">
-                  <p className="text-xs text-slate-500 uppercase font-medium">Total Interés</p>
+                  <p className="text-xs text-slate-500 uppercase font-medium">Total Interes</p>
                   <p className="text-lg font-bold text-amber-700">{formatCurrency(result.totalInterest)}</p>
                   <p className="text-xs text-slate-400">{((result.totalInterest / result.totalPrincipal) * 100).toFixed(1)}% del capital</p>
                 </Card>
@@ -315,7 +444,7 @@ const LoanCalculatorPage: React.FC = () => {
                         <th className="text-left py-2 px-3 font-semibold text-slate-700">Vence</th>
                         <th className="text-right py-2 px-3 font-semibold text-slate-700">Cuota</th>
                         <th className="text-right py-2 px-3 font-semibold text-slate-700">Capital</th>
-                        <th className="text-right py-2 px-3 font-semibold text-slate-700">Interés</th>
+                        <th className="text-right py-2 px-3 font-semibold text-slate-700">Interes</th>
                         <th className="text-right py-2 px-3 font-semibold text-slate-700">Saldo</th>
                       </tr>
                     </thead>
