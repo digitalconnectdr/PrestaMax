@@ -82,11 +82,11 @@ router.get('/', authenticate, requireTenant, requirePermission('loans.view'), (r
       SELECT l.*, c.full_name as client_name, c.id_number as client_id_number, c.phone_personal as client_phone,
              p.name as product_name, p.type as product_type,
              COALESCE((
-               SELECT SUM((COALESCE(i.principal_amount,0) + COALESCE(i.interest_amount,0)) - COALESCE(i.paid_amount,0))
+               SELECT SUM(COALESCE(i.total_amount,0) - COALESCE(i.paid_total,0))
                FROM installments i
                WHERE i.loan_id = l.id
                  AND i.status NOT IN ('paid','waived')
-                 AND date(COALESCE(i.deferred_due_date, i.due_date)) < date('now')
+                 AND date(i.due_date) < date('now')
              ), 0) + COALESCE(l.mora_balance, 0) AS overdue_balance
       FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id
       ${where} ORDER BY l.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), skip);
