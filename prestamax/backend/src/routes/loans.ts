@@ -61,14 +61,33 @@ router.get('/', authenticate, requireTenant, requirePermission('loans.view'), (r
     const skip = (parseInt(page)-1)*parseInt(limit);
     const db = getDb();
     let where = 'WHERE l.tenant_id=?'; const params: any[] = [req.tenant.id];
-    if (status) { where+=' AND l.status=?'; params.push(status); }
+    // Soporta status como un valor unico o lista comma-separated:
+    //   ?status=active          -> filtra solo 'active'
+    //   ?status=active,in_mora  -> filtra ambos
+    if (status) {
+      const statuses = String(status).split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        where += ' AND l.status=?';
+        params.push(statuses[0]);
+      } else if (statuses.length > 1) {
+        where += ` AND l.status IN (${statuses.map(() => '?').join(',')})`;
+        params.push(...statuses);
+      }
+    }
     if (client_id) { where+=' AND l.client_id=?'; params.push(client_id); }
     if (collector_id) { where+=' AND l.collector_id=?'; params.push(collector_id); }
     if (search) { where+=' AND (l.loan_number LIKE ? OR c.full_name LIKE ?)'; const s=`%${search}%`; params.push(s,s); }
     const total = (db.prepare(`SELECT COUNT(*) as cnt FROM loans l JOIN clients c ON c.id=l.client_id ${where}`).get(...params) as any).cnt;
     const data = db.prepare(`
       SELECT l.*, c.full_name as client_name, c.id_number as client_id_number, c.phone_personal as client_phone,
-             p.name as product_name, p.type as product_type
+             p.name as product_name, p.type as product_type,
+             COALESCE((
+               SELECT SUM((COALESCE(i.principal_amount,0) + COALESCE(i.interest_amount,0)) - COALESCE(i.paid_amount,0))
+               FROM installments i
+               WHERE i.loan_id = l.id
+                 AND i.status NOT IN ('paid','waived')
+                 AND date(COALESCE(i.deferred_due_date, i.due_date)) < date('now')
+             ), 0) + COALESCE(l.mora_balance, 0) AS overdue_balance
       FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id
       ${where} ORDER BY l.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), skip);
     res.json({ data, total, page:parseInt(page), limit:parseInt(limit) });

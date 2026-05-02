@@ -226,8 +226,14 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                 <label className={labelCls}>Plazo</label>
                 <div className="flex gap-2">
                   <input type="number" value={form.term} onChange={e => set('term', e.target.value)} className={`${inputCls} flex-1`} placeholder="12" />
-                  <select value={form.termUnit} onChange={e => set('termUnit', e.target.value)} className={`${inputCls} w-auto`}>
+                  <select value={form.termUnit} onChange={e => {
+                      const u = e.target.value
+                      const freqMap: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
+                      set('termUnit', u)
+                      if (freqMap[u]) set('paymentFrequency', freqMap[u])
+                    }} className={`${inputCls} w-auto`}>
                     <option value="months">Meses</option>
+                    <option value="biweekly">Quincenal</option>
                     <option value="weeks">Semanas</option>
                     <option value="days">Días</option>
                   </select>

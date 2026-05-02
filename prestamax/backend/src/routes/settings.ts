@@ -365,7 +365,7 @@ router.post('/branches', authenticate, requireTenant, requirePermission('setting
 router.get('/bank-accounts', authenticate, requireTenant, requirePermission('settings.bank_accounts'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    res.json(db.prepare('SELECT * FROM bank_accounts WHERE tenant_id=? ORDER BY bank_name').all(req.tenant.id));
+    res.json(db.prepare('SELECT * FROM bank_accounts WHERE tenant_id=? AND is_active=1 ORDER BY bank_name').all(req.tenant.id));
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 

@@ -46,6 +46,7 @@ interface ActiveLoan {
   principalBalance: number
   interestBalance: number
   moraBalance: number
+  overdueBalance?: number
   prorrogaFee?: number
 }
 
@@ -200,7 +201,7 @@ const PaymentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchPayments()
-    api.get('/loans?status=active&limit=200').then(res => setActiveLoans(res.data.data || [])).catch(() => {})
+    api.get('/loans?status=active,in_mora,overdue,disbursed,current&limit=200').then(res => setActiveLoans(res.data.data || [])).catch(() => {})
     api.get('/settings/bank-accounts').then(res => setBankAccounts(Array.isArray(res.data) ? res.data.filter((a: BankAccount) => a) : [])).catch(() => {})
   }, [])
 
@@ -614,13 +615,25 @@ const PaymentsPage: React.FC = () => {
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-slate-700">Monto a Pagar</label>
                     {selectedLoan && (
-                      <button
-                        onClick={() => setPayForm(f => ({ ...f, amount: String(selectedLoan.totalBalance.toFixed(2)) }))}
-                        className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1"
-                      >
-                        <Zap className="w-3 h-3" />
-                        Pagar saldo total
-                      </button>
+                      <div className="flex items-center gap-3">
+                        {(selectedLoan.overdueBalance || 0) > 0 && (
+                          <button
+                            onClick={() => setPayForm(f => ({ ...f, amount: String((selectedLoan.overdueBalance || 0).toFixed(2)) }))}
+                            className="text-xs text-amber-700 hover:underline font-medium flex items-center gap-1"
+                            title="Suma de cuotas vencidas + mora a la fecha"
+                          >
+                            <Zap className="w-3 h-3" />
+                            Pagar saldo vencido
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setPayForm(f => ({ ...f, amount: String(selectedLoan.totalBalance.toFixed(2)) }))}
+                          className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1"
+                        >
+                          <Zap className="w-3 h-3" />
+                          Pagar saldo total
+                        </button>
+                      </div>
                     )}
                   </div>
                   <input

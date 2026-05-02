@@ -546,7 +546,12 @@ const LoanCreatePage: React.FC = () => {
                   />
                   <select
                     value={form.termUnit}
-                    onChange={(e) => setForm({ ...form, termUnit: e.target.value })}
+                    onChange={(e) => {
+                      const u = e.target.value
+                      // Mapear unidad de plazo a frecuencia de pago automaticamente
+                      const freqMap: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
+                      setForm({ ...form, termUnit: u, paymentFrequency: freqMap[u] || form.paymentFrequency })
+                    }}
                     className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="months">Meses</option>
@@ -684,8 +689,8 @@ const LoanCreatePage: React.FC = () => {
                   if (filteredAccounts.length === 0) return (
                     <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                       {bankAccounts.length === 0
-                        ? <>No hay cuentas bancarias configuradas. <a href="/settings?tab=bank_accounts" className="underline font-medium">Agregar cuenta →</a></>
-                        : <>No tienes cuentas bancarias en <strong>{form.currency}</strong>. <a href="/settings?tab=bank_accounts" className="underline font-medium">Agregar cuenta {form.currency} →</a></>
+                        ? <>No hay cuentas bancarias configuradas. <a href="/settings/bank-accounts" className="underline font-medium">Agregar cuenta →</a></>
+                        : <>No tienes cuentas bancarias en <strong>{form.currency}</strong>. <a href="/settings/bank-accounts" className="underline font-medium">Agregar cuenta {form.currency} →</a></>
                       }
                     </p>
                   )
