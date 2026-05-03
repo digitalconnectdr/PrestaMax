@@ -490,8 +490,8 @@ const PaymentsPage: React.FC = () => {
 
       {/* Payment Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <Card className="w-full max-w-lg my-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <Card className="w-full max-w-lg my-4 max-h-[92vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -615,20 +615,25 @@ const PaymentsPage: React.FC = () => {
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-slate-700">Monto a Pagar</label>
                     {selectedLoan && (
-                      <div className="flex items-center gap-3">
-                        {(selectedLoan.overdueBalance || 0) > 0 && (
-                          <button
-                            onClick={() => setPayForm(f => ({ ...f, amount: String((selectedLoan.overdueBalance || 0).toFixed(2)) }))}
-                            className="text-xs text-amber-700 hover:underline font-medium flex items-center gap-1"
-                            title="Suma de cuotas vencidas + mora a la fecha"
-                          >
-                            <Zap className="w-3 h-3" />
-                            Pagar saldo vencido
-                          </button>
-                        )}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => {
+                            const ov = selectedLoan.overdueBalance || 0
+                            if (ov > 0) setPayForm(f => ({ ...f, amount: String(ov.toFixed(2)) }))
+                          }}
+                          disabled={(selectedLoan.overdueBalance || 0) <= 0}
+                          className={`text-xs font-medium flex items-center gap-1 ${(selectedLoan.overdueBalance || 0) > 0 ? 'text-amber-700 hover:underline' : 'text-slate-400 cursor-not-allowed'}`}
+                          title={(selectedLoan.overdueBalance || 0) > 0 ? 'Suma de cuotas vencidas + mora a la fecha' : 'No hay cuotas vencidas en este momento'}
+                        >
+                          <Zap className="w-3 h-3" />
+                          {(selectedLoan.overdueBalance || 0) > 0
+                            ? `Pagar vencido (${formatCurrency(selectedLoan.overdueBalance || 0)})`
+                            : 'Sin saldo vencido'}
+                        </button>
                         <button
                           onClick={() => setPayForm(f => ({ ...f, amount: String(selectedLoan.totalBalance.toFixed(2)) }))}
                           className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1"
+                          title="Liquidar el prestamo completo"
                         >
                           <Zap className="w-3 h-3" />
                           Pagar saldo total
