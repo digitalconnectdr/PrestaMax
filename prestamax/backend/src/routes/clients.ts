@@ -81,14 +81,33 @@ router.put('/:id', authenticate, requireTenant, requirePermission('clients.edit'
     const db = getDb();
     const d = req.body;
     const fn = d.first_name && d.last_name ? `${d.first_name} ${d.last_name}` : undefined;
-    db.prepare(`UPDATE clients SET first_name=COALESCE(?,first_name), last_name=COALESCE(?,last_name),
-      full_name=COALESCE(?,full_name), phone_personal=COALESCE(?,phone_personal), phone_work=COALESCE(?,phone_work),
-      phone_family=COALESCE(?,phone_family), whatsapp=COALESCE(?,whatsapp), email=COALESCE(?,email),
+    db.prepare(`UPDATE clients SET
+      first_name=COALESCE(?,first_name), last_name=COALESCE(?,last_name), full_name=COALESCE(?,full_name),
+      id_type=COALESCE(?,id_type), id_number=COALESCE(?,id_number), birth_date=COALESCE(?,birth_date),
+      gender=COALESCE(?,gender), marital_status=COALESCE(?,marital_status),
+      phone_personal=COALESCE(?,phone_personal), phone_work=COALESCE(?,phone_work),
+      phone_family=COALESCE(?,phone_family), family_contact_name=COALESCE(?,family_contact_name),
+      family_relationship=COALESCE(?,family_relationship), whatsapp=COALESCE(?,whatsapp), email=COALESCE(?,email),
       address=COALESCE(?,address), city=COALESCE(?,city), province=COALESCE(?,province),
-      occupation=COALESCE(?,occupation), employer=COALESCE(?,employer),work_address=COALESCE(?,work_address), monthly_income=COALESCE(?,monthly_income),
-      notes=COALESCE(?,notes), updated_at=? WHERE id=? AND tenant_id=?`).run(
-      d.first_name,d.last_name,fn,d.phone_personal,d.phone_work,d.phone_family,d.whatsapp,d.email,
-      d.address,d.city,d.province,d.occupation,d.employer,d.monthly_income,d.notes,now(),req.params.id,req.tenant.id
+      occupation=COALESCE(?,occupation), employer=COALESCE(?,employer), work_address=COALESCE(?,work_address),
+      economic_activity=COALESCE(?,economic_activity), monthly_income=COALESCE(?,monthly_income),
+      other_income=COALESCE(?,other_income), notes=COALESCE(?,notes),
+      consent_data_processing=COALESCE(?,consent_data_processing),
+      consent_whatsapp=COALESCE(?,consent_whatsapp),
+      updated_at=? WHERE id=? AND tenant_id=?`).run(
+      d.first_name||null, d.last_name||null, fn||null,
+      d.id_type||null, d.id_number||null, d.birth_date||null,
+      d.gender||null, d.marital_status||null,
+      d.phone_personal||null, d.phone_work||null,
+      d.phone_family||null, d.family_contact_name||null,
+      d.family_relationship||null, d.whatsapp||null, d.email||null,
+      d.address||null, d.city||null, d.province||null,
+      d.occupation||null, d.employer||null, d.work_address||null,
+      d.economic_activity||null, d.monthly_income||null,
+      d.other_income||null, d.notes||null,
+      d.consent_data_processing !== undefined ? (d.consent_data_processing ? 1 : 0) : null,
+      d.consent_whatsapp !== undefined ? (d.consent_whatsapp ? 1 : 0) : null,
+      now(), req.params.id, req.tenant.id
     );
     res.json(db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id));
   } catch(e) { res.status(500).json({ error: 'Failed to update client' }); }
