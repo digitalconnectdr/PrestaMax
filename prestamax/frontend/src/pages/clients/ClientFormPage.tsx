@@ -17,6 +17,7 @@ interface FormData {
   dateOfBirth: string
   gender: string
   maritalStatus: string
+  workAddress: string
   nationality: string
   phonePersonal: string
   phoneWork: string
@@ -50,8 +51,8 @@ const ClientFormPage: React.FC = () => {
     documentType: 'cedula',
     documentNumber: '',
     dateOfBirth: '',
-    gender: 'male',
-    maritalStatus: 'single',
+    gender: '',
+    maritalStatus: '',
     nationality: 'Dominicana',
     phonePersonal: '',
     phoneWork: '',
@@ -65,6 +66,7 @@ const ClientFormPage: React.FC = () => {
     province: '',
     occupation: '',
     employer: '',
+    workAddress: '',
     monthlyIncome: '',
     economicActivity: '',
     consentDataProcessing: false,
@@ -86,8 +88,9 @@ const ClientFormPage: React.FC = () => {
             documentType: client.idType || client.documentType || 'cedula',
             documentNumber: client.idNumber || client.documentNumber || '',
             dateOfBirth: client.birthDate || client.dateOfBirth || '',
-            gender: client.gender || 'male',
-            maritalStatus: client.maritalStatus || 'single',
+            gender: client.gender || '',
+            maritalStatus: client.maritalStatus || '',
+            workAddress: client.workAddress || '',
             nationality: client.nationality || 'Dominicana',
             phonePersonal: client.phonePersonal || '',
             phoneWork: client.phoneWork || '',
@@ -159,6 +162,7 @@ const ClientFormPage: React.FC = () => {
         dateOfBirth: formData.dateOfBirth || null,
         gender: formData.gender || null,
         maritalStatus: formData.maritalStatus || null,
+        workAddress: formData.workAddress || null,
         nationality: formData.nationality,
         phonePersonal: formData.phonePersonal.trim(),
         phoneWork: formData.phoneWork.trim() || null,
@@ -274,6 +278,7 @@ const ClientFormPage: React.FC = () => {
             name="gender"
             value={formData.gender}
             onChange={handleChange}
+            placeholder="-- Selecciona --"
             options={[
               { value: 'male', label: 'Masculino' },
               { value: 'female', label: 'Femenino' },
@@ -285,6 +290,7 @@ const ClientFormPage: React.FC = () => {
             name="maritalStatus"
             value={formData.maritalStatus}
             onChange={handleChange}
+            placeholder="-- Selecciona --"
             options={[
               { value: 'single', label: 'Soltero' },
               { value: 'married', label: 'Casado' },
@@ -416,6 +422,14 @@ const ClientFormPage: React.FC = () => {
             value={formData.employer}
             onChange={handleChange}
             placeholder="Empresa XYZ"
+          />
+          <Input
+            label="Dirección de la Empresa"
+            name="workAddress"
+            value={formData.workAddress}
+            onChange={handleChange}
+            placeholder="Av. Winston Churchill 123, Piantini"
+            className="md:col-span-2"
           />
           <Input
             label="Ingresos Mensuales"

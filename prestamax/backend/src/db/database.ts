@@ -610,6 +610,22 @@ export function initializeDatabase(): void {
   // ── Income/expenses: bank account link ──
   try { db.exec(`ALTER TABLE income_expenses ADD COLUMN bank_account_id TEXT`); } catch(_) {}
 
+  // Mayo 2026: nueva columna work_address para domicilio laboral del cliente
+  try { db.exec(`ALTER TABLE clients ADD COLUMN work_address TEXT`); } catch(_) {}
+
+  // Mayo 2026: convertir scores legacy 1-5 al sistema nuevo 0-100
+  // Mapeo: 1->10, 2->30, 3->50, 4->70, 5->90 (puntos medios de cada banda)
+  try {
+    db.exec(`UPDATE clients SET score = CASE
+      WHEN score = 1 THEN 10
+      WHEN score = 2 THEN 30
+      WHEN score = 3 THEN 50
+      WHEN score = 4 THEN 70
+      WHEN score = 5 THEN 90
+      ELSE score
+    END WHERE score BETWEEN 1 AND 5`);
+  } catch(_) {}
+
   // ── Loan requests: additional fields for auto-convert ──
   try { db.exec(`ALTER TABLE loan_requests ADD COLUMN product_id TEXT`); } catch(_) {}
   try { db.exec(`ALTER TABLE loan_requests ADD COLUMN rate REAL`); } catch(_) {}

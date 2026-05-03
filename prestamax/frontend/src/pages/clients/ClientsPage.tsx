@@ -47,7 +47,15 @@ const ClientsPage: React.FC = () => {
       name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ((c as any).idNumber || c.documentNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       ((c as any).phonePersonal || c.phone || '').includes(searchTerm)
-    const matchScore = !scoreFilter || String((c as any).score || c.score) === scoreFilter
+    const matchScore = !scoreFilter || (() => {
+      const sc = Number((c as any).score ?? c.score ?? 0)
+      if (scoreFilter === 'excelente') return sc >= 85
+      if (scoreFilter === 'muy_bueno') return sc >= 70 && sc < 85
+      if (scoreFilter === 'bueno')     return sc >= 50 && sc < 70
+      if (scoreFilter === 'regular')   return sc >= 30 && sc < 50
+      if (scoreFilter === 'deficiente') return sc < 30
+      return true
+    })()
     const matchStatus = !statusFilter || (statusFilter === 'active' ? (c as any).isActive !== 0 : (c as any).isActive === 0)
     return matchSearch && matchScore && matchStatus
   })
@@ -84,11 +92,11 @@ const ClientsPage: React.FC = () => {
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Todos los scores</option>
-            <option value="5">★★★★★ Score 5 (Excelente)</option>
-            <option value="4">★★★★ Score 4 (Bueno)</option>
-            <option value="3">★★★ Score 3 (Regular)</option>
-            <option value="2">★★ Score 2 (Malo)</option>
-            <option value="1">★ Score 1 (Muy Malo)</option>
+            <option value="excelente">Excelente (85-100)</option>
+            <option value="muy_bueno">Muy Bueno (70-84)</option>
+            <option value="bueno">Bueno (50-69)</option>
+            <option value="regular">Regular (30-49)</option>
+            <option value="deficiente">Deficiente (0-29)</option>
           </select>
           <select
             value={statusFilter}

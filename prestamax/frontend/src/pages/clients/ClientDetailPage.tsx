@@ -31,6 +31,7 @@ interface Client {
   province: string | null
   occupation: string | null
   employer: string | null
+  workAddress?: string | null
   monthlyIncome: number | null
   notes: string | null
   score: number | null
@@ -336,12 +337,13 @@ const ClientDetailPage: React.FC = () => {
             )}
 
             {/* Work */}
-            {(client.occupation || client.employer || client.monthlyIncome) && (
+            {(client.occupation || client.employer || client.workAddress || client.monthlyIncome) && (
               <Card>
                 <h3 className="section-title mb-4 flex items-center gap-2"><Briefcase className="w-4 h-4"/>Trabajo e Ingresos</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   {client.occupation && <div><p className="text-xs text-slate-500 font-semibold uppercase">Ocupación</p><p className="text-slate-900 font-medium mt-1">{client.occupation}</p></div>}
                   {client.employer && <div><p className="text-xs text-slate-500 font-semibold uppercase">Empleador</p><p className="text-slate-900 font-medium mt-1">{client.employer}</p></div>}
+                  {client.workAddress && <div><p className="text-xs text-slate-500 font-semibold uppercase">Dirección de la Empresa</p><p className="text-slate-900 font-medium mt-1">{client.workAddress}</p></div>}
                   {client.monthlyIncome != null && <div><p className="text-xs text-slate-500 font-semibold uppercase">Ingreso Mensual</p><p className="text-slate-900 font-medium mt-1 text-green-700">{formatCurrency(client.monthlyIncome)}</p></div>}
                 </div>
               </Card>

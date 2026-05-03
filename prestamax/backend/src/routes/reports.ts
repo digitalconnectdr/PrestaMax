@@ -654,7 +654,7 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
         c.last_name, c.id_number, c.id_type, c.gender, c.marital_status,
         c.birth_date, c.phone_personal, c.phone_work,
         c.address, c.city, c.province, c.occupation,
-        c.employer, c.monthly_income
+        c.employer, c.work_address, c.monthly_income
       FROM loans l
       JOIN clients c ON l.client_id = c.id
       JOIN loan_products lp ON l.product_id = lp.id
@@ -735,7 +735,7 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
         // ── Datos Laborales ───────────────────────────────────────────────────
         'EMPRESA DONDE TRABAJA': loan.employer || '',
         'CARGO':                 loan.occupation || '',
-        'DIRECCION_LABORAL':     '',
+        'DIRECCION_LABORAL':     loan.work_address || '',
         'SECTOR_LABORAL':        '',
         'CALLE_NUMERO_LABORAL':  '',
         'MUNICIPIO_LABORAL':     '',

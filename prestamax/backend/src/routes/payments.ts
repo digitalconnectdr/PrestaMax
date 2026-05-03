@@ -34,9 +34,9 @@ function recalcClientScore(db: any, clientId: string): void {
     const paidRatio    = loans.length > 0 ? paidLoans / loans.length : 0;
     // ageMonths: 0-1 scale (1 = 60 months of history = max trust)
     const ageMonths    = Math.min((Date.now() - new Date(client.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30), 60) / 60;
-    // raw = weighted average 0.0-1.0; convert to 1-5 scale to match the system's score range
+    // raw = weighted average 0.0-1.0; convert to 0-100 scale (Mayo 2026)
     const raw          = punctuality * 0.5 + paidRatio * 0.3 + ageMonths * 0.2;
-    const score        = Math.max(1, Math.min(5, Math.round(raw * 4) + 1)); // maps 0→1, 1→5
+    const score        = Math.max(0, Math.min(100, Math.round(raw * 100)));
     db.prepare('UPDATE clients SET score=?, score_updated_at=datetime(\'now\') WHERE id=?').run(score, clientId);
   } catch (_) { /* non-critical — do not break payment flow */ }
 }
