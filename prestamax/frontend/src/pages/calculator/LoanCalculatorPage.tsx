@@ -343,7 +343,12 @@ const LoanCalculatorPage: React.FC = () => {
                 onChange={e => setForm(p => ({ ...p, term: e.target.value }))} placeholder="12" />
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
-                <select value={form.termUnit} onChange={e => setForm(p => ({ ...p, termUnit: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select value={form.termUnit} onChange={e => {
+                  const u = e.target.value
+                  // Auto-sync: la Unidad del Plazo determina la Frecuencia de Pago
+                  const freqMap: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
+                  setForm(p => ({ ...p, termUnit: u, freq: freqMap[u] || p.freq }))
+                }} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="months">Meses</option>
                   <option value="biweekly">Quincenas</option>
                   <option value="weeks">Semanas</option>
