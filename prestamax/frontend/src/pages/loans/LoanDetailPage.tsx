@@ -613,6 +613,7 @@ const LoanDetailPage: React.FC = () => {
                         <th className="text-right py-2 px-3 font-semibold text-slate-700">Interés</th>
                         <th className="text-right py-2 px-3 font-semibold text-slate-700">Cuota</th>
                         <th className="text-right py-2 px-3 font-semibold text-slate-700">Mora</th>
+                        <th className="text-center py-2 px-3 font-semibold text-slate-700">Atraso/Anticipo</th>
                         <th className="text-center py-2 px-3 font-semibold text-slate-700">Estado</th>
                       </tr>
                     </thead>
@@ -655,6 +656,29 @@ const LoanDetailPage: React.FC = () => {
                               ) : (
                                 <span className="text-slate-400">—</span>
                               )}
+                            </td>
+                            <td className="py-2 px-3 text-center text-xs">
+                              {(() => {
+                                const isPaid = inst.status === 'paid'
+                                const isWaived = inst.status === 'waived'
+                                const dueRef = inst.deferredDueDate || inst.dueDate
+                                if (isWaived) return <span className="text-slate-400">Perdonada</span>
+                                if (isPaid && inst.paidAt && dueRef) {
+                                  const due = new Date(dueRef as string).setHours(0,0,0,0)
+                                  const paid = new Date(inst.paidAt as string).setHours(0,0,0,0)
+                                  const diff = Math.round((paid - due) / 86400000)
+                                  if (diff === 0) return <span className="text-emerald-700 font-medium">A tiempo</span>
+                                  if (diff < 0)  return <span className="text-emerald-700 font-medium">{Math.abs(diff)} día{Math.abs(diff) === 1 ? '' : 's'} anticipo</span>
+                                  return <span className="text-red-700 font-medium">{diff} día{diff === 1 ? '' : 's'} atraso</span>
+                                }
+                                if (!isPaid && dueRef) {
+                                  const due = new Date(dueRef as string).setHours(0,0,0,0)
+                                  const today = new Date().setHours(0,0,0,0)
+                                  const overdue = Math.round((today - due) / 86400000)
+                                  if (overdue > 0) return <span className="text-amber-700 font-medium">{overdue} día{overdue === 1 ? '' : 's'} vencido</span>
+                                }
+                                return <span className="text-slate-400">—</span>
+                              })()}
                             </td>
                             <td className="py-2 px-3 text-center">
                               <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusInfo.cls}`}>
