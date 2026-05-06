@@ -296,6 +296,7 @@ const ClientFormPage: React.FC = () => {
               { value: 'married', label: 'Casado' },
               { value: 'divorced', label: 'Divorciado' },
               { value: 'widowed', label: 'Viudo' },
+              { value: 'common_law', label: 'Unión Libre' },
             ]}
           />
           <Input

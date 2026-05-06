@@ -92,6 +92,13 @@ const SCORE_FACTORS = [
 ]
 
 const EMPTY_REF  = { type: 'personal', fullName: '', phone: '', relationship: '', employer: '' }
+
+// Mapeos para traducir valores en ingles a etiquetas en espanol
+const GENDER_LABELS: Record<string, string> = { male: 'Masculino', female: 'Femenino', other: 'Otro' }
+const MARITAL_LABELS: Record<string, string> = {
+  single: 'Soltero', married: 'Casado', divorced: 'Divorciado',
+  widowed: 'Viudo', common_law: 'Unión Libre',
+}
 const EMPTY_GUAR = { fullName: '', idNumber: '', phone: '', address: '' }
 
 const ClientDetailPage: React.FC = () => {
@@ -276,13 +283,13 @@ const ClientDetailPage: React.FC = () => {
                 {client.gender && (
                   <div>
                     <p className="text-xs text-slate-500 font-semibold uppercase">Género</p>
-                    <p className="text-slate-900 font-medium mt-1">{client.gender}</p>
+                    <p className="text-slate-900 font-medium mt-1">{GENDER_LABELS[client.gender || ''] || client.gender}</p>
                   </div>
                 )}
                 {client.maritalStatus && (
                   <div>
                     <p className="text-xs text-slate-500 font-semibold uppercase">Estado Civil</p>
-                    <p className="text-slate-900 font-medium mt-1">{client.maritalStatus}</p>
+                    <p className="text-slate-900 font-medium mt-1">{MARITAL_LABELS[client.maritalStatus || ''] || client.maritalStatus}</p>
                   </div>
                 )}
               </div>

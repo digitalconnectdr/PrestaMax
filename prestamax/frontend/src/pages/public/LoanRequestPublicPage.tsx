@@ -44,6 +44,7 @@ const LoanRequestPublicPage: React.FC = () => {
     // Work & Economy
     occupation: '',
     employer: '',
+    workAddress: '',
     monthlyIncome: '',
     economicActivity: '',
     // Family reference
@@ -116,6 +117,7 @@ const LoanRequestPublicPage: React.FC = () => {
           familyRelationship: form.familyRelationship || undefined,
           occupation: form.occupation || undefined,
           employer: form.employer || undefined,
+          workAddress: form.workAddress || undefined,
           monthlyIncome: form.monthlyIncome ? parseFloat(form.monthlyIncome) : undefined,
           economicActivity: form.economicActivity || undefined,
           loanAmount: form.loanAmount ? parseFloat(form.loanAmount) : undefined,
@@ -319,6 +321,10 @@ const LoanRequestPublicPage: React.FC = () => {
               <div>
                 <label className={labelCls}>Empresa / Empleador</label>
                 <input value={form.employer} onChange={set('employer')} placeholder="Nombre de la empresa" className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Dirección de la Empresa</label>
+                <input value={form.workAddress} onChange={set('workAddress')} placeholder="Av. Winston Churchill 123, Piantini" className={inputCls} />
               </div>
               <div>
                 <label className={labelCls}>Ingresos mensuales (RD$)</label>

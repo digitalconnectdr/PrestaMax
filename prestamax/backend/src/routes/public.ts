@@ -38,7 +38,7 @@ router.post('/apply/:token', (req: Request, res: Response) => {
       dateOfBirth, gender, maritalStatus, nationality, whatsapp,
       city, province, phoneWork, phoneFamily,
       familyContactName, familyRelationship,
-      occupation, employer, monthlyIncome, economicActivity,
+      occupation, employer, workAddress, monthlyIncome, economicActivity,
     } = req.body;
 
     if (!clientName || !clientPhone) {
@@ -56,9 +56,9 @@ router.post('/apply/:token', (req: Request, res: Response) => {
          date_of_birth, gender, marital_status, nationality, whatsapp,
          city, province, phone_work, phone_family,
          family_contact_name, family_relationship,
-         occupation, employer, monthly_income, economic_activity,
+         occupation, employer, work_address, monthly_income, economic_activity,
          status)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')
     `).run(
       id, tenant.id, clientName, clientEmail || null, clientPhone,
       clientAddress || null, idNumber || null, loanAmount || null,
@@ -66,7 +66,7 @@ router.post('/apply/:token', (req: Request, res: Response) => {
       dateOfBirth || null, gender || null, maritalStatus || null, nationality || null, whatsapp || null,
       city || null, province || null, phoneWork || null, phoneFamily || null,
       familyContactName || null, familyRelationship || null,
-      occupation || null, employer || null, monthlyIncome || null, economicActivity || null,
+      occupation || null, employer || null, workAddress || null, monthlyIncome || null, economicActivity || null,
     );
 
     res.status(201).json({

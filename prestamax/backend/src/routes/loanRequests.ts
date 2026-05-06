@@ -126,15 +126,20 @@ router.put('/:id/convert', authenticate, requireTenant, requirePermission('reque
       const nameParts = fullName.trim().split(/\s+/);
       const firstName = nameParts[0] || fullName;
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
-      db.prepare(`INSERT INTO clients (id,tenant_id,client_number,full_name,first_name,last_name,id_number,phone_personal,whatsapp,email,address,city,occupation,monthly_income,birth_date,gender,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`).run(
+      db.prepare(`INSERT INTO clients (id,tenant_id,client_number,full_name,first_name,last_name,id_number,phone_personal,phone_work,phone_family,whatsapp,email,address,city,province,occupation,employer,work_address,economic_activity,monthly_income,birth_date,gender,marital_status,family_contact_name,family_relationship,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`).run(
         clientId, req.tenant.id, clientNumber,
         fullName, firstName, lastName,
         request.id_number || null,
-        request.client_phone || null, request.whatsapp || request.client_phone || null,
+        request.client_phone || null, request.phone_work || null, request.phone_family || null,
+        request.whatsapp || request.client_phone || null,
         request.client_email || null, request.client_address || null,
-        request.city || null, request.occupation || null,
-        request.monthly_income || null, request.date_of_birth || request.birth_date || null, request.gender || null
+        request.city || null, request.province || null,
+        request.occupation || null, request.employer || null, request.work_address || null,
+        request.economic_activity || null, request.monthly_income || null,
+        request.date_of_birth || request.birth_date || null,
+        request.gender || null, request.marital_status || null,
+        request.family_contact_name || null, request.family_relationship || null
       );
     }
 

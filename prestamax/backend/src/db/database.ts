@@ -698,6 +698,7 @@ export function initializeDatabase(): void {
     `ALTER TABLE loan_requests ADD COLUMN whatsapp TEXT`,
     `ALTER TABLE loan_requests ADD COLUMN city TEXT`,
     `ALTER TABLE loan_requests ADD COLUMN province TEXT`,
+    `ALTER TABLE loan_requests ADD COLUMN work_address TEXT`,
     `ALTER TABLE loan_requests ADD COLUMN phone_work TEXT`,
     `ALTER TABLE loan_requests ADD COLUMN phone_family TEXT`,
     `ALTER TABLE loan_requests ADD COLUMN family_contact_name TEXT`,
