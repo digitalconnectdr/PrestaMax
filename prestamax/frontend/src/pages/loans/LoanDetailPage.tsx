@@ -1381,6 +1381,75 @@ const LoanDetailPage: React.FC = () => {
                   </span>
                 </div>
 
+                {/* Tabla de cuotas pendientes/vencidas */}
+                {loan.installments && loan.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived').length > 0 && (
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Estado de cuotas</span>
+                      <div className="flex gap-1.5 flex-wrap text-[10px]">
+                        {(() => {
+                          const overdueCount = loan.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived' && (i.moraDays || 0) > 0).length
+                          const totalMoraInst = loan.installments.reduce((s: number, i: any) => s + (i.status !== 'paid' && i.status !== 'waived' ? (i.moraAmount || 0) : 0), 0)
+                          return (<>
+                            {overdueCount > 0 && (
+                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{overdueCount} vencida{overdueCount > 1 ? 's' : ''}</span>
+                            )}
+                            {totalMoraInst > 0 && (
+                              <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">Mora: {formatCurrency(totalMoraInst, loan.currency || 'DOP')}</span>
+                            )}
+                            {(loan.prorrogaFee || 0) > 0 && (
+                              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Prorroga: {formatCurrency(loan.prorrogaFee, loan.currency || 'DOP')}</span>
+                            )}
+                          </>)
+                        })()}
+                      </div>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-50 sticky top-0">
+                          <tr>
+                            <th className="text-left px-3 py-1.5 font-semibold text-slate-600">#</th>
+                            <th className="text-left px-3 py-1.5 font-semibold text-slate-600">Vence</th>
+                            <th className="text-center px-3 py-1.5 font-semibold text-slate-600">Días</th>
+                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Cuota</th>
+                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Mora</th>
+                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Pendiente</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {loan.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived').slice(0, 12).map((inst: any) => {
+                            const moraDays = inst.moraDays || 0
+                            const isOverdue = moraDays > 0
+                            const cuota = (inst.principalAmount || 0) + (inst.interestAmount || 0)
+                            const pendiente = Math.max(0, cuota - (inst.paidTotal || 0)) + (inst.moraAmount || 0)
+                            const isPartial = inst.status === 'partial' || (inst.paidTotal || 0) > 0
+                            return (
+                              <tr key={inst.id} className={`border-t border-slate-100 ${isOverdue ? 'bg-red-50' : isPartial ? 'bg-amber-50' : ''}`}>
+                                <td className="px-3 py-1.5 text-slate-600">{inst.installmentNumber}</td>
+                                <td className="px-3 py-1.5 text-slate-700">{inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('es-DO') : '—'}</td>
+                                <td className="px-3 py-1.5 text-center">
+                                  {isOverdue
+                                    ? <span className="text-red-700 font-semibold">{moraDays}d atraso</span>
+                                    : isPartial
+                                      ? <span className="text-amber-700">parcial</span>
+                                      : <span className="text-slate-400">—</span>}
+                                </td>
+                                <td className="px-3 py-1.5 text-right text-slate-700">{formatCurrency(cuota, loan.currency || 'DOP')}</td>
+                                <td className="px-3 py-1.5 text-right">
+                                  {(inst.moraAmount || 0) > 0
+                                    ? <span className="text-red-600 font-semibold">{formatCurrency(inst.moraAmount, loan.currency || 'DOP')}</span>
+                                    : <span className="text-slate-300">—</span>}
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-semibold text-slate-900">{formatCurrency(pendiente, loan.currency || 'DOP')}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 {/* Payment type selector */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Tipo de Pago</label>
