@@ -598,8 +598,8 @@ const PaymentsPage: React.FC = () => {
                       <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Estado de cuotas</span>
                       <div className="flex gap-1.5 flex-wrap text-[10px]">
                         {(() => {
-                          const overdueCount = loanDetail.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived' && (i.mora_days || 0) > 0).length
-                          const totalMoraInst = loanDetail.installments.reduce((s: number, i: any) => s + (i.status !== 'paid' && i.status !== 'waived' ? (i.mora_amount || 0) : 0), 0)
+                          const overdueCount = loanDetail.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived' && (i.moraDays || 0) > 0).length
+                          const totalMoraInst = loanDetail.installments.reduce((s: number, i: any) => s + (i.status !== 'paid' && i.status !== 'waived' ? (i.moraAmount || 0) : 0), 0)
                           return (<>
                             {overdueCount > 0 && (
                               <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{overdueCount} vencida{overdueCount > 1 ? 's' : ''}</span>
@@ -607,8 +607,8 @@ const PaymentsPage: React.FC = () => {
                             {totalMoraInst > 0 && (
                               <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">Mora: {formatCurrency(totalMoraInst)}</span>
                             )}
-                            {(loanDetail.prorroga_fee || 0) > 0 && (
-                              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Prorroga: {formatCurrency(loanDetail.prorroga_fee)}</span>
+                            {(loanDetail.prorrogaFee || 0) > 0 && (
+                              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Prorroga: {formatCurrency(loanDetail.prorrogaFee)}</span>
                             )}
                           </>)
                         })()}
@@ -628,15 +628,15 @@ const PaymentsPage: React.FC = () => {
                         </thead>
                         <tbody>
                           {loanDetail.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived').slice(0, 12).map((inst: any) => {
-                            const moraDays = inst.mora_days || 0
+                            const moraDays = inst.moraDays || 0
                             const isOverdue = moraDays > 0
-                            const cuota = (inst.principal_amount || 0) + (inst.interest_amount || 0)
-                            const pendiente = Math.max(0, cuota - (inst.paid_total || 0)) + (inst.mora_amount || 0)
-                            const isPartial = inst.status === 'partial' || (inst.paid_total || 0) > 0
+                            const cuota = (inst.principalAmount || 0) + (inst.interestAmount || 0)
+                            const pendiente = Math.max(0, cuota - (inst.paidTotal || 0)) + (inst.moraAmount || 0)
+                            const isPartial = inst.status === 'partial' || (inst.paidTotal || 0) > 0
                             return (
                               <tr key={inst.id} className={`border-t border-slate-100 ${isOverdue ? 'bg-red-50' : isPartial ? 'bg-amber-50' : ''}`}>
-                                <td className="px-3 py-1.5 text-slate-600">{inst.installment_number}</td>
-                                <td className="px-3 py-1.5 text-slate-700">{inst.due_date ? new Date(inst.due_date).toLocaleDateString('es-DO') : '—'}</td>
+                                <td className="px-3 py-1.5 text-slate-600">{inst.installmentNumber}</td>
+                                <td className="px-3 py-1.5 text-slate-700">{inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('es-DO') : '—'}</td>
                                 <td className="px-3 py-1.5 text-center">
                                   {isOverdue
                                     ? <span className="text-red-700 font-semibold">{moraDays}d atraso</span>
@@ -646,8 +646,8 @@ const PaymentsPage: React.FC = () => {
                                 </td>
                                 <td className="px-3 py-1.5 text-right text-slate-700">{formatCurrency(cuota)}</td>
                                 <td className="px-3 py-1.5 text-right">
-                                  {(inst.mora_amount || 0) > 0
-                                    ? <span className="text-red-600 font-semibold">{formatCurrency(inst.mora_amount)}</span>
+                                  {(inst.moraAmount || 0) > 0
+                                    ? <span className="text-red-600 font-semibold">{formatCurrency(inst.moraAmount)}</span>
                                     : <span className="text-slate-300">—</span>}
                                 </td>
                                 <td className="px-3 py-1.5 text-right font-semibold text-slate-900">{formatCurrency(pendiente)}</td>
