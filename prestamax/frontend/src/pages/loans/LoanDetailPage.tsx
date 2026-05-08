@@ -1398,7 +1398,7 @@ const LoanDetailPage: React.FC = () => {
                               <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">Mora: {formatCurrency(totalMoraInst, loan.currency || 'DOP')}</span>
                             )}
                             {(loan.prorrogaFee || 0) > 0 && (
-                              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Prorroga: {formatCurrency(loan.prorrogaFee, loan.currency || 'DOP')}</span>
+                              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Prorroga: {formatCurrency(loan.prorrogaFee || 0, loan.currency || 'DOP')}</span>
                             )}
                           </>)
                         })()}

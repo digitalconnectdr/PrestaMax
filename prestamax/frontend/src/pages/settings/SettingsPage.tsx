@@ -107,6 +107,7 @@ const SettingsPage: React.FC = () => {
   const [showBankForm, setShowBankForm] = useState(false)
   const [editingBank, setEditingBank] = useState<BankAccount | null>(null)
   const [bankForm, setBankForm] = useState({ bankName:'', accountNumber:'', accountType:'checking', accountHolder:'', currency:'DOP', initialBalance:'0' })
+  const [customBankMode, setCustomBankMode] = useState(false)
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transfers, setTransfers] = useState<AccountTransfer[]>([])
   const [transferForm, setTransferForm] = useState({ fromAccountId:'', toAccountId:'', amount:'', notes:'', exchangeRate:'' })
@@ -435,6 +436,7 @@ const SettingsPage: React.FC = () => {
       setShowBankForm(false)
       setEditingBank(null)
       setBankForm({ bankName:'', accountNumber:'', accountType:'checking', accountHolder:'', currency:'DOP', initialBalance:'0' })
+      setCustomBankMode(false)
       loadTab('bank_accounts')
     } catch (err: any) { toast.error(err?.response?.data?.error || 'Error al guardar cuenta') }
   }
@@ -613,6 +615,8 @@ const SettingsPage: React.FC = () => {
   const startEditBank = (acc: BankAccount) => {
     setEditingBank(acc)
     setBankForm({ bankName: acc.bankName, accountNumber: acc.accountNumber, accountType: acc.accountType, accountHolder: acc.accountHolder, currency: acc.currency, initialBalance: String(acc.initialBalance||0) })
+    // Si el banco guardado no esta en la lista predefinida, abrir en modo custom
+    setCustomBankMode(!!acc.bankName && !BANKS_DR.includes(acc.bankName))
     setShowBankForm(true)
   }
 
@@ -1186,7 +1190,7 @@ const SettingsPage: React.FC = () => {
                   <p className="text-sm text-slate-500 mt-1">Configura las cuentas donde recibes pagos</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={()=>{setEditingBank(null);setBankForm({bankName:'',accountNumber:'',accountType:'checking',accountHolder:'',currency:'DOP',initialBalance:'0'});setShowBankForm(true)}} size="sm" className="flex items-center gap-2">
+                  <Button onClick={()=>{setEditingBank(null);setBankForm({bankName:'',accountNumber:'',accountType:'checking',accountHolder:'',currency:'DOP',initialBalance:'0'});setCustomBankMode(false);setShowBankForm(true)}} size="sm" className="flex items-center gap-2">
                     <Plus className="w-4 h-4"/>Nueva Cuenta
                   </Button>
                   <Button onClick={()=>setShowTransferModal(true)} size="sm" variant="outline" className="flex items-center gap-2">
@@ -1203,10 +1207,43 @@ const SettingsPage: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">Banco *</label>
-                      <select value={bankForm.bankName} onChange={e=>setBankForm(p=>({...p,bankName:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">-- Selecciona el banco --</option>
-                        {BANKS_DR.map(b=><option key={b} value={b}>{b}</option>)}
-                      </select>
+                      {!customBankMode ? (
+                        <select
+                          value={BANKS_DR.includes(bankForm.bankName) ? bankForm.bankName : ''}
+                          onChange={e => {
+                            if (e.target.value === '__custom__') {
+                              setCustomBankMode(true)
+                              setBankForm(p => ({ ...p, bankName: '' }))
+                            } else {
+                              setBankForm(p => ({ ...p, bankName: e.target.value }))
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">-- Selecciona el banco --</option>
+                          {BANKS_DR.filter(b => b !== 'Otro').map(b => <option key={b} value={b}>{b}</option>)}
+                          <option value="__custom__">+ Otro banco / Digitar nombre...</option>
+                        </select>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={bankForm.bankName}
+                            onChange={e => setBankForm(p => ({ ...p, bankName: e.target.value }))}
+                            placeholder="Digita el nombre del banco o institucion"
+                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setCustomBankMode(false); setBankForm(p => ({ ...p, bankName: '' })) }}
+                            className="px-3 py-2 text-xs text-slate-600 hover:text-slate-800 border border-slate-300 rounded-lg hover:bg-slate-50"
+                            title="Volver a la lista de bancos"
+                          >
+                            &larr; Lista
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <Input label="Número de Cuenta" value={bankForm.accountNumber} onChange={e=>setBankForm(p=>({...p,accountNumber:e.target.value}))} placeholder="000-0000000-0" />
                     <div>

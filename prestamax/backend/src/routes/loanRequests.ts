@@ -166,18 +166,41 @@ router.put('/:id/convert', authenticate, requireTenant, requirePermission('reque
     function getNextDate2(d: Date, freq: string): Date {
       const nd = new Date(d);
       if (freq === 'daily') nd.setDate(nd.getDate() + 1);
+      else if (freq === 'every_2_days') nd.setDate(nd.getDate() + 2);
       else if (freq === 'weekly') nd.setDate(nd.getDate() + 7);
       else if (freq === 'biweekly') nd.setDate(nd.getDate() + 15);
-      else nd.setMonth(nd.getMonth() + 1);
+      else if (freq === 'quarterly') nd.setMonth(nd.getMonth() + 3);
+      else if (freq === 'annual' || freq === 'yearly') nd.setFullYear(nd.getFullYear() + 1);
+      else nd.setMonth(nd.getMonth() + 1); // monthly (default)
       return nd;
     }
     function r2(v: number) { return Math.round(v * 100) / 100; }
     function getN(term: number, termUnit: string, freq: string): number {
-      const months = termUnit === 'months' ? term : termUnit === 'weeks' ? term / 4.33 : term / 30;
-      if (freq === 'daily') return Math.round(months * 30);
-      if (freq === 'weekly') return Math.round(months * 4.33);
-      if (freq === 'biweekly') return Math.round(months * 2);
-      return Math.round(months);
+      // Caso directo: termUnit y freq son la misma unidad → term cuotas
+      if (
+        (termUnit === 'months'   && freq === 'monthly')  ||
+        (termUnit === 'biweekly' && freq === 'biweekly') ||
+        (termUnit === 'weeks'    && freq === 'weekly')   ||
+        (termUnit === 'days'     && freq === 'daily')
+      ) return Math.max(1, Math.round(term));
+      // Convertir term a meses
+      let months: number;
+      if      (termUnit === 'months')   months = term;
+      else if (termUnit === 'years')    months = term * 12;
+      else if (termUnit === 'biweekly') months = term / 2;
+      else if (termUnit === 'weeks')    months = term / 4.33;
+      else if (termUnit === 'days')     months = term / 30;
+      else                              months = term;
+      // Convertir meses a cuotas segun freq
+      let n: number;
+      if      (freq === 'daily')        n = months * 30;
+      else if (freq === 'every_2_days') n = months * 15;
+      else if (freq === 'weekly')       n = months * 4.33;
+      else if (freq === 'biweekly')     n = months * 2;
+      else if (freq === 'quarterly')    n = months / 3;
+      else if (freq === 'annual' || freq === 'yearly') n = months / 12;
+      else                              n = months;
+      return Math.max(1, Math.round(n));
     }
 
     const mRate = rate_type === 'annual' ? finalRate / 100 / 12

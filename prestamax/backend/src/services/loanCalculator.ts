@@ -26,7 +26,7 @@ export function generateInstallmentSchedule(params: {
       const payment = calculateFixedPayment(disbursedAmount, monthlyRate, numInstallments);
       interest = balance * monthlyRate;
       principal = payment - interest;
-      if (i === numInstallments) principal = balance; // final adjustment
+      if (i === numInstallments) principal = balance;
     } else if (amortizationType === 'flat_interest') {
       const totalInterest = disbursedAmount * monthlyRate * numInstallments;
       principal = disbursedAmount / numInstallments;
@@ -35,7 +35,6 @@ export function generateInstallmentSchedule(params: {
       interest = balance * monthlyRate;
       principal = i === numInstallments ? balance : 0;
     } else {
-      // declining balance
       interest = balance * monthlyRate;
       principal = disbursedAmount / numInstallments;
     }
@@ -77,13 +76,31 @@ function getMonthlyRate(rate: number, rateType: string): number {
 }
 
 function getInstallmentCount(term: number, termUnit: string, frequency: string): number {
-  const termInMonths = termUnit === 'months' ? term : termUnit === 'weeks' ? term / 4.33 : term / 30;
+  if (
+    (termUnit === 'months'   && frequency === 'monthly')  ||
+    (termUnit === 'biweekly' && frequency === 'biweekly') ||
+    (termUnit === 'weeks'    && frequency === 'weekly')   ||
+    (termUnit === 'days'     && frequency === 'daily')
+  ) return Math.max(1, Math.round(term));
+
+  let termInMonths: number;
+  if      (termUnit === 'months')   termInMonths = term;
+  else if (termUnit === 'years')    termInMonths = term * 12;
+  else if (termUnit === 'biweekly') termInMonths = term / 2;
+  else if (termUnit === 'weeks')    termInMonths = term / 4.33;
+  else if (termUnit === 'days')     termInMonths = term / 30;
+  else                              termInMonths = term;
+
   switch (frequency) {
-    case 'daily': return Math.round(termInMonths * 30);
-    case 'weekly': return Math.round(termInMonths * 4.33);
-    case 'biweekly': return Math.round(termInMonths * 2);
-    case 'monthly': return Math.round(termInMonths);
-    default: return Math.round(termInMonths);
+    case 'daily':        return Math.max(1, Math.round(termInMonths * 30));
+    case 'every_2_days': return Math.max(1, Math.round(termInMonths * 15));
+    case 'weekly':       return Math.max(1, Math.round(termInMonths * 4.33));
+    case 'biweekly':     return Math.max(1, Math.round(termInMonths * 2));
+    case 'quarterly':    return Math.max(1, Math.round(termInMonths / 3));
+    case 'annual':
+    case 'yearly':       return Math.max(1, Math.round(termInMonths / 12));
+    case 'monthly':      return Math.max(1, Math.round(termInMonths));
+    default:             return Math.max(1, Math.round(termInMonths));
   }
 }
 
@@ -94,6 +111,9 @@ function getNextDate(date: Date, frequency: string): Date {
     case 'weekly': return addWeeks(date, 1);
     case 'biweekly': return addDays(date, 15);
     case 'monthly': return addMonths(date, 1);
+    case 'quarterly': return addMonths(date, 3);
+    case 'annual':
+    case 'yearly': return addMonths(date, 12);
     default: return addMonths(date, 1);
   }
 }
@@ -119,16 +139,12 @@ export function calculateEarlyLiquidation(
 ): { rebateAmount: number; totalToPay: number } {
   let rebateAmount = 0;
   if (rebatePolicy === 'proportional') {
-    // Proportional: rebate 100% of remaining unearned interest (full benefit to early payer)
     rebateAmount = round2(remainingInterest);
   } else if (rebatePolicy === 'partial') {
-    // Partial: rebate 50% of remaining interest (shared benefit)
     rebateAmount = round2(remainingInterest * 0.5);
   } else if (rebatePolicy === 'fixed_rate' && rebateRate > 0) {
-    // Fixed rate: rebate a configured percentage of remaining interest
     rebateAmount = round2(remainingInterest * rebateRate);
   }
-  // 'none' or unknown: no rebate
   return { rebateAmount, totalToPay: round2(principalBalance - rebateAmount) };
 }
 

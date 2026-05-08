@@ -42,6 +42,36 @@ function periodsPerMonth(freq: string): number {
   return 1 // monthly
 }
 
+// Convierte una tasa expresada en `rateType` a su equivalente mensual (en %).
+// Util porque calcSchedule espera la tasa mensual.
+function rateToMonthly(rate: number, rateType: string): number {
+  switch (rateType) {
+    case 'daily':    return rate * 30
+    case 'weekly':   return rate * 4.33
+    case 'biweekly': return rate * 2
+    case 'annual':   return rate / 12
+    case 'monthly':
+    default:         return rate
+  }
+}
+
+// Convierte una tasa mensual (%) a su equivalente expresado en `rateType`.
+function monthlyToRate(monthly: number, rateType: string): number {
+  switch (rateType) {
+    case 'daily':    return monthly / 30
+    case 'weekly':   return monthly / 4.33
+    case 'biweekly': return monthly / 2
+    case 'annual':   return monthly * 12
+    case 'monthly':
+    default:         return monthly
+  }
+}
+
+const RATE_TYPE_LABEL: Record<string, string> = {
+  daily: 'Diaria', weekly: 'Semanal', biweekly: 'Quincenal',
+  monthly: 'Mensual', annual: 'Anual',
+}
+
 // Calcula numero total de pagos basado en termino, unidad y frecuencia
 function getNPay(term: number, termUnit: string, freq: string): number {
   let nPay = term
@@ -212,6 +242,7 @@ const LoanCalculatorPage: React.FC = () => {
   const [form, setForm] = useState({
     amount: '',
     rate: '',
+    rateType: 'monthly',  // unidad en la que el usuario expresa la tasa
     profit: '',
     term: '',
     termUnit: 'months',
@@ -226,18 +257,28 @@ const LoanCalculatorPage: React.FC = () => {
     const term = parseInt(form.term)
     if (!amount || !term) return
 
-    let rate = parseFloat(form.rate)
+    // Convertir la tasa ingresada (en su unidad) a equivalente mensual,
+    // porque calcSchedule y findRateFromProfit operan con tasa mensual.
+    let monthlyRate = 0
     if (mode === 'profit') {
       const profit = parseFloat(form.profit)
       if (!profit) return
-      rate = findRateFromProfit(amount, profit, term, form.termUnit, form.freq, form.amortType)
+      // findRateFromProfit retorna la tasa MENSUAL necesaria para esa ganancia
+      monthlyRate = findRateFromProfit(amount, profit, term, form.termUnit, form.freq, form.amortType)
+    } else {
+      const userRate = parseFloat(form.rate)
+      if (!userRate) return
+      monthlyRate = rateToMonthly(userRate, form.rateType)
     }
-    if (!rate) return
+    if (!monthlyRate) return
 
     const firstDate = new Date(form.firstDate + 'T12:00:00')
-    const installments = calcSchedule(amount, rate, term, form.termUnit, form.freq, form.amortType, firstDate)
+    const installments = calcSchedule(amount, monthlyRate, term, form.termUnit, form.freq, form.amortType, firstDate)
     const totalPayment = installments.reduce((s, i) => s + i.payment, 0)
     const totalInterest = installments.reduce((s, i) => s + i.interest, 0)
+
+    // Devolver la tasa en la unidad seleccionada por el usuario
+    const displayRate = monthlyToRate(monthlyRate, form.rateType)
 
     setResult({
       installments,
@@ -245,7 +286,7 @@ const LoanCalculatorPage: React.FC = () => {
       totalInterest: Math.round(totalInterest * 100) / 100,
       totalPrincipal: amount,
       monthlyPayment: installments[0]?.payment || 0,
-      computedRate: Math.round(rate * 100) / 100,
+      computedRate: Math.round(displayRate * 100) / 100,
     })
   }, [form, mode])
 
@@ -257,7 +298,7 @@ const LoanCalculatorPage: React.FC = () => {
       `*SIMULACION DE PRESTAMO*`,
       ``,
       `Monto: ${formatCurrency(parseFloat(form.amount))}`,
-      `Tasa: ${result.computedRate.toFixed(2)}% mensual`,
+      `Tasa: ${result.computedRate.toFixed(2)}% ${(RATE_TYPE_LABEL[form.rateType] || 'mensual').toLowerCase()}`,
       `Plazo: ${form.term} ${TERM_UNIT_LABEL[form.termUnit] || form.termUnit}`,
       `Frecuencia: ${FREQ_LABEL[form.freq]}`,
       `Tipo: ${AMORT_LABEL[form.amortType]}`,
@@ -331,11 +372,49 @@ const LoanCalculatorPage: React.FC = () => {
               onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} placeholder="50,000.00" />
 
             {mode === 'rate' ? (
-              <Input label="Tasa de Interes Mensual (%) *" type="number" step="0.01" value={form.rate}
-                onChange={e => setForm(p => ({ ...p, rate: e.target.value }))} placeholder="5.00" />
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tasa de Interes (%) *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={form.rate}
+                    onChange={e => setForm(p => ({ ...p, rate: e.target.value }))}
+                    placeholder="5.00"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <select
+                    value={form.rateType}
+                    onChange={e => setForm(p => ({ ...p, rateType: e.target.value }))}
+                    className="px-2 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="monthly">Mensual</option>
+                    <option value="biweekly">Quincenal</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="daily">Diaria</option>
+                    <option value="annual">Anual</option>
+                  </select>
+                </div>
+              </div>
             ) : (
-              <Input label="Ganancia Deseada (RD$) *" type="number" step="0.01" value={form.profit}
-                onChange={e => setForm(p => ({ ...p, profit: e.target.value }))} placeholder="5,000.00" />
+              <>
+                <Input label="Ganancia Deseada (RD$) *" type="number" step="0.01" value={form.profit}
+                  onChange={e => setForm(p => ({ ...p, profit: e.target.value }))} placeholder="5,000.00" />
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Mostrar tasa calculada en</label>
+                  <select
+                    value={form.rateType}
+                    onChange={e => setForm(p => ({ ...p, rateType: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="monthly">Mensual</option>
+                    <option value="biweekly">Quincenal</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="daily">Diaria</option>
+                    <option value="annual">Anual</option>
+                  </select>
+                </div>
+              </>
             )}
 
             <div className="grid grid-cols-2 gap-2">
@@ -345,9 +424,10 @@ const LoanCalculatorPage: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Unidad</label>
                 <select value={form.termUnit} onChange={e => {
                   const u = e.target.value
-                  // Auto-sync: la Unidad del Plazo determina la Frecuencia de Pago
-                  const freqMap: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
-                  setForm(p => ({ ...p, termUnit: u, freq: freqMap[u] || p.freq }))
+                  // Auto-sync: la Unidad del Plazo determina la Frecuencia de Pago Y la unidad de la Tasa
+                  const map: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
+                  const synced = map[u]
+                  setForm(p => ({ ...p, termUnit: u, freq: synced || p.freq, rateType: synced || p.rateType }))
                 }} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="months">Meses</option>
                   <option value="biweekly">Quincenas</option>
@@ -396,7 +476,7 @@ const LoanCalculatorPage: React.FC = () => {
                     </div>
                     <div>
                       <p className="text-xs text-slate-600 uppercase font-medium">Tasa calculada para tu ganancia</p>
-                      <p className="text-2xl font-bold text-emerald-700">{result.computedRate.toFixed(2)}% <span className="text-base font-normal text-slate-600">mensual</span></p>
+                      <p className="text-2xl font-bold text-emerald-700">{result.computedRate.toFixed(2)}% <span className="text-base font-normal text-slate-600">{(RATE_TYPE_LABEL[form.rateType] || 'Mensual').toLowerCase()}</span></p>
                     </div>
                   </div>
                 </div>
