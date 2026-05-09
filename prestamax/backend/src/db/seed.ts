@@ -144,8 +144,9 @@ async function seed() {
     'C.I.: {{client_id}}',
   ].join('\n');
 
-  db.prepare('INSERT OR IGNORE INTO contract_templates (id,tenant_id,name,type,body,is_default) VALUES (?,?,?,?,?,?)').run('tmpl-pagare-001',tenantId,'Pagaré Estándar','general',pagareBody,1);
-  db.prepare('INSERT OR IGNORE INTO contract_templates (id,tenant_id,name,type,body,is_default) VALUES (?,?,?,?,?,?)').run('tmpl-contract-001',tenantId,'Contrato General de Prestamo','general',contractBody,0);
+  // Las plantillas predeterminadas se siembran en database.ts (Contrato General
+  // de Préstamo o Pagaré + Pagaré Notarial). Aqui ya no insertamos las viejas
+  // ('Pagaré Estándar' / 'Contrato General de Prestamo') para evitar duplicados.
 
   // WhatsApp templates
   const waMsgs = [

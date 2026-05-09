@@ -190,6 +190,9 @@ const CollectionTasksTab: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // ── Permission/plan denied flag ────────────────────────────────────────────
+  const [accessDenied, setAccessDenied] = useState<{ reason: 'plan' | 'permission' } | null>(null)
+
   // ── Data fetching ──────────────────────────────────────────────────────────
   const fetchTasks = useCallback(async () => {
     setIsLoading(true)
@@ -200,7 +203,17 @@ const CollectionTasksTab: React.FC = () => {
       const res = await api.get('/collection-tasks', { params })
       setTasks(res.data.tasks || [])
       setCanManageState(res.data.canManage || false)
-    } catch { toast.error('Error al cargar la agenda') }
+      setAccessDenied(null)
+    } catch (err: any) {
+      // Plan o permiso no incluye Agenda — mostrar mensaje amigable, sin error
+      if (err?.response?.status === 403) {
+        const code = err?.response?.data?.code
+        setAccessDenied({ reason: code === 'PLAN_FEATURE_REQUIRED' ? 'plan' : 'permission' })
+        setTasks([])
+      } else {
+        toast.error('Error al cargar la agenda')
+      }
+    }
     finally { setIsLoading(false) }
   }, [filterCollector])
 
@@ -463,6 +476,21 @@ const CollectionTasksTab: React.FC = () => {
         <div className="flex items-center justify-center py-16 text-slate-400">
           <div className="w-6 h-6 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin mr-2"/>
           Cargando agenda...
+        </div>
+      ) : accessDenied ? (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+          <ClipboardList className="w-12 h-12 mb-3 opacity-30"/>
+          {accessDenied.reason === 'plan' ? (
+            <>
+              <p className="font-medium text-slate-600">Función no incluida en tu plan</p>
+              <p className="text-sm mt-1 text-center max-w-md">La Agenda de Cobranza requiere un plan superior. Actualiza tu suscripción para asignar y administrar tareas de cobranza.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-slate-600">Sin acceso a la Agenda</p>
+              <p className="text-sm mt-1 text-center max-w-md">Tu rol no tiene permiso para ver tareas de cobranza. Pídele al administrador del tenant que te asigne el permiso "Ver tareas asignadas".</p>
+            </>
+          )}
         </div>
       ) : displayTasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-slate-400">
