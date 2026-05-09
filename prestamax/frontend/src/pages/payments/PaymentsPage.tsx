@@ -170,6 +170,8 @@ const PaymentsPage: React.FC = () => {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [methodFilter, setMethodFilter] = useState('')
+  const [voidedFilter, setVoidedFilter] = useState<'valid' | 'voided' | 'all'>('valid')
+  const [voidedCounts, setVoidedCounts] = useState<{ valid: number; voided: number }>({ valid: 0, voided: 0 })
   const [showModal, setShowModal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [payForm, setPayForm] = useState(INITIAL_FORM)
@@ -189,10 +191,11 @@ const PaymentsPage: React.FC = () => {
 
   const selectedLoan = activeLoans.find(l => l.id === payForm.loanId)
 
-  const fetchPayments = async () => {
+  const fetchPayments = async (filter: 'valid' | 'voided' | 'all' = voidedFilter) => {
     try {
-      const res = await api.get('/payments')
+      const res = await api.get(`/payments?voided_filter=${filter}&limit=500`)
       setPayments(res.data.data || [])
+      if (res.data.counts) setVoidedCounts(res.data.counts)
     } catch (err) {
       if (!isAccessDenied(err)) toast.error('Error al cargar pagos')
     } finally {
@@ -201,7 +204,10 @@ const PaymentsPage: React.FC = () => {
   }
 
   useEffect(() => {
-    fetchPayments()
+    fetchPayments(voidedFilter)
+  }, [voidedFilter])
+
+  useEffect(() => {
     api.get('/loans?status=active,in_mora,overdue,disbursed,current&limit=200').then(res => setActiveLoans(res.data.data || [])).catch(() => {})
     api.get('/settings/bank-accounts').then(res => setBankAccounts(Array.isArray(res.data) ? res.data.filter((a: BankAccount) => a) : [])).catch(() => {})
   }, [])
@@ -358,13 +364,29 @@ const PaymentsPage: React.FC = () => {
           <p className="text-lg font-bold text-green-700 mt-1">{formatCurrency(totalAmount)}</p>
         </Card>
         <Card className="p-4 text-center">
-          <p className="text-xs text-slate-500 uppercase font-medium">Pagos</p>
-          <p className="text-lg font-bold text-slate-800 mt-1">{filtered.filter(p=>!p.isVoided).length}</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">Pagos válidos</p>
+          <p className="text-lg font-bold text-slate-800 mt-1">{voidedCounts.valid}</p>
         </Card>
         <Card className="p-4 text-center bg-slate-50">
           <p className="text-xs text-slate-500 uppercase font-medium">Anulados</p>
-          <p className="text-lg font-bold text-slate-500 mt-1">{filtered.filter(p=>p.isVoided).length}</p>
+          <p className="text-lg font-bold text-slate-500 mt-1">{voidedCounts.voided}</p>
         </Card>
+      </div>
+
+      {/* Toggle Validos / Anulados / Todos */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setVoidedFilter('valid')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${voidedFilter === 'valid' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
+        >Válidos ({voidedCounts.valid})</button>
+        <button
+          onClick={() => setVoidedFilter('voided')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${voidedFilter === 'voided' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
+        >Anulados ({voidedCounts.voided})</button>
+        <button
+          onClick={() => setVoidedFilter('all')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${voidedFilter === 'all' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
+        >Todos ({voidedCounts.valid + voidedCounts.voided})</button>
       </div>
 
       {/* Filters */}

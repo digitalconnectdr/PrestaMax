@@ -488,7 +488,14 @@ const LoansPage: React.FC = () => {
                       {loan.rate}% {loan.rateType === 'monthly' ? 'mens.' : 'anual'}
                     </td>
                     <td className="py-3 px-4">
-                      {loan.term} {loan.termUnit === 'months' ? 'meses' : 'sem.'}
+                      {loan.term} {
+                        loan.termUnit === 'months'   ? 'meses' :
+                        loan.termUnit === 'biweekly' ? 'quinc.' :
+                        loan.termUnit === 'weeks'    ? 'sem.' :
+                        loan.termUnit === 'days'     ? 'días' :
+                        loan.termUnit === 'years'    ? 'años' :
+                        loan.termUnit
+                      }
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span className={loan.moraBalance > 0 ? 'text-red-600 font-semibold' : 'font-medium'}>

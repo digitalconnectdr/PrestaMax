@@ -796,7 +796,14 @@ const LoanDetailPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-slate-500 font-medium">Plazo</p>
-                    <p className="font-semibold text-slate-900">{loan.term} {loan.termUnit === 'months' ? 'meses' : 'semanas'}</p>
+                    <p className="font-semibold text-slate-900">{loan.term} {
+                      loan.termUnit === 'months'   ? (loan.term === 1 ? 'mes' : 'meses') :
+                      loan.termUnit === 'biweekly' ? (loan.term === 1 ? 'quincena' : 'quincenas') :
+                      loan.termUnit === 'weeks'    ? (loan.term === 1 ? 'semana' : 'semanas') :
+                      loan.termUnit === 'days'     ? (loan.term === 1 ? 'día' : 'días') :
+                      loan.termUnit === 'years'    ? (loan.term === 1 ? 'año' : 'años') :
+                      loan.termUnit
+                    }</p>
                   </div>
                   <div>
                     <p className="text-slate-500 font-medium">Frecuencia de Pago</p>

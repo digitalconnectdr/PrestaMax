@@ -480,7 +480,14 @@ const LoanCreatePage: React.FC = () => {
                 <div className="text-sm text-slate-600 space-y-1">
                   <p>Tasa: <strong>{product.rate}% {product.rateType === 'monthly' ? 'mensual' : 'anual'}</strong></p>
                   <p>Monto: <strong>{formatCurrency(product.minAmount)} – {formatCurrency(product.maxAmount)}</strong></p>
-                  <p>Plazo: <strong>{product.minTerm} – {product.maxTerm} {product.termUnit === 'months' ? 'meses' : 'sem.'}</strong></p>
+                  <p>Plazo: <strong>{product.minTerm} – {product.maxTerm} {
+                    product.termUnit === 'months'   ? 'meses' :
+                    product.termUnit === 'biweekly' ? 'quincenas' :
+                    product.termUnit === 'weeks'    ? 'semanas' :
+                    product.termUnit === 'days'     ? 'días' :
+                    product.termUnit === 'years'    ? 'años' :
+                    product.termUnit
+                  }</strong></p>
                   <p>Frecuencia: <strong>{FREQ_LABELS[product.paymentFrequency] || product.paymentFrequency}</strong></p>
                   {product.isReditos && <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Réditos</span>}
                   {product.isSanType && <span className="inline-block text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full ml-1">San</span>}
@@ -896,7 +903,14 @@ const LoanCreatePage: React.FC = () => {
                   )}
                   <div className="flex justify-between">
                     <span className="text-slate-500">Plazo</span>
-                    <span className="font-medium">{form.term} {form.termUnit === 'months' ? 'meses' : form.termUnit}</span>
+                    <span className="font-medium">{form.term} {
+                      form.termUnit === 'months'   ? 'meses' :
+                      form.termUnit === 'biweekly' ? 'quincenas' :
+                      form.termUnit === 'weeks'    ? 'semanas' :
+                      form.termUnit === 'days'     ? 'días' :
+                      form.termUnit === 'years'    ? 'años' :
+                      form.termUnit
+                    }</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Tasa</span>

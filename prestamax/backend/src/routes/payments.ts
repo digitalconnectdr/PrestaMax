@@ -317,15 +317,37 @@ router.post('/preview', authenticate, requireTenant, requirePermission('payments
 // ─── GET list ─────────────────────────────────────────────────────────────────
 router.get('/', authenticate, requireTenant, requirePermission('payments.view'), (req: AuthRequest, res: Response) => {
   try {
-    const { loan_id, bank_account_id, page = '1', limit = '20' } = req.query as any;
+    const { loan_id, bank_account_id, page = '1', limit = '20', voided_filter } = req.query as any;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const db = getDb();
-    // When filtering by specific loan, include voided payments so history is complete
-    let where = (loan_id || bank_account_id) ? 'WHERE p.tenant_id=?' : 'WHERE p.tenant_id=? AND p.is_voided=0';
+
+    // voided_filter: 'valid' (default) | 'voided' | 'all'
+    // When filtering by specific loan, default a 'all' (historial completo del prestamo).
+    let voidedClause = '';
+    const filterMode = (voided_filter || (loan_id || bank_account_id ? 'all' : 'valid')).toString();
+    if (filterMode === 'valid')  voidedClause = ' AND p.is_voided=0';
+    else if (filterMode === 'voided') voidedClause = ' AND p.is_voided=1';
+    // 'all' -> no clause
+
+    let where = `WHERE p.tenant_id=?${voidedClause}`;
     const params: any[] = [req.tenant.id];
     if (loan_id) { where += ' AND p.loan_id=?'; params.push(loan_id); }
     if (bank_account_id) { where += ' AND p.bank_account_id=?'; params.push(bank_account_id); }
+
     const total = (db.prepare(`SELECT COUNT(*) as c FROM payments p ${where}`).get(...params) as any).c;
+
+    // Conteo separado de validos vs anulados (sin filtro de voided) para mostrar en la UI
+    const baseWhere = (loan_id || bank_account_id)
+      ? 'WHERE p.tenant_id=?' + (loan_id ? ' AND p.loan_id=?' : '') + (bank_account_id ? ' AND p.bank_account_id=?' : '')
+      : 'WHERE p.tenant_id=?';
+    const baseParams: any[] = [req.tenant.id];
+    if (loan_id) baseParams.push(loan_id);
+    if (bank_account_id) baseParams.push(bank_account_id);
+    const counts = db.prepare(`SELECT
+      SUM(CASE WHEN p.is_voided=0 THEN 1 ELSE 0 END) AS valid_count,
+      SUM(CASE WHEN p.is_voided=1 THEN 1 ELSE 0 END) AS voided_count
+      FROM payments p ${baseWhere}`).get(...baseParams) as any;
+
     const data = db.prepare(`
       SELECT p.*, l.loan_number,
              c.full_name as client_name,
@@ -340,7 +362,15 @@ router.get('/', authenticate, requireTenant, requirePermission('payments.view'),
       LEFT JOIN bank_accounts ba ON ba.id=p.bank_account_id
       LEFT JOIN users u ON u.id=p.registered_by
       ${where} ORDER BY p.payment_date DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), skip);
-    res.json({ data, total });
+    res.json({
+      data,
+      total,
+      counts: {
+        valid:  Number(counts?.valid_count)  || 0,
+        voided: Number(counts?.voided_count) || 0,
+      },
+      filter: filterMode,
+    });
   } catch (e: any) { console.error('GET /payments error:', e.message); res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
