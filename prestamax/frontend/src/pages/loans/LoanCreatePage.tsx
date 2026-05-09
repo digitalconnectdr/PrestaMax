@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePermission } from '@/hooks/usePermission'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -94,6 +95,7 @@ interface LoanFormData {
 
 const LoanCreatePage: React.FC = () => {
   const navigate = useNavigate()
+  const { can } = usePermission()
   const [step, setStep] = useState(1)
   const [clients, setClients] = useState<Client[]>([])
   const [products, setProducts] = useState<LoanProduct[]>([])
@@ -695,10 +697,20 @@ const LoanCreatePage: React.FC = () => {
                     : bankAccounts
                   if (filteredAccounts.length === 0) return (
                     <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      {bankAccounts.length === 0
-                        ? <>No hay cuentas bancarias configuradas. <a href="/settings/bank-accounts" className="underline font-medium">Agregar cuenta →</a></>
-                        : <>No tienes cuentas bancarias en <strong>{form.currency}</strong>. <a href="/settings/bank-accounts" className="underline font-medium">Agregar cuenta {form.currency} →</a></>
-                      }
+                      {(() => {
+                        const handleAddAccount = (e: React.MouseEvent) => {
+                          e.preventDefault()
+                          if (can('settings.bank_accounts')) {
+                            navigate('/settings/bank-accounts')
+                          } else {
+                            toast.error('No tienes permisos para crear cuentas bancarias. Pídele al administrador del tenant que las configure.')
+                          }
+                        }
+                        if (bankAccounts.length === 0) {
+                          return <>No hay cuentas bancarias configuradas. <button type="button" onClick={handleAddAccount} className="underline font-medium hover:text-amber-900">Agregar cuenta →</button></>
+                        }
+                        return <>No tienes cuentas bancarias en <strong>{form.currency}</strong>. <button type="button" onClick={handleAddAccount} className="underline font-medium hover:text-amber-900">Agregar cuenta {form.currency} →</button></>
+                      })()}
                     </p>
                   )
                   return (

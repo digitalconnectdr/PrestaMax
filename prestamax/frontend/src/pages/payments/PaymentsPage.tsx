@@ -521,8 +521,8 @@ const PaymentsPage: React.FC = () => {
 
       {/* Payment Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
-          <Card className="w-full max-w-lg my-4 max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-2 sm:p-4 overflow-y-auto">
+          <Card className="w-full max-w-lg my-2 sm:my-4 max-h-[95vh] sm:max-h-[92vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div>

@@ -533,8 +533,8 @@ const CollectionsPage: React.FC = () => {
 
       {/* Quick Pay Modal */}
       {showPayModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-2 sm:p-4 overflow-y-auto">
+          <Card className="w-full max-w-lg my-2 sm:my-4 max-h-[95vh] sm:max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="section-title">Registrar Pago — {showPayModal.clientName}</h2>
               <button onClick={() => setShowPayModal(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5"/></button>

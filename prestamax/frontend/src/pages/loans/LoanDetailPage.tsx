@@ -1302,8 +1302,8 @@ const LoanDetailPage: React.FC = () => {
 
       {/* Payment Modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <Card className="w-full max-w-lg my-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-2 sm:p-4 overflow-y-auto">
+          <Card className="w-full max-w-lg my-2 sm:my-4 max-h-[95vh] sm:max-h-[92vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -1518,15 +1518,40 @@ const LoanDetailPage: React.FC = () => {
 
                 {/* Amount input */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
                     <label className="block text-sm font-medium text-slate-700">Monto a Pagar</label>
-                    <button
-                      onClick={() => setPaymentData({ ...paymentData, amount: String(totalOverdue.toFixed(2)) })}
-                      className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1"
-                    >
-                      <Zap className="w-3 h-3" />
-                      Pagar saldo total
-                    </button>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {(() => {
+                        // Saldo vencido real: cuotas con due_date < hoy + mora
+                        const today = new Date(); today.setHours(0,0,0,0)
+                        const overdue = (loan.installments || [])
+                          .filter((i: any) => i.status !== 'paid' && i.status !== 'waived' && i.dueDate && new Date(i.dueDate) < today)
+                          .reduce((s: number, i: any) => s + Math.max(0, (i.totalAmount || 0) - (i.paidTotal || 0)) + (i.moraAmount || 0), 0)
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => { if (overdue > 0) setPaymentData({ ...paymentData, amount: String(overdue.toFixed(2)) }) }}
+                            disabled={overdue <= 0}
+                            className={`text-xs font-medium flex items-center gap-1 ${overdue > 0 ? 'text-amber-700 hover:underline' : 'text-slate-400 cursor-not-allowed'}`}
+                            title={overdue > 0 ? 'Suma de cuotas vencidas + mora a la fecha' : 'No hay cuotas vencidas en este momento'}
+                          >
+                            <Zap className="w-3 h-3" />
+                            {overdue > 0
+                              ? `Pagar vencido (${formatCurrency(overdue, loan.currency || 'DOP')})`
+                              : 'Sin saldo vencido'}
+                          </button>
+                        )
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => setPaymentData({ ...paymentData, amount: String((loan.totalBalance || totalOverdue).toFixed(2)) })}
+                        className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1"
+                        title="Liquidar el préstamo completo"
+                      >
+                        <Zap className="w-3 h-3" />
+                        Pagar saldo total
+                      </button>
+                    </div>
                   </div>
                   <input
                     type="number"
