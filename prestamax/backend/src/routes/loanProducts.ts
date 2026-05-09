@@ -21,11 +21,12 @@ router.post('/', authenticate, requireTenant, requirePermission('settings.produc
     const minTerm   = d.min_term   ?? d.minTerm   ?? null;
     const maxTerm   = d.max_term   ?? d.maxTerm   ?? null;
     if (rate === null || rate === undefined) return res.status(400).json({ error: 'La tasa de interes es requerida' });
-    db.prepare(`INSERT INTO loan_products (id,tenant_id,name,type,description,min_amount,max_amount,rate,rate_type,
+    const code = d.code ?? null;
+    db.prepare(`INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
       min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,mora_rate_daily,mora_grace_days,
       requires_guarantee,requires_approval,allows_prepayment,rebate_policy,is_san_type,is_reditos) VALUES
-      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-      id, req.tenant.id, d.name, d.type, d.description||null,
+      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id, req.tenant.id, d.name, code, d.type, d.description||null,
       minAmount, maxAmount, rate, d.rate_type||'monthly',
       minTerm, maxTerm, d.term_unit||'months', d.payment_frequency||'monthly',
       d.amortization_type||'fixed_installment',
@@ -68,7 +69,7 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
     const isActive     = d.is_active ?? d.isActive;
 
     db.prepare(`UPDATE loan_products SET
-      name=COALESCE(?,name), type=COALESCE(?,type), description=COALESCE(?,description),
+      name=COALESCE(?,name), code=COALESCE(?,code), type=COALESCE(?,type), description=COALESCE(?,description),
       min_amount=COALESCE(?,min_amount), max_amount=COALESCE(?,max_amount),
       rate=COALESCE(?,rate), rate_type=COALESCE(?,rate_type),
       min_term=COALESCE(?,min_term), max_term=COALESCE(?,max_term),
@@ -80,7 +81,7 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
       is_san_type=COALESCE(?,is_san_type), is_reditos=COALESCE(?,is_reditos),
       is_active=COALESCE(?,is_active)
       WHERE id=? AND tenant_id=?`).run(
-      norm(d.name), norm(d.type), norm(d.description),
+      norm(d.name), norm(d.code), norm(d.type), norm(d.description),
       minAmount, maxAmount,
       rate, rateType,
       minTerm, maxTerm,

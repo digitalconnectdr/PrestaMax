@@ -710,6 +710,9 @@ export function initializeDatabase(): void {
   ];
   for (const sql of loanRequestExtraFields) { try { db.exec(sql); } catch(_) {} }
 
+  // ── loan_products: codigo de producto (campo opcional para identificacion) ──
+  try { db.exec(`ALTER TABLE loan_products ADD COLUMN code TEXT`); } catch(_) {}
+
   // ── Notarial / legal document fields for tenants ──────────────────────────
   try { db.exec(`ALTER TABLE tenants ADD COLUMN notary_name TEXT`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN notary_collegiate_number TEXT`); } catch(_) {}
@@ -919,3 +922,4 @@ export function uuid(): string {
 export function now(): string {
   return new Date().toISOString();
 }
+  

@@ -675,11 +675,49 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('loans.v
       return res.status(400).json({ error: `El préstamo ya está en estado "${loan.status}"` })
     }
 
-    db.prepare(`UPDATE loans SET status='voided', updated_at=datetime('now'), notes=COALESCE(notes||' | ','')|| ? WHERE id=? AND tenant_id=?`)
+    // ── Reverso del desembolso a la cuenta bancaria de origen ──────────────
+    // Si el prestamo fue desembolsado, devolver el monto desembolsado al banco
+    // y reducir el saldo prestado para que las metricas vuelvan al estado pre-prestamo.
+    const wasDisbursed = ['active', 'in_mora', 'disbursed', 'restructured'].includes(loan.status)
+    const disbAmount = parseFloat(loan.disbursed_amount) || 0
+    const bankAccountId = loan.disbursement_bank_account_id
+    let bankReversed = false
+
+    if (wasDisbursed && disbAmount > 0 && bankAccountId) {
+      const bankAcc = db.prepare('SELECT * FROM bank_accounts WHERE id=? AND tenant_id=?').get(bankAccountId, req.tenant!.id) as any
+      if (bankAcc) {
+        // Recuperar el dinero al banco: +current_balance y -loaned_balance por el monto desembolsado
+        db.prepare('UPDATE bank_accounts SET current_balance=current_balance+?, loaned_balance=MAX(0, loaned_balance-?) WHERE id=? AND tenant_id=?')
+          .run(disbAmount, disbAmount, bankAccountId, req.tenant!.id)
+        bankReversed = true
+      }
+    }
+
+    // Cancelar las cuotas pendientes (no las ya pagadas)
+    db.prepare(`UPDATE installments SET status='cancelled' WHERE loan_id=? AND status NOT IN ('paid','waived','cancelled')`)
+      .run(req.params.id)
+
+    db.prepare(`UPDATE loans SET status='voided', principal_balance=0, interest_balance=0, total_balance=0, mora_balance=0, updated_at=datetime('now'), notes=COALESCE(notes||' | ','')|| ? WHERE id=? AND tenant_id=?`)
       .run(`[ANULADO: ${reason}]`, req.params.id, req.tenant!.id)
 
-    res.json({ success: true, message: 'Préstamo anulado correctamente' })
-  } catch (e) { res.status(500).json({ error: 'Error al anular préstamo' }) }
+    // Audit log
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)').run(
+      uuid(), req.tenant!.id, (req as any).user.id, (req as any).user.full_name,
+      'voided', 'loan', req.params.id,
+      `Anulo el prestamo ${loan.loan_number||req.params.id}: ${reason}` + (bankReversed ? ` (reverso bancario: ${disbAmount.toFixed(2)})` : ''),
+      JSON.stringify({ reason, bank_reversed: bankReversed, refunded_amount: bankReversed ? disbAmount : 0, bank_account_id: bankAccountId })
+    )
+
+    res.json({
+      success: true,
+      message: 'Prestamo anulado correctamente' + (bankReversed ? `. Se devolvieron ${disbAmount.toFixed(2)} a la cuenta bancaria.` : ''),
+      bank_reversed: bankReversed,
+      refunded_amount: bankReversed ? disbAmount : 0
+    })
+  } catch (e) {
+    console.error('POST /loans/:id/void error:', e)
+    res.status(500).json({ error: (e as any)?.message || 'Error al anular prestamo' })
+  }
 })
 
 export default router;
