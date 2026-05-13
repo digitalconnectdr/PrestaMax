@@ -75,6 +75,14 @@ api.interceptors.response.use(
       localStorage.removeItem('prestamax_tenant_id')
       window.location.href = '/login'
     }
+    // ACCESS_REVOKED: el usuario fue bloqueado por su admin (membresia o tenant
+    // desactivado). Cerrar sesion completamente y redirigir al login con mensaje.
+    if (error.response?.status === 403 && error.response?.data?.code === 'ACCESS_REVOKED') {
+      localStorage.removeItem('prestamax_token')
+      localStorage.removeItem('prestamax_tenant_id')
+      const msg = encodeURIComponent(error.response?.data?.error || 'Tu cuenta fue desactivada')
+      window.location.href = `/login?revoked=1&msg=${msg}`
+    }
     // 403 errors are access-denied — mark them so pages can handle silently
     if (error.response?.status === 403) {
       error.isAccessDenied = true

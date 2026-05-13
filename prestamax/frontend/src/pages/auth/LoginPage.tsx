@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useTenant } from '@/hooks/useTenant'
 import Button from '@/components/ui/Button'
@@ -20,6 +20,20 @@ const LoginPage: React.FC = () => {
   const { login } = useAuth()
   const { selectTenant, setUserTenants } = useTenant()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Si el usuario llego aqui porque su cuenta fue desactivada
+  // (?revoked=1&msg=...), mostrar el mensaje y limpiar el query string.
+  useEffect(() => {
+    if (searchParams.get('revoked') === '1') {
+      const msg = searchParams.get('msg') || 'Tu cuenta fue desactivada. Contacta a tu administrador.'
+      setError(msg)
+      toast.error(msg, { duration: 6000 })
+      // Limpiar la URL para que el mensaje no quede pegado al recargar
+      searchParams.delete('revoked'); searchParams.delete('msg')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,9 +54,16 @@ const LoginPage: React.FC = () => {
       toast.success('Bienvenido a PrestaMax')
       navigate('/dashboard')
     } catch (err: any) {
-      const message = err.response?.data?.message || 'Error al iniciar sesión'
-      setError(message)
-      toast.error(message)
+      // Caso especifico: cuenta desactivada (backend devuelve 403 ACCESS_REVOKED)
+      const code = err.response?.data?.code
+      const message = err.response?.data?.error || err.response?.data?.message || 'Error al iniciar sesión'
+      if (code === 'ACCESS_REVOKED') {
+        setError(message)
+        toast.error(message, { duration: 6000 })
+      } else {
+        setError(message)
+        toast.error(message)
+      }
     } finally {
       setIsLoading(false)
     }

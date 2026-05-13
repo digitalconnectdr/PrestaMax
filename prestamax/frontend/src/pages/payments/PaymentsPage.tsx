@@ -18,6 +18,7 @@ import { usePermission } from '@/hooks/usePermission'
 
 interface Payment {
   id: string
+  loanId: string
   paymentNumber: string
   paymentDate: string
   clientName: string
@@ -70,25 +71,68 @@ interface PaymentPreview {
 const METHOD_LABELS: Record<string, string> = { cash: 'Efectivo', transfer: 'Transferencia', check: 'Cheque', card: 'Tarjeta' }
 
 // ── Print receipt for a payment ───────────────────────────────────────────────
-const printPaymentReceipt = (p: Payment, tenantName: string) => {
-  const win = window.open('', '_blank', 'width=420,height=600')
-  if (!win) { alert('Activa ventanas emergentes para imprimir'); return }
+// Acepta info del tenant (nombre, telefono, etc) — el negocio del prestamista
+// es quien aparece en el recibo, no PrestaMax. Tambien hace fetch al loan
+// para incluir proxima fecha de pago, balance pendiente y cuotas X de Y.
+const printPaymentReceipt = async (p: Payment, tenant: { name?: string; phone?: string; email?: string; address?: string } | string) => {
+  const t = typeof tenant === 'string' ? { name: tenant } : (tenant || {})
+  const tenantName = t.name || 'Negocio'
+  const tenantPhone = t.phone || ''
+  const tenantAddress = t.address || ''
+
+  // Fetch loan detail para obtener balance, proxima cuota y conteo de cuotas
+  let loan: any = null
+  try {
+    const r = await api.get(`/loans/${(p as any).loanId || ''}`)
+    loan = r.data
+  } catch (_) { /* recibo se imprime sin estos datos si falla */ }
+
   const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const fmtMoney = (n: number) => `RD$${(n || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+
+  // Calcular: cuotas pagadas / total, proxima fecha de pago, balance pendiente
+  let cuotasInfo = ''
+  let proximoPago = ''
+  let balancePendiente = ''
+  if (loan?.installments && Array.isArray(loan.installments)) {
+    const total = loan.installments.length
+    const paidCount = loan.installments.filter((i: any) => i.status === 'paid').length
+    cuotasInfo = `${paidCount} de ${total}`
+    // Proxima cuota pendiente (no paid/waived) con menor due_date
+    const pending = loan.installments
+      .filter((i: any) => i.status !== 'paid' && i.status !== 'waived')
+      .sort((a: any, b: any) => new Date(a.deferred_due_date || a.dueDate || a.due_date).getTime() - new Date(b.deferred_due_date || b.dueDate || b.due_date).getTime())
+    if (pending.length > 0) {
+      const next = pending[0]
+      const nextDate = next.deferredDueDate || next.dueDate || next.due_date
+      if (nextDate) proximoPago = fmtDate(nextDate)
+    }
+    const balance = (loan.principalBalance || 0) + (loan.interestBalance || 0) + (loan.moraBalance || 0)
+    balancePendiente = fmtMoney(balance)
+  }
+
+  const win = window.open('', '_blank', 'width=420,height=700')
+  if (!win) { alert('Activa ventanas emergentes para imprimir'); return }
   const rows = [
     ['Capital aplicado', fmtMoney(p.appliedCapital || 0)],
     ['Interés aplicado', fmtMoney(p.appliedInterest || 0)],
     ['Mora aplicada', fmtMoney(p.appliedMora || 0)],
   ].map(([l, v]) => `<tr><td style="padding:3px 0;color:#555">${l}</td><td style="padding:3px 0;text-align:right">${v}</td></tr>`).join('')
+
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Recibo</title>
   <style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px;color:#333}
-  h2{font-size:16px;margin:0 0 4px}hr{border:none;border-top:1px dashed #ccc;margin:10px 0}
+  h2{font-size:18px;margin:0 0 4px}hr{border:none;border-top:1px dashed #ccc;margin:10px 0}
   .total{font-size:16px;font-weight:bold;color:#16a34a}.num{color:#1e3a5f;font-weight:bold}
   table{width:100%;border-collapse:collapse}.void{color:red;font-size:14px;font-weight:bold;text-align:center}
+  .bal-row{background:#fef3c7;padding:6px 8px;border-radius:4px;margin:4px 0;display:flex;justify-content:space-between}
+  .next-row{background:#dbeafe;padding:6px 8px;border-radius:4px;margin:4px 0;display:flex;justify-content:space-between}
+  .footer{font-size:9px;color:#888;text-align:center;margin-top:16px;border-top:1px solid #eee;padding-top:8px}
   @media print{@page{margin:10mm}}</style></head><body>
   <div style="text-align:center;margin-bottom:12px">
     <h2>${tenantName}</h2>
-    <p style="margin:0;font-size:11px;color:#888">Comprobante de Pago</p>
+    ${tenantPhone ? `<p style="margin:2px 0;font-size:12px;color:#555">Tel: ${tenantPhone}</p>` : ''}
+    ${tenantAddress ? `<p style="margin:2px 0;font-size:10px;color:#888">${tenantAddress}</p>` : ''}
+    <p style="margin:6px 0 0 0;font-size:11px;color:#888;font-weight:bold;letter-spacing:1px">COMPROBANTE DE PAGO</p>
   </div>
   <hr/>
   <table><tbody>
@@ -108,11 +152,15 @@ const printPaymentReceipt = (p: Payment, tenantName: string) => {
     <span>TOTAL PAGADO</span><span class="total">${fmtMoney(p.amount)}</span>
   </div>
   <hr/>
+  ${cuotasInfo ? `<div class="bal-row"><span>Cuotas pagadas</span><strong>${cuotasInfo}</strong></div>` : ''}
+  ${proximoPago ? `<div class="next-row"><span>Próxima fecha de pago</span><strong>${proximoPago}</strong></div>` : ''}
+  ${balancePendiente ? `<div class="bal-row"><span>Balance pendiente</span><strong>${balancePendiente}</strong></div>` : ''}
   ${p.isVoided ? '<div class="void">⚠ PAGO ANULADO</div><hr/>' : ''}
   <p style="font-size:10px;color:#888;text-align:center;margin-top:12px">
-    Registrado por: ${p.registeredByName || '—'}<br/>
-    ${p.notes ? `Notas: ${p.notes}` : ''}
+    Registrado por: ${p.registeredByName || '—'}
+    ${p.notes ? `<br/>Notas: ${p.notes}` : ''}
   </p>
+  <p class="footer">Plataforma de servicios PrestaMax</p>
   <script>window.onload=()=>{window.print();}</script>
   </body></html>`)
   win.document.close()
@@ -472,7 +520,7 @@ const PaymentsPage: React.FC = () => {
                       <div className="flex items-center gap-1">
                         {/* Print receipt */}
                         <button
-                          onClick={() => printPaymentReceipt(payment, (tenantState as any)?.currentTenant?.name || 'PrestaMax')}
+                          onClick={() => printPaymentReceipt(payment, (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' })}
                           className="p-1.5 hover:bg-blue-50 rounded text-blue-500 transition-colors"
                           title="Imprimir recibo"
                         >
@@ -481,7 +529,7 @@ const PaymentsPage: React.FC = () => {
                         {/* WhatsApp */}
                         {!payment.isVoided && payment.clientPhone && (
                           <button
-                            onClick={() => sendWhatsApp(payment, (tenantState as any)?.currentTenant?.name || 'PrestaMax')}
+                            onClick={() => sendWhatsApp(payment, (tenantState as any)?.currentTenant?.tenant?.name || 'Negocio')}
                             className="p-1.5 hover:bg-green-50 rounded text-green-600 transition-colors"
                             title="Enviar por WhatsApp"
                           >

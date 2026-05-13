@@ -21,11 +21,23 @@ router.post('/login', async (req: Request, res: Response) => {
     if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     const memberships = db.prepare(`
-      SELECT tm.*, t.name as t_name, t.slug as t_slug, t.logo_url as t_logo, t.currency as t_currency, p.features as plan_features
+      SELECT tm.*, t.name as t_name, t.slug as t_slug, t.logo_url as t_logo, t.currency as t_currency, t.phone as t_phone, t.email as t_email, t.address as t_address, t.is_active as t_active, p.features as plan_features
       FROM tenant_memberships tm JOIN tenants t ON t.id = tm.tenant_id
       LEFT JOIN plans p ON p.id = t.plan_id
-      WHERE tm.user_id = ? AND tm.is_active = 1
+      WHERE tm.user_id = ? AND tm.is_active = 1 AND t.is_active = 1
     `).all(user.id) as any[];
+
+    // Si no tiene ninguna membresia activa y NO es platform admin, rechazar.
+    // Esto evita que un usuario bloqueado por su admin (membership.is_active=0
+    // o tenant.is_active=0) pueda iniciar sesion y navegar.
+    const isPlatformAdmin = ['platform_owner','platform_admin','admin'].includes(user.platform_role);
+    if (memberships.length === 0 && !isPlatformAdmin) {
+      return res.status(403).json({
+        error: 'Tu cuenta esta desactivada o no tiene acceso a ninguna empresa. Contacta a tu administrador.',
+        code: 'ACCESS_REVOKED',
+      });
+    }
+
     const tenants = memberships.map((m: any) => {
       const roles = JSON.parse(m.roles||'[]');
       const explicit = JSON.parse(m.permissions||'{}');
@@ -34,7 +46,7 @@ router.post('/login', async (req: Request, res: Response) => {
       const effectivePermissions = Array.from(computePermissions(roles, explicit, planFeatures));
       return {
         ...m, roles, permissions: explicit, effectivePermissions,
-        tenant: { id: m.tenant_id, name: m.t_name, slug: m.t_slug, logo_url: m.t_logo, currency: m.t_currency }
+        tenant: { id: m.tenant_id, name: m.t_name, slug: m.t_slug, logo_url: m.t_logo, currency: m.t_currency, phone: m.t_phone, email: m.t_email, address: m.t_address }
       };
     });
     const { password_hash, ...userSafe } = user;
@@ -49,8 +61,18 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
       SELECT tm.*, t.name as t_name, t.slug as t_slug, t.logo_url as t_logo, t.currency as t_currency, p.features as plan_features
       FROM tenant_memberships tm JOIN tenants t ON t.id = tm.tenant_id
       LEFT JOIN plans p ON p.id = t.plan_id
-      WHERE tm.user_id = ? AND tm.is_active = 1
+      WHERE tm.user_id = ? AND tm.is_active = 1 AND t.is_active = 1
     `).all(req.user.id) as any[];
+
+    // Rechazar acceso si no hay memberships activas y no es platform admin
+    const isPlatformAdmin = ['platform_owner','platform_admin','admin'].includes(req.user.platform_role);
+    if (memberships.length === 0 && !isPlatformAdmin) {
+      return res.status(403).json({
+        error: 'Tu cuenta esta desactivada o no tiene acceso a ninguna empresa. Contacta a tu administrador.',
+        code: 'ACCESS_REVOKED',
+      });
+    }
+
     const tenants = memberships.map((m: any) => {
       const roles = JSON.parse(m.roles||'[]');
       const explicit = JSON.parse(m.permissions||'{}');
@@ -59,7 +81,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
       const effectivePermissions = Array.from(computePermissions(roles, explicit, planFeatures));
       return {
         ...m, roles, permissions: explicit, effectivePermissions,
-        tenant: { id: m.tenant_id, name: m.t_name, slug: m.t_slug, logo_url: m.t_logo, currency: m.t_currency }
+        tenant: { id: m.tenant_id, name: m.t_name, slug: m.t_slug, logo_url: m.t_logo, currency: m.t_currency, phone: m.t_phone, email: m.t_email, address: m.t_address }
       };
     });
     const { password_hash, ...userSafe } = req.user;
