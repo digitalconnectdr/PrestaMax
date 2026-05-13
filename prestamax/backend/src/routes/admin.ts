@@ -242,6 +242,11 @@ router.get('/tenants/:id', authenticate, requirePlatformAdmin, (req: AuthRequest
 router.put('/tenants/:id', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb(); const d = req.body;
+
+    // Detectar si hubo cambio de plan para limpiar permisos huerfanos
+    const before = db.prepare('SELECT plan_id FROM tenants WHERE id=?').get(req.params.id) as any;
+    const planChanged = d.plan_id && before && before.plan_id !== d.plan_id;
+
     db.prepare(`UPDATE tenants SET
       plan_id=COALESCE(?,plan_id),
       is_active=COALESCE(?,is_active),
@@ -265,6 +270,17 @@ router.put('/tenants/:id', authenticate, requirePlatformAdmin, (req: AuthRequest
       d.subscription_notes||null,
       now(), req.params.id
     );
+
+    // Si hubo cambio de plan, limpiar permisos explicitos que el nuevo plan no permite.
+    // Esto evita que un downgrade deje permisos huerfanos que se reactivarian
+    // automaticamente en un upgrade posterior.
+    if (planChanged) {
+      try {
+        const { applyPlanChange } = require('./billing');
+        applyPlanChange(db, req.params.id, d.plan_id);
+      } catch (e) { console.error('Error limpiando permisos al cambiar plan:', e); }
+    }
+
     res.json(db.prepare('SELECT * FROM tenants WHERE id=?').get(req.params.id));
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });

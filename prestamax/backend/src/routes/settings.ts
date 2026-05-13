@@ -696,8 +696,11 @@ router.get('/users/:membershipId/permissions', authenticate, requireTenant, requ
     }
     const roles: string[] = (() => { try { return JSON.parse(membership.roles || '[]') } catch(_) { return [] } })();
     const explicit: Record<string,boolean> = (() => { try { return JSON.parse(membership.permissions || '{}') } catch(_) { return {} } })();
-    const effective = Array.from(computePermissions(roles, explicit));
-    res.json({ roles, explicit, effective });
+    // Aplicar plan ceiling
+    const planRow = db.prepare('SELECT p.features FROM tenants t LEFT JOIN plans p ON p.id=t.plan_id WHERE t.id=?').get(req.tenant.id) as any;
+    const planFeatures: string[] = (() => { try { return JSON.parse(planRow?.features || '[]') } catch(_) { return [] } })();
+    const effective = Array.from(computePermissions(roles, explicit, planFeatures));
+    res.json({ roles, explicit, effective, planFeatures });
   } catch(e: any) { res.status(500).json({ error: e.message }); }
 });
 
@@ -729,7 +732,10 @@ router.put('/users/:membershipId/permissions', authenticate, requireTenant, requ
     const updated = db.prepare('SELECT * FROM tenant_memberships WHERE id=?').get(req.params.membershipId) as any;
     const roles2: string[] = JSON.parse(updated.roles || '[]');
     const explicit2: Record<string,boolean> = JSON.parse(updated.permissions || '{}');
-    res.json({ permissions: explicit2, effective: Array.from(computePermissions(roles2, explicit2)) });
+    // Aplicar plan ceiling al respond para reflejar lo que realmente puede hacer
+    const planRow = db.prepare('SELECT p.features FROM tenants t LEFT JOIN plans p ON p.id=t.plan_id WHERE t.id=?').get(req.tenant.id) as any;
+    const planFeatures2: string[] = (() => { try { return JSON.parse(planRow?.features || '[]') } catch(_) { return [] } })();
+    res.json({ permissions: explicit2, effective: Array.from(computePermissions(roles2, explicit2, planFeatures2)), planFeatures: planFeatures2 });
   } catch(e: any) { res.status(500).json({ error: e.message }); }
 });
 

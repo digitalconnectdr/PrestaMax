@@ -99,27 +99,48 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     const existingSlug = db.prepare('SELECT id FROM tenants WHERE slug=?').get(baseSlug);
     const slug = existingSlug ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
 
-    // 1. Crear tenant en estado trial (10 dias)
+    // 1. Verificar si este email ya uso el trial antes (anti-reutilizacion)
+    const trialUsedRow = db.prepare('SELECT email, first_tenant_id, first_used_at FROM trial_history WHERE email=?').get(normalizedEmail) as any;
+    const trialAlreadyUsed = !!trialUsedRow;
+
+    // Si el usuario ya uso trial, debe seleccionar un plan pago de entrada
+    // (no se le otorga trial nuevamente).
+    if (trialAlreadyUsed && !plan_id) {
+      return res.status(400).json({
+        error: 'Este email ya uso el periodo de prueba anteriormente. Para crear una nueva cuenta debes seleccionar un plan pago.',
+        code: 'TRIAL_ALREADY_USED',
+        first_used_at: trialUsedRow.first_used_at,
+      });
+    }
+
+    // 2. Crear tenant
     const trialPlan = plan_id ? null : (db.prepare('SELECT id FROM plans WHERE is_trial_default=1 LIMIT 1').get() as any);
     const effectivePlanId = plan_id || trialPlan?.id || null;
     const tenantId = uuid();
-    const trialEnd = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+    // Si el usuario selecciono un plan pago, NO le damos trial - se cobra desde el inicio
+    const isStartingWithPaidPlan = !!plan_id;
+    const initialStatus = isStartingWithPaidPlan ? 'pending' : 'trial';
+    const trialEnd = isStartingWithPaidPlan
+      ? null
+      : new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`INSERT INTO tenants (id,name,slug,email,phone,currency,plan_id,subscription_status,subscription_start,subscription_end,is_active,created_at)
-      VALUES (?,?,?,?,?,?,?,'trial',datetime('now'),?,1,datetime('now'))`)
-      .run(tenantId, company_name.trim(), slug, normalizedEmail, phone || null, currency, effectivePlanId, trialEnd);
+      VALUES (?,?,?,?,?,?,?,?,datetime('now'),?,1,datetime('now'))`)
+      .run(tenantId, company_name.trim(), slug, normalizedEmail, phone || null, currency, effectivePlanId, initialStatus, trialEnd);
+
+    // Marcar email como ya-uso-trial (solo si realmente esta usando trial)
+    if (!trialAlreadyUsed && !isStartingWithPaidPlan) {
+      try {
+        db.prepare(`INSERT OR IGNORE INTO trial_history (id, email, first_tenant_id, first_used_at)
+          VALUES (?, ?, ?, datetime('now'))`)
+          .run(uuid(), normalizedEmail, tenantId);
+      } catch(_) {}
+    }
 
     // 2. Tenant settings
     db.prepare('INSERT OR IGNORE INTO tenant_settings (id,tenant_id) VALUES (?,?)').run(uuid(), tenantId);
 
-    // 3. Plantillas por defecto
-    const pagareBody = `                    PAGARE\n\n{{company_name}}\n{{company_address}}\nTel: {{company_phone}}   Email: {{company_email}}\n\nPrestamo No.: {{loan_number}}\n--------------------------------------------------\n\nYo, {{client_name}}, portador de la cedula {{client_id}},\ndomiciliado en {{client_address}}, {{client_city}},\ndebo y pagare a {{company_name}} la suma de RD$ {{amount}}\n\n--------------------------------------------------\nDETALLE DE CUOTAS\n--------------------------------------------------\n{{payment_plan}}\n\nFirma del deudor:  ______________________________________\nNombre:            {{client_name}}\nFecha:             {{print_date}}`;
-    const contractBody = `CONTRATO DE PRESTAMO PERSONAL\n\nEntre {{company_name}} y el cliente {{client_name}},\nportador de la cedula {{client_id}}.\n\nMONTO:  {{amount}}\nTASA:   {{rate}}\nPLAZO:  {{term}}\nFECHA:  {{print_date}}\n\n_______________________   _______________________\nFirma del Deudor          Firma del Prestamista`;
-    try {
-      db.prepare('INSERT OR IGNORE INTO contract_templates (id,tenant_id,name,type,body,is_default) VALUES (?,?,?,?,?,?)')
-        .run(uuid(), tenantId, 'Pagare Estandar', 'general', pagareBody, 1);
-      db.prepare('INSERT OR IGNORE INTO contract_templates (id,tenant_id,name,type,body,is_default) VALUES (?,?,?,?,?,?)')
-        .run(uuid(), tenantId, 'Contrato General de Prestamo', 'general', contractBody, 0);
-    } catch (_) {}
+    // 3. Plantillas por defecto: las maneja database.ts (Contrato General de
+    //    Prestamo o Pagare + Pagare Notarial). Aqui ya no insertamos las viejas.
 
     // 4. Crear usuario admin
     const hash = await bcrypt.hash(admin_password, 12);

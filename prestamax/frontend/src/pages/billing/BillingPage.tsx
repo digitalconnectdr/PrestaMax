@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { Check, Loader2, ExternalLink, AlertCircle, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { TenantContext } from '@/contexts/TenantContext';
 
 interface Plan {
   id: string;
@@ -44,6 +45,7 @@ const formatLimit = (n: number) => (n < 0 ? 'Sin limite' : n.toString());
 
 const BillingPage: React.FC = () => {
   const [params] = useSearchParams();
+  const { refreshCurrentTenant } = useContext(TenantContext);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,13 +54,29 @@ const BillingPage: React.FC = () => {
 
   useEffect(() => {
     if (params.get('stripe') === 'success') {
-      toast.success('Suscripcion activada exitosamente! Ya puedes usar el sistema.');
+      toast.success('Suscripcion activada exitosamente! Actualizando permisos...');
+      // El webhook de Stripe puede tardar 1-3s en procesarse. Damos margen.
+      setTimeout(async () => {
+        await refreshCurrentTenant();
+        // Recargar tambien la informacion de suscripcion local de esta pagina
+        try {
+          const subRes = await api.get('/billing/subscription');
+          setSubscription(subRes.data || null);
+        } catch (_) {}
+      }, 2500);
     } else if (params.get('stripe') === 'cancel') {
       toast('Checkout cancelado. Puedes intentarlo de nuevo cuando quieras.', { icon: 'ℹ️' });
     } else if (params.get('stripe') === 'portal-return') {
-      toast.success('Cambios guardados.');
+      toast.success('Cambios guardados. Actualizando permisos...');
+      setTimeout(async () => {
+        await refreshCurrentTenant();
+        try {
+          const subRes = await api.get('/billing/subscription');
+          setSubscription(subRes.data || null);
+        } catch (_) {}
+      }, 2500);
     }
-  }, [params]);
+  }, [params, refreshCurrentTenant]);
 
   const load = async () => {
     setLoading(true);
@@ -89,7 +107,18 @@ const BillingPage: React.FC = () => {
         toast.error('No se pudo iniciar el checkout');
       }
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Error al iniciar el checkout');
+      const code = e?.response?.data?.code;
+      const message = e?.response?.data?.error || 'Error al iniciar el checkout';
+      if (code === 'ALREADY_SUBSCRIBED') {
+        toast.error('Ya tienes este plan activo. No te cobraremos dos veces.');
+      } else if (code === 'USE_CUSTOMER_PORTAL') {
+        toast(
+          'Para cambiar de plan usa "Administrar suscripcion" — evita cobros duplicados.',
+          { icon: 'ℹ️', duration: 6000 }
+        );
+      } else {
+        toast.error(message);
+      }
       setCheckoutLoading(null);
     }
   };

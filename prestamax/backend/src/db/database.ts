@@ -713,6 +713,28 @@ export function initializeDatabase(): void {
   // ── loan_products: codigo de producto (campo opcional para identificacion) ──
   try { db.exec(`ALTER TABLE loan_products ADD COLUMN code TEXT`); } catch(_) {}
 
+  // ── trial_history: tracking persistente de emails que ya usaron trial ────
+  // Permite bloquear que el mismo email vuelva a registrarse y obtener trial
+  // aunque borre o cambie su tenant.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trial_history (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      first_tenant_id TEXT,
+      first_used_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_trial_history_email ON trial_history(email);
+  `);
+
+  // Backfill: cualquier email que ya tenga un tenant cuenta como trial usado
+  try {
+    db.exec(`
+      INSERT OR IGNORE INTO trial_history (id, email, first_tenant_id, first_used_at)
+      SELECT lower(hex(randomblob(16))), lower(email), id, COALESCE(created_at, datetime('now'))
+      FROM tenants WHERE email IS NOT NULL
+    `);
+  } catch(_) {}
+
   // ── Notarial / legal document fields for tenants ──────────────────────────
   try { db.exec(`ALTER TABLE tenants ADD COLUMN notary_name TEXT`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN notary_collegiate_number TEXT`); } catch(_) {}
