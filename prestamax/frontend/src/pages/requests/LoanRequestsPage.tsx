@@ -66,6 +66,7 @@ const LoanRequestsPage: React.FC = () => {
   const [rejectForm, setRejectForm] = useState({ open: false, reason: '', notes: '' })
   const [isActing, setIsActing] = useState(false)
   const [publicLink, setPublicLink] = useState<string>('')
+  const [publicLinkError, setPublicLinkError] = useState<string>('')
   const [showLinkPanel, setShowLinkPanel] = useState(false)
   const [isRegenerating, setIsRegenerating] = useState(false)
   const [showImageModal, setShowImageModal] = useState<{ src: string; label: string } | null>(null)
@@ -91,8 +92,24 @@ const LoanRequestsPage: React.FC = () => {
     try {
       const res = await api.get('/loan-requests/settings/public-link')
       const base = window.location.origin
-      setPublicLink(`${base}/apply/${res.data.publicToken}`)
-    } catch {}
+      const token = res.data.publicToken || res.data.public_token
+      if (!token) {
+        setPublicLinkError('No se pudo generar el token del portal. Contacta a soporte.')
+        return
+      }
+      setPublicLink(`${base}/apply/${token}`)
+      setPublicLinkError('')
+    } catch (err: any) {
+      const code = err?.response?.data?.code
+      const message = err?.response?.data?.error || 'Error al cargar el link'
+      if (code === 'PLAN_FEATURE_REQUIRED') {
+        setPublicLinkError('Tu plan no incluye Solicitudes de prestamo. Actualiza el plan para habilitar el portal publico.')
+      } else if (err?.response?.status === 403) {
+        setPublicLinkError('No tienes permiso para ver el link del portal. Pide a tu admin el permiso "requests.view".')
+      } else {
+        setPublicLinkError(message)
+      }
+    }
   }
 
   useEffect(() => { loadRequests(); loadPublicLink() }, [filterStatus])
@@ -223,9 +240,14 @@ const LoanRequestsPage: React.FC = () => {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-blue-900 mb-1">Link del portal público de solicitudes</p>
               <p className="text-xs text-blue-600 mb-3">Comparte este link con tus clientes para que puedan enviar solicitudes de préstamo desde cualquier dispositivo.</p>
+              {publicLinkError && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mb-2">
+                  ⚠ {publicLinkError}
+                </p>
+              )}
               <div className="flex gap-2 flex-wrap">
-                <div className="flex-1 min-w-0 bg-white border border-blue-200 rounded-lg px-3 py-2 font-mono text-xs text-blue-800 truncate">
-                  {publicLink || 'Cargando...'}
+                <div className={`flex-1 min-w-0 bg-white border rounded-lg px-3 py-2 font-mono text-xs truncate ${publicLinkError ? 'border-amber-200 text-amber-600' : 'border-blue-200 text-blue-800'}`}>
+                  {publicLink || (publicLinkError ? 'No disponible' : 'Cargando...')}
                 </div>
                 <Button size="sm" onClick={handleCopyLink} className="flex items-center gap-1 flex-shrink-0">
                   <Copy className="w-3.5 h-3.5" />Copiar
