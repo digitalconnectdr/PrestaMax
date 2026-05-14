@@ -16,14 +16,21 @@ export function formatCurrency(amount: number, currency = 'DOP'): string {
   }).format(amount)
 }
 
-// Supported currencies catalog
+// Supported currencies catalog — monedas oficiales del sistema
+// (alineadas en LoginPage, RegisterPage y Configuracion > Monedas Habilitadas)
 export const SUPPORTED_CURRENCIES: { code: string; name: string; symbol: string }[] = [
-  { code: 'DOP', name: 'Peso Dominicano', symbol: 'RD$' },
-  { code: 'USD', name: 'Dólar Estadounidense', symbol: '$' },
-  { code: 'EUR', name: 'Euro', symbol: '€' },
-  { code: 'HTG', name: 'Gourde Haitiano', symbol: 'G' },
-  { code: 'CAD', name: 'Dólar Canadiense', symbol: 'CA$' },
-  { code: 'GBP', name: 'Libra Esterlina', symbol: '£' },
+  { code: 'DOP', name: 'Peso Dominicano',           symbol: 'RD$' },
+  { code: 'USD', name: 'Dólar Estadounidense',       symbol: '$'   },
+  { code: 'EUR', name: 'Euro',                       symbol: '€'   },
+  { code: 'HTG', name: 'Gourde Haitiano',            symbol: 'G'   },
+  { code: 'MXN', name: 'Peso Mexicano',              symbol: 'MX$' },
+  { code: 'COP', name: 'Peso Colombiano',            symbol: 'CO$' },
+  { code: 'PEN', name: 'Sol Peruano',                symbol: 'S/'  },
+  { code: 'CLP', name: 'Peso Chileno',               symbol: 'CL$' },
+  { code: 'BOB', name: 'Boliviano',                  symbol: 'Bs'  },
+  { code: 'UYU', name: 'Peso Uruguayo',              symbol: '$U'  },
+  { code: 'BRL', name: 'Real Brasileño',             symbol: 'R$'  },
+  { code: 'GTQ', name: 'Quetzal Guatemalteco',       symbol: 'Q'   },
 ]
 
 export function getCurrencySymbol(currency: string): string {

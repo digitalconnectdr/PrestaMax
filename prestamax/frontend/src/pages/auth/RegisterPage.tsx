@@ -7,6 +7,7 @@ import Input from '@/components/ui/Input'
 import { Building2, User, Mail, Phone, Lock, CheckCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
+import { SUPPORTED_CURRENCIES } from '@/lib/utils'
 
 interface Plan {
   id: string
@@ -226,13 +227,9 @@ const RegisterPage: React.FC = () => {
                     onChange={e => set('currency', e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
                   >
-                    <option value="DOP">DOP — Peso Dominicano</option>
-                    <option value="USD">USD — Dólar Americano</option>
-                    <option value="EUR">EUR — Euro</option>
-                    <option value="GTQ">GTQ — Quetzal</option>
-                    <option value="HNL">HNL — Lempira</option>
-                    <option value="MXN">MXN — Peso Mexicano</option>
-                    <option value="COP">COP — Peso Colombiano</option>
+                    {SUPPORTED_CURRENCIES.map(cur => (
+                      <option key={cur.code} value={cur.code}>{cur.code} — {cur.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>

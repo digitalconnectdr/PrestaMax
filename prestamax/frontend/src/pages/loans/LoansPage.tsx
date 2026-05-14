@@ -50,7 +50,7 @@ const CSV_FIELD_HELP = [
   { field: 'purpose',             req: false, desc: 'Propósito del préstamo (ej: Negocio propio)' },
   { field: 'notes',               req: false, desc: 'Notas adicionales internas' },
   { field: 'loan_number',         req: false, desc: 'Número original del préstamo (se genera automáticamente si se omite)' },
-  { field: 'currency',            req: false, desc: 'Moneda del préstamo: DOP | USD | EUR | HTG | CAD | GBP  (default: DOP)' },
+  { field: 'currency',            req: false, desc: 'Moneda del préstamo: DOP | USD | EUR | HTG | MXN | COP | PEN | CLP | BOB | UYU | BRL | GTQ  (default: DOP)' },
   { field: 'exchange_rate_to_dop',req: false, desc: 'Tasa de cambio respecto al peso dominicano en la fecha de desembolso (ej: 58.50). Solo requerido si currency ≠ DOP' },
 ]
 
