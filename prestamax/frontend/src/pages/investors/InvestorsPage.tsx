@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
-import { Users, Plus, X, Edit2, Trash2, FileText, DollarSign, Eye } from 'lucide-react'
+import { Users, Plus, X, Edit2, Trash2, Eye } from 'lucide-react'
 import api, { isAccessDenied } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { usePermission } from '@/hooks/usePermission'
@@ -52,12 +52,10 @@ const InvestorsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
 
+  const canView   = can('investors.view')
   const canCreate = can('investors.create')
   const canEdit   = can('investors.edit')
   const canDelete = can('investors.delete')
-
-  // Permission guard: redirige si el plan/usuario no tiene investors.view
-  if (!can('investors.view')) return <Navigate to="/dashboard" replace />
 
   const load = async () => {
     setIsLoading(true)
@@ -71,7 +69,14 @@ const InvestorsPage: React.FC = () => {
     }
   }
 
-  useEffect(() => { load() }, [])
+  // IMPORTANTE: los hooks deben declararse SIEMPRE antes de cualquier `return` condicional
+  useEffect(() => {
+    if (canView) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canView])
+
+  // Permission guard: redirige si el plan/usuario no tiene investors.view
+  if (!canView) return <Navigate to="/dashboard" replace />
 
   const openCreate = () => {
     setEditing(null)

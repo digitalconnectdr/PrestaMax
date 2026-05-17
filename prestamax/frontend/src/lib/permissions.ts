@@ -36,7 +36,7 @@ export type PermKey =
   | 'templates.view' | 'templates.create' | 'templates.edit' | 'templates.delete'
   // Calculator
   | 'calculator.use'
-  // Investors (Pro / Enterprise)
+  // Investors (Pro/Enterprise)
   | 'investors.view' | 'investors.create' | 'investors.edit' | 'investors.delete'
   | 'investors.assign' | 'investors.payouts' | 'investors.portal'
 
@@ -106,7 +106,14 @@ export const PERM_DEFS: PermDef[] = [
   { key:'templates.create', module:'templates',  moduleLabel:'Plantillas',     label:'Crear plantillas',     description:'Crear nuevas plantillas de contrato' },
   { key:'templates.edit',   module:'templates',  moduleLabel:'Plantillas',     label:'Editar plantillas',    description:'Modificar plantillas de contrato existentes' },
   { key:'templates.delete', module:'templates',  moduleLabel:'Plantillas',     label:'Eliminar plantillas',  description:'Eliminar plantillas de contrato' },
-  { key:'calculator.use', module:'calculator', moduleLabel:'Calculadora',     label:'Usar calculadora',      description:'Usar la calculadora de préstamos' },
+  { key:'calculator.use',   module:'calculator', moduleLabel:'Calculadora',    label:'Usar calculadora',      description:'Usar la calculadora de préstamos' },
+  { key:'investors.view',    module:'investors', moduleLabel:'Inversionistas', label:'Ver inversionistas',     description:'Acceder al listado y detalle de inversionistas' },
+  { key:'investors.create',  module:'investors', moduleLabel:'Inversionistas', label:'Crear inversionistas',   description:'Registrar nuevos inversionistas' },
+  { key:'investors.edit',    module:'investors', moduleLabel:'Inversionistas', label:'Editar inversionistas',  description:'Modificar datos de inversionistas' },
+  { key:'investors.delete',  module:'investors', moduleLabel:'Inversionistas', label:'Desactivar inversionistas', description:'Desactivar inversionistas existentes' },
+  { key:'investors.assign',  module:'investors', moduleLabel:'Inversionistas', label:'Asignar préstamos',      description:'Vincular/desvincular préstamos a un inversionista' },
+  { key:'investors.payouts', module:'investors', moduleLabel:'Inversionistas', label:'Ver/generar payouts',    description:'Generar y consultar reportes de liquidación a inversionistas' },
+  { key:'investors.portal',  module:'investors', moduleLabel:'Inversionistas', label:'Portal del inversionista', description:'Acceder al portal de solo-lectura del inversionista' },
 ]
 
 // Group definitions by module for UI rendering
@@ -160,6 +167,13 @@ export const PERM_REQUIRES_FEATURE: Partial<Record<PermKey, string[]>> = {
   'whatsapp.send': ['whatsapp'],
   'whatsapp.templates': ['whatsapp'],
   'settings.branches': ['branches'],
+  'investors.view':    ['investors'],
+  'investors.create':  ['investors'],
+  'investors.edit':    ['investors'],
+  'investors.delete':  ['investors'],
+  'investors.assign':  ['investors'],
+  'investors.payouts': ['investors'],
+  'investors.portal':  ['investors'],
 }
 
 export function planAllowsPermission(planFeatures: string[], permKey: PermKey): boolean {
@@ -167,9 +181,9 @@ export function planAllowsPermission(planFeatures: string[], permKey: PermKey): 
   // If plan has no restrictions (empty array), allow all. Otherwise check for exact PermKey match.
   // Legacy format detection: if features are old-style (no dots), allow all (backward compatibility)
   if (!planFeatures || planFeatures.length === 0) return true;
-  
+
   const isLegacyFormat = planFeatures.every(f => !f.includes('.'));
   if (isLegacyFormat) return true; // Old format: no restrictions
-  
+
   return planFeatures.includes(permKey);
 }

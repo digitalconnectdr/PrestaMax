@@ -3,16 +3,17 @@ import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { PageLoadingState } from '@/components/ui/Loading'
-import { ArrowLeft, Users, DollarSign, FileText, Link2, Calendar, TrendingUp, X } from 'lucide-react'
+import { ArrowLeft, Users, Link2, TrendingUp, X } from 'lucide-react'
 import api, { isAccessDenied } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { usePermission } from '@/hooks/usePermission'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
 
 const InvestorDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { can } = usePermission()
+
   const [investor, setInvestor] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showAssign, setShowAssign] = useState(false)
@@ -27,9 +28,8 @@ const InvestorDetailPage: React.FC = () => {
   const [report, setReport] = useState<any>(null)
   const [reportLoading, setReportLoading] = useState(false)
 
+  const canView = can('investors.view')
   const canAssign = can('investors.assign')
-
-  if (!can('investors.view')) return <Navigate to="/dashboard" replace />
 
   const load = async () => {
     setIsLoading(true)
@@ -56,8 +56,19 @@ const InvestorDetailPage: React.FC = () => {
     }
   }
 
-  useEffect(() => { load() }, [id])
-  useEffect(() => { if (investor) loadReport() }, [investor?.id])
+  // IMPORTANTE: los hooks deben declararse SIEMPRE en el mismo orden,
+  // por lo que el guard de permiso va DESPUÉS de todos los hooks.
+  useEffect(() => {
+    if (canView && id) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, canView])
+
+  useEffect(() => {
+    if (canView && investor) loadReport()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [investor?.id, canView])
+
+  if (!canView) return <Navigate to="/dashboard" replace />
 
   const openAssign = async () => {
     setShowAssign(true)
@@ -100,6 +111,16 @@ const InvestorDetailPage: React.FC = () => {
   if (isLoading) return <PageLoadingState />
   if (!investor) return null
 
+  // ===== Helpers para tolerar ambos formatos (camelCase del interceptor + snake_case directo) =====
+  const fullName        = investor.fullName        ?? investor.full_name ?? ''
+  const modelType       = investor.modelType       ?? investor.model_type
+  const fixedRate       = investor.fixedRateMonthly      ?? investor.fixed_rate_monthly ?? 0
+  const equityPct       = investor.equityPercentInterest ?? investor.equity_percent_interest ?? 0
+  const commissionPct   = investor.commissionPercent     ?? investor.commission_percent ?? 0
+  const idNumber        = investor.idNumber              ?? investor.id_number
+  const capitalContrib  = investor.capitalContributed    ?? investor.capital_contributed ?? 0
+  const loansList       = investor.loans || []
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -109,13 +130,13 @@ const InvestorDetailPage: React.FC = () => {
         </button>
         <div>
           <h1 className="page-title flex items-center gap-2">
-            <Users className="w-6 h-6" />{investor.full_name}
+            <Users className="w-6 h-6" />{fullName}
           </h1>
           <p className="text-slate-600 text-sm">
-            {investor.model_type === 'fixed_rate'
-              ? `Tasa Fija · ${investor.fixed_rate_monthly}% mensual`
-              : `Participación · ${investor.equity_percent_interest}% del interés`}
-            {' · '}Comisión: {investor.commission_percent}%
+            {modelType === 'fixed_rate'
+              ? `Tasa Fija · ${fixedRate}% mensual`
+              : `Participación · ${equityPct}% del interés`}
+            {' · '}Comisión: {commissionPct}%
           </p>
         </div>
       </div>
@@ -126,8 +147,8 @@ const InvestorDetailPage: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div><span className="text-slate-500">Email:</span> <strong>{investor.email || '—'}</strong></div>
           <div><span className="text-slate-500">Teléfono:</span> <strong>{investor.phone || '—'}</strong></div>
-          <div><span className="text-slate-500">Cédula:</span> <strong>{investor.id_number || '—'}</strong></div>
-          <div><span className="text-slate-500">Capital aportado:</span> <strong>{formatCurrency(investor.capital_contributed || 0)}</strong></div>
+          <div><span className="text-slate-500">Cédula:</span> <strong>{idNumber || '—'}</strong></div>
+          <div><span className="text-slate-500">Capital aportado:</span> <strong>{formatCurrency(Number(capitalContrib) || 0)}</strong></div>
         </div>
         {investor.notes && (
           <div className="mt-3 p-3 bg-slate-50 rounded-lg text-sm text-slate-700">
@@ -139,14 +160,14 @@ const InvestorDetailPage: React.FC = () => {
       {/* Préstamos asignados */}
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="section-title">Préstamos Asignados ({investor.loans?.length || 0})</h3>
+          <h3 className="section-title">Préstamos Asignados ({loansList.length})</h3>
           {canAssign && (
             <Button size="sm" onClick={openAssign} className="flex items-center gap-1">
               <Link2 className="w-4 h-4" />Asignar préstamo
             </Button>
           )}
         </div>
-        {investor.loans && investor.loans.length > 0 ? (
+        {loansList.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -160,31 +181,37 @@ const InvestorDetailPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {investor.loans.map((l: any) => (
-                  <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-2 px-3 font-mono text-xs text-blue-700">{l.loan_number}</td>
-                    <td className="py-2 px-3 text-slate-700">{l.client_name}</td>
-                    <td className="py-2 px-3 text-right text-slate-700">
-                      {formatCurrency(l.disbursed_amount || 0, l.currency || 'DOP')}
-                    </td>
-                    <td className="py-2 px-3 text-right font-semibold text-slate-900">
-                      {formatCurrency(l.total_balance || 0, l.currency || 'DOP')}
-                    </td>
-                    <td className="py-2 px-3">
-                      <span className="text-xs text-slate-600">{l.status}</span>
-                    </td>
-                    {canAssign && (
-                      <td className="py-2 px-3 text-right">
-                        <button
-                          onClick={() => handleUnassign(l.id)}
-                          className="text-xs text-red-600 hover:underline"
-                        >
-                          Desvincular
-                        </button>
+                {loansList.map((l: any) => {
+                  const loanNumber = l.loanNumber ?? l.loan_number ?? ''
+                  const clientName = l.clientName ?? l.client_name ?? ''
+                  const disbursed  = l.disbursedAmount ?? l.disbursed_amount ?? 0
+                  const balance    = l.totalBalance ?? l.total_balance ?? 0
+                  return (
+                    <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="py-2 px-3 font-mono text-xs text-blue-700">{loanNumber}</td>
+                      <td className="py-2 px-3 text-slate-700">{clientName}</td>
+                      <td className="py-2 px-3 text-right text-slate-700">
+                        {formatCurrency(Number(disbursed) || 0, l.currency || 'DOP')}
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="py-2 px-3 text-right font-semibold text-slate-900">
+                        {formatCurrency(Number(balance) || 0, l.currency || 'DOP')}
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className="text-xs text-slate-600">{l.status}</span>
+                      </td>
+                      {canAssign && (
+                        <td className="py-2 px-3 text-right">
+                          <button
+                            onClick={() => handleUnassign(l.id)}
+                            className="text-xs text-red-600 hover:underline"
+                          >
+                            Desvincular
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -217,47 +244,60 @@ const InvestorDetailPage: React.FC = () => {
           </div>
         </div>
 
-        {report && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-blue-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-500 uppercase">Pagos en periodo</p>
-                <p className="text-xl font-bold text-blue-700">{report.payments_count}</p>
+        {report && (() => {
+          const paymentsCount = report.paymentsCount ?? report.payments_count ?? 0
+          const totals        = report.totals || {}
+          const grossInterest = totals.grossInterest    ?? totals.gross_interest    ?? 0
+          const grossMora     = totals.grossMora        ?? totals.gross_mora        ?? 0
+          const grossTotal    = totals.grossTotal       ?? totals.gross_total       ?? 0
+          const commPercent   = totals.commissionPercent ?? totals.commission_percent ?? 0
+          const commAmount    = totals.commissionAmount ?? totals.commission_amount ?? 0
+          const netToInvestor = totals.netToInvestor    ?? totals.net_to_investor    ?? 0
+          const activeLoans   = report.activeLoans || report.active_loans || { count: 0, outstandingPrincipal: 0, outstanding_principal: 0 }
+          const activeCount   = activeLoans.count ?? 0
+          const outstanding   = activeLoans.outstandingPrincipal ?? activeLoans.outstanding_principal ?? 0
+          return (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-500 uppercase">Pagos en periodo</p>
+                  <p className="text-xl font-bold text-blue-700">{paymentsCount}</p>
+                </div>
+                <div className="bg-amber-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-500 uppercase">Interés cobrado</p>
+                  <p className="text-xl font-bold text-amber-700">{formatCurrency(Number(grossInterest) || 0)}</p>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-500 uppercase">Mora cobrada</p>
+                  <p className="text-xl font-bold text-red-700">{formatCurrency(Number(grossMora) || 0)}</p>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-500 uppercase">A entregar</p>
+                  <p className="text-xl font-bold text-emerald-700">{formatCurrency(Number(netToInvestor) || 0)}</p>
+                </div>
               </div>
-              <div className="bg-amber-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-500 uppercase">Interés cobrado</p>
-                <p className="text-xl font-bold text-amber-700">{formatCurrency(report.totals.gross_interest)}</p>
-              </div>
-              <div className="bg-red-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-500 uppercase">Mora cobrada</p>
-                <p className="text-xl font-bold text-red-700">{formatCurrency(report.totals.gross_mora)}</p>
-              </div>
-              <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-500 uppercase">A entregar</p>
-                <p className="text-xl font-bold text-emerald-700">{formatCurrency(report.totals.net_to_investor)}</p>
-              </div>
-            </div>
 
-            <div className="bg-slate-50 rounded-lg p-4 text-sm space-y-1">
-              <div className="flex justify-between">
-                <span>Total bruto (interés + mora)</span>
-                <strong>{formatCurrency(report.totals.gross_total)}</strong>
+              <div className="bg-slate-50 rounded-lg p-4 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span>Total bruto (interés + mora)</span>
+                  <strong>{formatCurrency(Number(grossTotal) || 0)}</strong>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Comisión por administración ({commPercent}%)</span>
+                  <span>−{formatCurrency(Number(commAmount) || 0)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-emerald-700 pt-2 border-t border-slate-200">
+                  <span>Monto a entregar al inversionista</span>
+                  <span>{formatCurrency(Number(netToInvestor) || 0)}</span>
+                </div>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Comisión por administración ({report.totals.commission_percent}%)</span>
-                <span>−{formatCurrency(report.totals.commission_amount)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-emerald-700 pt-2 border-t border-slate-200">
-                <span>Monto a entregar al inversionista</span>
-                <span>{formatCurrency(report.totals.net_to_investor)}</span>
-              </div>
-            </div>
 
-            <p className="text-xs text-slate-500">
-              {report.active_loans.count} préstamo(s) activo(s) · Capital pendiente: {formatCurrency(report.active_loans.outstanding_principal)}
-            </p>
-          </div>
-        )}
+              <p className="text-xs text-slate-500">
+                {activeCount} préstamo(s) activo(s) · Capital pendiente: {formatCurrency(Number(outstanding) || 0)}
+              </p>
+            </div>
+          )
+        })()}
       </Card>
 
       {/* Modal de asignar préstamo */}
@@ -285,11 +325,16 @@ const InvestorDetailPage: React.FC = () => {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 >
                   <option value="">— Seleccionar —</option>
-                  {availableLoans.map((l: any) => (
-                    <option key={l.id} value={l.id}>
-                      {l.loanNumber} · {l.clientName} · {formatCurrency(l.disbursedAmount || 0, l.currency || 'DOP')}
-                    </option>
-                  ))}
+                  {availableLoans.map((l: any) => {
+                    const ln = l.loanNumber ?? l.loan_number ?? ''
+                    const cn = l.clientName ?? l.client_name ?? ''
+                    const da = l.disbursedAmount ?? l.disbursed_amount ?? 0
+                    return (
+                      <option key={l.id} value={l.id}>
+                        {ln} · {cn} · {formatCurrency(Number(da) || 0, l.currency || 'DOP')}
+                      </option>
+                    )
+                  })}
                 </select>
                 <p className="text-xs text-slate-500 mt-2">
                   Solo se muestran préstamos activos sin inversionista actualmente asignado.

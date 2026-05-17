@@ -16,6 +16,7 @@ export function formatCurrency(amount: number, currency = 'DOP'): string {
   }).format(amount || 0)}`
 }
 
+// Supported currencies catalog — monedas oficiales del sistema
 export const SUPPORTED_CURRENCIES: { code: string; name: string; symbol: string }[] = [
   { code: 'DOP', name: 'Peso Dominicano',           symbol: 'RD$' },
   { code: 'USD', name: 'Dólar Estadounidense',       symbol: '$'   },
@@ -106,31 +107,40 @@ export function getScoreBarColor(score: number): string {
   return 'bg-red-500'
 }
 
-// ── Loan Status Config (icon + color label) ─────────────────────────────────
-export function getLoanStatusConfig(status: LoanStatus | string) {
-  const map: Record<string, { label: string; color: string; bg: string }> = {
-    draft:        { label: 'Borrador',      color: 'text-slate-700',   bg: 'bg-slate-100' },
-    under_review: { label: 'En Revisión',   color: 'text-amber-700',   bg: 'bg-amber-100' },
-    approved:     { label: 'Aprobado',      color: 'text-blue-700',    bg: 'bg-blue-100' },
-    rejected:     { label: 'Rechazado',     color: 'text-red-700',     bg: 'bg-red-100' },
-    active:       { label: 'Activo',        color: 'text-emerald-700', bg: 'bg-emerald-100' },
-    disbursed:    { label: 'Desembolsado',  color: 'text-emerald-700', bg: 'bg-emerald-100' },
-    in_mora:      { label: 'En Mora',       color: 'text-red-700',     bg: 'bg-red-100' },
-    liquidated:   { label: 'Liquidado',     color: 'text-slate-700',   bg: 'bg-slate-200' },
-    paid:         { label: 'Pagado',        color: 'text-slate-700',   bg: 'bg-slate-200' },
-    cancelled:    { label: 'Cancelado',     color: 'text-slate-500',   bg: 'bg-slate-100' },
-    voided:       { label: 'Anulado',       color: 'text-slate-500',   bg: 'bg-slate-100' },
-    written_off:  { label: 'Incobrable',    color: 'text-red-700',     bg: 'bg-red-100' },
-    restructured: { label: 'Reestructurado', color: 'text-purple-700', bg: 'bg-purple-100' },
-  }
-  return map[status as string] || { label: status as string, color: 'text-slate-700', bg: 'bg-slate-100' }
+export interface LoanStatusConfig {
+  label: string
+  color: string
+  bg: string
 }
 
-// ── Mora Category (severity bands) ──────────────────────────────────────────
-export function getMoraCategory(daysOverdue: number): { label: string; color: string; bg: string } {
-  if (daysOverdue <= 0)  return { label: 'Al día',    color: 'text-emerald-700', bg: 'bg-emerald-100' }
-  if (daysOverdue <= 7)  return { label: '1-7 días',  color: 'text-amber-700',   bg: 'bg-amber-100' }
-  if (daysOverdue <= 30) return { label: '8-30 días', color: 'text-orange-700',  bg: 'bg-orange-100' }
-  if (daysOverdue <= 60) return { label: '31-60 días',color: 'text-red-700',     bg: 'bg-red-100' }
-  return { label: '60+ días', color: 'text-red-900', bg: 'bg-red-200' }
+export function getLoanStatusConfig(status: LoanStatus | string): LoanStatusConfig {
+  const map: Record<string, LoanStatusConfig> = {
+    draft:        { label: 'Borrador',       color: 'text-slate-600',   bg: 'bg-slate-100'   },
+    under_review: { label: 'En Revisión',    color: 'text-blue-600',    bg: 'bg-blue-100'    },
+    approved:     { label: 'Aprobado',       color: 'text-green-600',   bg: 'bg-green-100'   },
+    rejected:     { label: 'Rechazado',      color: 'text-red-600',     bg: 'bg-red-100'     },
+    active:       { label: 'Activo',         color: 'text-emerald-600', bg: 'bg-emerald-100' },
+    disbursed:    { label: 'Desembolsado',   color: 'text-emerald-600', bg: 'bg-emerald-100' },
+    in_mora:      { label: 'En Mora',        color: 'text-orange-600',  bg: 'bg-orange-100'  },
+    liquidated:   { label: 'Liquidado',      color: 'text-slate-600',   bg: 'bg-slate-100'   },
+    paid:         { label: 'Pagado',         color: 'text-green-600',   bg: 'bg-green-100'   },
+    cancelled:    { label: 'Cancelado',      color: 'text-slate-600',   bg: 'bg-slate-100'   },
+    voided:       { label: 'Anulado',        color: 'text-red-700',     bg: 'bg-red-100'     },
+    written_off:  { label: 'Incobrable',     color: 'text-red-700',     bg: 'bg-red-100'     },
+    restructured: { label: 'Reestructurado', color: 'text-purple-600',  bg: 'bg-purple-100'  },
+  }
+  return map[status as string] || { label: String(status), color: 'text-slate-600', bg: 'bg-slate-100' }
+}
+
+export interface MoraCategory {
+  label: string
+  color: string
+}
+
+export function getMoraCategory(days: number): MoraCategory {
+  if (days <= 0)  return { label: 'Al día',    color: 'text-emerald-600' }
+  if (days <= 7)  return { label: 'Leve',      color: 'text-yellow-600'  }
+  if (days <= 30) return { label: 'Moderada',  color: 'text-orange-600'  }
+  if (days <= 90) return { label: 'Grave',     color: 'text-red-600'     }
+  return             { label: 'Muy Grave', color: 'text-red-700'     }
 }
