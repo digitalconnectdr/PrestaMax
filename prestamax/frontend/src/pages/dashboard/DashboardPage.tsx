@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DollarSign, TrendingUp, AlertCircle, Calendar, Users, FileText } from 'lucide-react'
+import { DollarSign, TrendingUp, AlertCircle, Calendar, Users, FileText, Briefcase, Wallet, ArrowDownCircle } from 'lucide-react'
 import Stat from '@/components/ui/Stat'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -34,6 +34,9 @@ interface DashboardData {
     todayCount: number
     totalClients: number
     liquidated: number
+    carteraPropia?: number
+    carteraTerceros?: number
+    pasivoInversionistas?: number
   }
   statusDistribution: { status: string; count: number }[]
   recentPayments: {
@@ -193,6 +196,39 @@ const DashboardPage: React.FC = () => {
           footer="Préstamos completados"
         />
       </div>
+
+      {/* Inversionistas: solo se muestra si hay cartera de terceros o pasivo */}
+      {((kpis.carteraTerceros ?? 0) > 0 || (kpis.pasivoInversionistas ?? 0) > 0) && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Briefcase className="w-5 h-5 text-slate-600" />
+            <h2 className="text-lg font-semibold text-slate-700">Inversionistas</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Stat
+              icon={Wallet}
+              title="Cartera Propia"
+              value={formatCurrency(kpis.carteraPropia ?? 0)}
+              color="blue"
+              footer="Financiada con capital propio"
+            />
+            <Stat
+              icon={Briefcase}
+              title="Cartera de Terceros"
+              value={formatCurrency(kpis.carteraTerceros ?? 0)}
+              color="purple"
+              footer="Financiada por inversionistas"
+            />
+            <Stat
+              icon={ArrowDownCircle}
+              title="Pasivo a Inversionistas"
+              value={formatCurrency(kpis.pasivoInversionistas ?? 0)}
+              color="red"
+              footer="Neto pendiente de liquidar"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

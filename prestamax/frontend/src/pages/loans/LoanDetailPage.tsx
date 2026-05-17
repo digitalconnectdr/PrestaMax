@@ -526,6 +526,18 @@ const LoanDetailPage: React.FC = () => {
                 )}
               </span>
             )}
+            {((loan as any).investorId || (loan as any).investor_id) && ((loan as any).investorName || (loan as any).investor_name) && (
+              <button
+                onClick={() => navigate(`/investors/${(loan as any).investorId ?? (loan as any).investor_id}`)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-200 rounded-full px-2.5 py-1 hover:bg-purple-200 transition-colors"
+                title="Prestamo financiado por inversionista"
+              >
+                Inversionista: {(loan as any).investorName ?? (loan as any).investor_name}
+                {((loan as any).investorCommissionPercent ?? (loan as any).investor_commission_percent) != null && (
+                  <span className="text-purple-500 font-normal"> · {(loan as any).investorCommissionPercent ?? (loan as any).investor_commission_percent}% comision</span>
+                )}
+              </button>
+            )}
           </div>
           <p className="text-slate-600 text-sm mt-1">
             <button

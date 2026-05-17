@@ -172,11 +172,13 @@ router.get('/:id', authenticate, requireTenant, requirePermission('loans.view'),
     const loan = db.prepare(`SELECT l.*,c.full_name as client_name,c.id_number as client_id_number,
       c.phone_personal as client_phone,c.whatsapp as client_whatsapp,c.score as client_score,
       p.name as product_name,p.type as product_type,
-      u.full_name as collector_name
+      u.full_name as collector_name,
+      inv.full_name as investor_name, inv.commission_percent as investor_commission_percent
       FROM loans l
       JOIN clients c ON c.id=l.client_id
       JOIN loan_products p ON p.id=l.product_id
       LEFT JOIN users u ON u.id=l.collector_id
+      LEFT JOIN investors inv ON inv.id=l.investor_id
       WHERE l.id=? AND l.tenant_id=?`).get(req.params.id, req.tenant.id) as any;
     if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
     loan.installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY installment_number').all(loan.id);
