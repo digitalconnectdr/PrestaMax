@@ -693,6 +693,46 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE loans ADD COLUMN investor_id TEXT`); } catch(_) {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_loans_investor ON loans(investor_id)`); } catch(_) {}
 
+  // ── investor_payouts: liquidaciones registradas a inversionistas (Fase 1.5) ──
+  // Cada vez que el prestamista le paga a un inversionista, se registra aqui.
+  // Los pagos involucrados quedan marcados via payments.liquidated_in_payout_id
+  // para que el siguiente reporte de liquidacion los excluya y no haya doble pago.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS investor_payouts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      investor_id TEXT NOT NULL,
+      period_from TEXT NOT NULL,
+      period_to TEXT NOT NULL,
+      payments_count INTEGER NOT NULL DEFAULT 0,
+      gross_interest REAL NOT NULL DEFAULT 0,
+      gross_mora REAL NOT NULL DEFAULT 0,
+      gross_capital REAL NOT NULL DEFAULT 0,
+      gross_total REAL NOT NULL DEFAULT 0,
+      commission_percent REAL NOT NULL DEFAULT 0,
+      commission_amount REAL NOT NULL DEFAULT 0,
+      net_amount REAL NOT NULL DEFAULT 0,
+      paid_at TEXT,
+      paid_by TEXT,
+      payment_method TEXT,
+      bank_account_id TEXT,
+      reference TEXT,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'paid',
+      income_expense_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+      FOREIGN KEY (investor_id) REFERENCES investors(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investor_payouts_tenant   ON investor_payouts(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_investor_payouts_investor ON investor_payouts(investor_id);
+    CREATE INDEX IF NOT EXISTS idx_investor_payouts_status   ON investor_payouts(status);
+  `);
+  try { db.exec(`ALTER TABLE payments ADD COLUMN liquidated_in_payout_id TEXT`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_payments_payout ON payments(liquidated_in_payout_id)`); } catch(_) {}
+
+
   // Loan requests table (submitted by clients via public portal)
   db.exec(`CREATE TABLE IF NOT EXISTS loan_requests (
     id TEXT PRIMARY KEY,

@@ -33,7 +33,37 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
       FROM loans WHERE tenant_id=? GROUP BY COALESCE(currency,'DOP')
     `).all(tid);
 
-    res.json({ kpis: { total_portfolio:totalPortfolio, total_loans:totalLoans, active_portfolio:activeBalance, active_loans:activeLoans, overdue_loans:overdueCount, mora_balance:moraBalance, today_payments:todayPayments.v, today_count:todayPayments.c, total_clients:totalClients, liquidated }, status_distribution:statusDist, recent_payments:recentPayments, top_overdue:topOverdue, daily_collections:dailyColl, portfolio_by_currency:portfolioByCurrency });
+    // ── Investors split (Fase 1.5): cartera propia vs de terceros + pasivo pendiente ──
+    const carteraPropia = (db.prepare(`
+      SELECT COALESCE(SUM(total_balance),0) as v
+      FROM loans WHERE tenant_id=? AND investor_id IS NULL
+        AND status IN ('active','current','overdue','in_mora')
+    `).get(tid) as any).v;
+    const carteraTerceros = (db.prepare(`
+      SELECT COALESCE(SUM(total_balance),0) as v
+      FROM loans WHERE tenant_id=? AND investor_id IS NOT NULL
+        AND status IN ('active','current','overdue','in_mora')
+    `).get(tid) as any).v;
+    // Pasivo: agrupa pagos pendientes por inversionista, aplica su comision, suma neto
+    const pasivoRows = db.prepare(`
+      SELECT i.id as investor_id, i.commission_percent,
+             COALESCE(SUM(p.applied_interest), 0) as gross_interest,
+             COALESCE(SUM(p.applied_mora), 0) as gross_mora
+      FROM investors i
+      LEFT JOIN loans l ON l.investor_id=i.id AND l.tenant_id=?
+      LEFT JOIN payments p ON p.loan_id=l.id AND p.is_voided=0 AND p.liquidated_in_payout_id IS NULL
+      WHERE i.tenant_id=? AND i.is_active=1
+      GROUP BY i.id
+    `).all(tid, tid) as any[];
+    let pasivoInversionistas = 0;
+    for (const r of pasivoRows) {
+      const gross = (r.gross_interest || 0) + (r.gross_mora || 0);
+      const commission = gross * ((r.commission_percent || 0) / 100);
+      pasivoInversionistas += (gross - commission);
+    }
+    pasivoInversionistas = Math.round(pasivoInversionistas * 100) / 100;
+
+    res.json({ kpis: { total_portfolio:totalPortfolio, total_loans:totalLoans, active_portfolio:activeBalance, active_loans:activeLoans, overdue_loans:overdueCount, mora_balance:moraBalance, today_payments:todayPayments.v, today_count:todayPayments.c, total_clients:totalClients, liquidated, cartera_propia:carteraPropia, cartera_terceros:carteraTerceros, pasivo_inversionistas:pasivoInversionistas }, status_distribution:statusDist, recent_payments:recentPayments, top_overdue:topOverdue, daily_collections:dailyColl, portfolio_by_currency:portfolioByCurrency });
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
 });
 
