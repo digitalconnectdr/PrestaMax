@@ -145,7 +145,8 @@ router.get('/:id', authenticate, requireTenant, requirePermission('investors.vie
 router.post('/:id/assign-loan', authenticate, requireTenant, requirePermission('investors.assign'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    const { loanId } = req.body;
+    // El interceptor del frontend convierte camelCase a snake_case en el body, asi que aceptamos ambos
+    const loanId = req.body.loanId ?? req.body.loan_id;
     if (!loanId) return res.status(400).json({ error: 'loanId requerido' });
 
     // Validar que el inversionista y el prestamo pertenezcan al tenant
@@ -166,7 +167,8 @@ router.post('/:id/assign-loan', authenticate, requireTenant, requirePermission('
 router.post('/:id/unassign-loan', authenticate, requireTenant, requirePermission('investors.assign'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    const { loanId } = req.body;
+    // El interceptor del frontend convierte camelCase a snake_case en el body, asi que aceptamos ambos
+    const loanId = req.body.loanId ?? req.body.loan_id;
     if (!loanId) return res.status(400).json({ error: 'loanId requerido' });
     db.prepare('UPDATE loans SET investor_id=NULL WHERE id=? AND tenant_id=? AND investor_id=?')
       .run(loanId, req.tenant.id, req.params.id);
