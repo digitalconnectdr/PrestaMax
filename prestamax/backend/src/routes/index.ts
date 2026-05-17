@@ -18,6 +18,7 @@ import publicRoutes from './public';
 import collectionTaskRoutes from './collection_tasks';
 import notificationRoutes from './notifications';
 import billingRoutes from './billing';
+import investorsRoutes from './investors';
 
 export const router = Router();
 
@@ -42,3 +43,4 @@ router.use('/public', publicRoutes);
 router.use('/collection-tasks', collectionTaskRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/billing', billingRoutes);
+router.use('/investors', investorsRoutes);

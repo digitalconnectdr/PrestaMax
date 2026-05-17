@@ -37,6 +37,9 @@ export type PermKey =
   | 'templates.view' | 'templates.create' | 'templates.edit' | 'templates.delete'
   // Calculator
   | 'calculator.use'
+  // Investors (Fase 1 MVP) — disponible solo en planes Pro y Enterprise
+  | 'investors.view' | 'investors.create' | 'investors.edit' | 'investors.delete'
+  | 'investors.assign' | 'investors.payouts' | 'investors.portal'
 
 export interface PermDef {
   key: PermKey
@@ -118,6 +121,14 @@ export const PERM_DEFS: PermDef[] = [
   { key:'templates.delete', module:'templates',  moduleLabel:'Plantillas',     label:'Eliminar plantillas',  description:'Eliminar plantillas de contrato' },
   // ── Calculadora ───────────────────────────────────────────────────
   { key:'calculator.use', module:'calculator', moduleLabel:'Calculadora',     label:'Usar calculadora',      description:'Usar la calculadora de préstamos' },
+  // ── Inversionistas (Pro / Enterprise) ─────────────────────────────
+  { key:'investors.view',    module:'investors', moduleLabel:'Inversionistas', label:'Ver inversionistas',     description:'Ver lista y datos de inversionistas del tenant' },
+  { key:'investors.create',  module:'investors', moduleLabel:'Inversionistas', label:'Crear inversionistas',   description:'Registrar nuevos inversionistas' },
+  { key:'investors.edit',    module:'investors', moduleLabel:'Inversionistas', label:'Editar inversionistas',  description:'Modificar datos del inversionista (tasa, comision, etc.)' },
+  { key:'investors.delete',  module:'investors', moduleLabel:'Inversionistas', label:'Desactivar inversionistas', description:'Desactivar/archivar inversionistas' },
+  { key:'investors.assign',  module:'investors', moduleLabel:'Inversionistas', label:'Asignar prestamos',      description:'Vincular o desvincular prestamos a inversionistas' },
+  { key:'investors.payouts', module:'investors', moduleLabel:'Inversionistas', label:'Registrar pagos',        description:'Registrar liquidaciones/pagos hechos al inversionista' },
+  { key:'investors.portal',  module:'investors', moduleLabel:'Inversionistas', label:'Acceso al portal',       description:'Permite al usuario "investor" entrar al portal de transparencia (solo lectura, con Muralla China)' },
 ]
 
 // ─── Default permissions per role ────────────────────────────────────────────
@@ -171,8 +182,17 @@ const COBRADOR_DEFAULTS: PermKey[] = [
   'calculator.use',
 ]
 
+// Rol especial: el inversionista solo entra a su portal (Muralla China).
+// NO se le otorga ningun permiso de operacion del sistema.
+const INVESTOR_DEFAULTS: PermKey[] = [
+  'investors.portal',
+]
+
+// El prestamista/oficial NO recibe investors.* por default. Si el admin
+// quiere darle visibilidad, lo activa manualmente en explicit permissions.
+
 export const ROLE_DEFAULTS: Record<string, PermKey[]> = {
-  tenant_owner: ALL_KEYS as PermKey[], // all
+  tenant_owner: ALL_KEYS as PermKey[], // all (incluye investors.*)
   admin: ADMIN_DEFAULTS,
   prestamista: OFICIAL_DEFAULTS,
   oficial: OFICIAL_DEFAULTS,
@@ -180,6 +200,7 @@ export const ROLE_DEFAULTS: Record<string, PermKey[]> = {
   cashier: CASHIER_DEFAULTS,
   cobrador: COBRADOR_DEFAULTS,
   collector: COBRADOR_DEFAULTS,
+  investor: INVESTOR_DEFAULTS,
 }
 
 // ─── Compute effective permissions ───────────────────────────────────────────

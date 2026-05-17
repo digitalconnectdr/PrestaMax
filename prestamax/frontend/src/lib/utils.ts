@@ -9,15 +9,13 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currency = 'DOP'): string {
-  return new Intl.NumberFormat('es-DO', {
-    style: 'currency',
-    currency,
+  const symbol = getCurrencySymbol(currency)
+  return `${symbol}${new Intl.NumberFormat('es-DO', {
     minimumFractionDigits: 2,
-  }).format(amount)
+    maximumFractionDigits: 2,
+  }).format(amount || 0)}`
 }
 
-// Supported currencies catalog — monedas oficiales del sistema
-// (alineadas en LoginPage, RegisterPage y Configuracion > Monedas Habilitadas)
 export const SUPPORTED_CURRENCIES: { code: string; name: string; symbol: string }[] = [
   { code: 'DOP', name: 'Peso Dominicano',           symbol: 'RD$' },
   { code: 'USD', name: 'Dólar Estadounidense',       symbol: '$'   },
@@ -41,12 +39,9 @@ export function getCurrencyName(currency: string): string {
   return SUPPORTED_CURRENCIES.find(c => c.code === currency)?.name ?? currency
 }
 
-// Safely parse any date string — handles SQLite "YYYY-MM-DD HH:MM:SS" (space separator)
-// and ISO 8601 "YYYY-MM-DDTHH:MM:SSZ" as well as date-only "YYYY-MM-DD".
 function parseDate(date: string | Date | null | undefined): Date | null {
   if (!date) return null
   if (date instanceof Date) return isNaN(date.getTime()) ? null : date
-  // Normalize SQLite format: "2026-04-23 18:30:00" → "2026-04-23T18:30:00"
   const normalized = (date as string).replace(' ', 'T')
   const d = new Date(normalized)
   return isNaN(d.getTime()) ? null : d
@@ -59,42 +54,24 @@ export function formatDate(date: string | Date | null | undefined, fmt = 'dd/MM/
 }
 
 export function formatDateTime(date: string | Date | null | undefined): string {
+  return formatDate(date, "dd/MM/yyyy HH:mm")
+}
+
+export function daysSince(date: string | Date | null | undefined): number {
   const d = parseDate(date)
-  if (!d) return '—'
-  try { return format(d, 'dd/MM/yyyy HH:mm', { locale: es }) } catch { return '—' }
+  if (!d) return 0
+  return differenceInDays(new Date(), d)
 }
 
-export function getDaysOverdue(dueDate: string): number {
-  const days = differenceInDays(new Date(), new Date(dueDate))
-  return Math.max(0, days)
-}
-
-export function getMoraCategory(days: number): { label: string; color: string; bgColor: string } {
-  if (days === 0) return { label: 'Al día', color: 'text-emerald-600', bgColor: 'bg-emerald-100' }
-  if (days <= 7) return { label: '1-7 días', color: 'text-yellow-600', bgColor: 'bg-yellow-100' }
-  if (days <= 15) return { label: '8-15 días', color: 'text-orange-600', bgColor: 'bg-orange-100' }
-  if (days <= 30) return { label: '16-30 días', color: 'text-red-600', bgColor: 'bg-red-100' }
-  return { label: '+30 días', color: 'text-red-700', bgColor: 'bg-red-200' }
-}
-
-export function getLoanStatusConfig(status: LoanStatus) {
-  const configs: Record<LoanStatus, { label: string; color: string; bg: string }> = {
-    draft: { label: 'Borrador', color: 'text-slate-600', bg: 'bg-slate-100' },
-    under_review: { label: 'En revisión', color: 'text-blue-600', bg: 'bg-blue-100' },
-    pending_docs: { label: 'Pend. Docs', color: 'text-amber-600', bg: 'bg-amber-100' },
-    approved: { label: 'Aprobado', color: 'text-green-600', bg: 'bg-green-100' },
-    rejected: { label: 'Rechazado', color: 'text-red-600', bg: 'bg-red-100' },
-    disbursed: { label: 'Desembolsado', color: 'text-teal-600', bg: 'bg-teal-100' },
-    active: { label: 'Activo', color: 'text-green-600', bg: 'bg-green-100' },
-    current: { label: 'Al día', color: 'text-emerald-600', bg: 'bg-emerald-100' },
-    overdue: { label: 'Vencido', color: 'text-orange-600', bg: 'bg-orange-100' },
-    in_mora: { label: 'En mora', color: 'text-red-600', bg: 'bg-red-100' },
-    restructured: { label: 'Reestructurado', color: 'text-purple-600', bg: 'bg-purple-100' },
-    liquidated: { label: 'Liquidado', color: 'text-slate-600', bg: 'bg-slate-100' },
-    written_off: { label: 'Castigado', color: 'text-gray-600', bg: 'bg-gray-200' },
-    cancelled: { label: 'Anulado', color: 'text-red-500', bg: 'bg-red-50' },
+export function getLoanStatusLabel(status: LoanStatus | string): string {
+  const map: Record<string, string> = {
+    draft: 'Borrador', under_review: 'En Revisión', approved: 'Aprobado',
+    rejected: 'Rechazado', active: 'Activo', disbursed: 'Desembolsado',
+    in_mora: 'En Mora', liquidated: 'Liquidado', paid: 'Pagado',
+    cancelled: 'Cancelado', voided: 'Anulado', written_off: 'Incobrable',
+    restructured: 'Reestructurado',
   }
-  return configs[status] || { label: status, color: 'text-slate-600', bg: 'bg-slate-100' }
+  return map[status] || status
 }
 
 export function getScoreColor(score: number): string {
@@ -127,4 +104,33 @@ export function getScoreBarColor(score: number): string {
   if (score >= 50) return 'bg-yellow-500'
   if (score >= 30) return 'bg-orange-500'
   return 'bg-red-500'
+}
+
+// ── Loan Status Config (icon + color label) ─────────────────────────────────
+export function getLoanStatusConfig(status: LoanStatus | string) {
+  const map: Record<string, { label: string; color: string; bg: string }> = {
+    draft:        { label: 'Borrador',      color: 'text-slate-700',   bg: 'bg-slate-100' },
+    under_review: { label: 'En Revisión',   color: 'text-amber-700',   bg: 'bg-amber-100' },
+    approved:     { label: 'Aprobado',      color: 'text-blue-700',    bg: 'bg-blue-100' },
+    rejected:     { label: 'Rechazado',     color: 'text-red-700',     bg: 'bg-red-100' },
+    active:       { label: 'Activo',        color: 'text-emerald-700', bg: 'bg-emerald-100' },
+    disbursed:    { label: 'Desembolsado',  color: 'text-emerald-700', bg: 'bg-emerald-100' },
+    in_mora:      { label: 'En Mora',       color: 'text-red-700',     bg: 'bg-red-100' },
+    liquidated:   { label: 'Liquidado',     color: 'text-slate-700',   bg: 'bg-slate-200' },
+    paid:         { label: 'Pagado',        color: 'text-slate-700',   bg: 'bg-slate-200' },
+    cancelled:    { label: 'Cancelado',     color: 'text-slate-500',   bg: 'bg-slate-100' },
+    voided:       { label: 'Anulado',       color: 'text-slate-500',   bg: 'bg-slate-100' },
+    written_off:  { label: 'Incobrable',    color: 'text-red-700',     bg: 'bg-red-100' },
+    restructured: { label: 'Reestructurado', color: 'text-purple-700', bg: 'bg-purple-100' },
+  }
+  return map[status as string] || { label: status as string, color: 'text-slate-700', bg: 'bg-slate-100' }
+}
+
+// ── Mora Category (severity bands) ──────────────────────────────────────────
+export function getMoraCategory(daysOverdue: number): { label: string; color: string; bg: string } {
+  if (daysOverdue <= 0)  return { label: 'Al día',    color: 'text-emerald-700', bg: 'bg-emerald-100' }
+  if (daysOverdue <= 7)  return { label: '1-7 días',  color: 'text-amber-700',   bg: 'bg-amber-100' }
+  if (daysOverdue <= 30) return { label: '8-30 días', color: 'text-orange-700',  bg: 'bg-orange-100' }
+  if (daysOverdue <= 60) return { label: '31-60 días',color: 'text-red-700',     bg: 'bg-red-100' }
+  return { label: '60+ días', color: 'text-red-900', bg: 'bg-red-200' }
 }

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import {
   BarChart3, Users, DollarSign, CreditCard, FileText, FileCheck,
   Truck, MessageCircle, Settings, Package, Users2, MapPin, BookOpen,
-  ReceiptText, LogOut, ChevronLeft, TrendingUp, Landmark, ShieldCheck, ClipboardList, Calculator, CalendarRange
+  ReceiptText, LogOut, ChevronLeft, TrendingUp, Landmark, ShieldCheck, ClipboardList, Calculator, CalendarRange, Briefcase
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
@@ -52,6 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
         { icon: Calculator,   label: 'Calculadora',      path: '/calculator', show: can('calculator.use') },
         { icon: BookOpen,     label: 'Plantillas',       path: '/templates',  show: can('templates.view') },
         { icon: ClipboardList,label: 'Solicitudes',      path: '/requests',   show: can('requests.view') },
+        { icon: Briefcase,    label: 'Inversionistas',   path: '/investors',  show: can('investors.view') },
       ],
     },
     {

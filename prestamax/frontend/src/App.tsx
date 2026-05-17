@@ -32,6 +32,8 @@ import PrivacyPage from '@/pages/public/PrivacyPage'
 import LoanRequestsPage from '@/pages/requests/LoanRequestsPage'
 import LoanCalculatorPage from '@/pages/calculator/LoanCalculatorPage'
 import BillingPage from '@/pages/billing/BillingPage'
+import InvestorsPage from '@/pages/investors/InvestorsPage'
+import InvestorDetailPage from '@/pages/investors/InvestorDetailPage'
 
 import AppLayout from '@/components/layout/AppLayout'
 
@@ -152,6 +154,13 @@ const AppRoutes: React.FC = () => {
           } />
 
           <Route path="/admin" element={<PlatformAdminPage />} />
+
+          <Route path="/investors" element={
+            <PermissionRoute perm="investors.view"><InvestorsPage /></PermissionRoute>
+          } />
+          <Route path="/investors/:id" element={
+            <PermissionRoute perm="investors.view"><InvestorDetailPage /></PermissionRoute>
+          } />
         </Route>
       )}
 

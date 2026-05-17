@@ -36,6 +36,9 @@ export type PermKey =
   | 'templates.view' | 'templates.create' | 'templates.edit' | 'templates.delete'
   // Calculator
   | 'calculator.use'
+  // Investors (Pro / Enterprise)
+  | 'investors.view' | 'investors.create' | 'investors.edit' | 'investors.delete'
+  | 'investors.assign' | 'investors.payouts' | 'investors.portal'
 
 export interface PermDef {
   key: PermKey

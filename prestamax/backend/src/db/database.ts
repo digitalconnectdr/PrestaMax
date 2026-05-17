@@ -666,6 +666,33 @@ export function initializeDatabase(): void {
   // Public token for loan request portal (unique per tenant)
   try { db.exec(`ALTER TABLE tenants ADD COLUMN public_token TEXT`); } catch(_) {}
 
+  // ── investors: modulo de Inversionistas (Fase 1 MVP) ─────────────────────
+  // Cada inversionista pertenece a un tenant. Se asigna a prestamos via
+  // loans.investor_id (NULL = financiado por el prestamista 'house').
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS investors (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      id_number TEXT,
+      model_type TEXT NOT NULL DEFAULT 'fixed_rate',
+      fixed_rate_monthly REAL NOT NULL DEFAULT 0,
+      equity_percent_interest REAL NOT NULL DEFAULT 0,
+      commission_percent REAL NOT NULL DEFAULT 0,
+      capital_contributed REAL NOT NULL DEFAULT 0,
+      notes TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investors_tenant ON investors(tenant_id);
+  `);
+  try { db.exec(`ALTER TABLE loans ADD COLUMN investor_id TEXT`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_loans_investor ON loans(investor_id)`); } catch(_) {}
+
   // Loan requests table (submitted by clients via public portal)
   db.exec(`CREATE TABLE IF NOT EXISTS loan_requests (
     id TEXT PRIMARY KEY,
@@ -913,8 +940,8 @@ export function initializeDatabase(): void {
   // Always ensure the 4 default subscription plans exist (INSERT OR IGNORE = safe to run every boot)
   const starterFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "requests.view", "requests.approve", "requests.reject", "requests.convert"]);
   const basicFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "settings.templates", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections"]);
-  const proFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "settings.templates", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit"]);
-  const enterpriseFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "settings.templates", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "reports.datacredito"]);
+  const proFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "settings.templates", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "investors.view", "investors.create", "investors.edit", "investors.delete", "investors.assign", "investors.payouts", "investors.portal"]);
+  const enterpriseFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "settings.templates", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "reports.datacredito", "investors.view", "investors.create", "investors.edit", "investors.delete", "investors.assign", "investors.payouts", "investors.portal"]);
   const defaultPlans = [
     { id: 'plan-starter', name: 'Starter', slug: 'starter', price: 29.99, collectors: 1, clients: 100, users: 3, trial: 10, features: starterFeatures, desc: 'Ideal para iniciar. Funciones básicas de préstamos.' },
     { id: 'plan-basico', name: 'Básico', slug: 'basico', price: 59.99, collectors: 3, clients: 500, users: 8, trial: 10, features: basicFeatures, desc: 'Para prestamistas en crecimiento con WhatsApp y sucursales.' },
