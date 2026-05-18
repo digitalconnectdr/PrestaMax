@@ -19,6 +19,7 @@ import collectionTaskRoutes from './collection_tasks';
 import notificationRoutes from './notifications';
 import billingRoutes from './billing';
 import investorsRoutes from './investors';
+import portalInvestorRoutes from './portal_investor';
 
 export const router = Router();
 
@@ -44,3 +45,4 @@ router.use('/collection-tasks', collectionTaskRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/billing', billingRoutes);
 router.use('/investors', investorsRoutes);
+router.use('/portal/investor', portalInvestorRoutes);

@@ -424,4 +424,71 @@ router.post('/payouts/:payoutId/void', authenticate, requireTenant, requirePermi
   }
 });
 
+// ─── POST /api/investors/:id/grant-portal-access — crear/vincular user inv. ──
+// Si el inversionista no tiene user_id, crea un user con rol 'investor' y
+// password temporal (devuelto UNA SOLA VEZ al admin). Si ya lo tiene, hace
+// reset del password (genera uno nuevo y lo devuelve).
+router.post('/:id/grant-portal-access', authenticate, requireTenant, requirePermission('investors.payouts'), async (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const investor = db.prepare('SELECT * FROM investors WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
+    if (!investor) return res.status(404).json({ error: 'Inversionista no encontrado' });
+    if (!investor.email) return res.status(400).json({ error: 'El inversionista debe tener email registrado para acceder al portal' });
+
+    const bcrypt = require('bcryptjs');
+    const tempPassword = 'inv-' + Math.random().toString(36).slice(-10);
+    const hash = bcrypt.hashSync(tempPassword, 10);
+
+    let userId = investor.user_id;
+    let user = userId ? db.prepare('SELECT * FROM users WHERE id=?').get(userId) as any : null;
+
+    if (!user) {
+      // Buscar user existente por email (un user puede ser inversionista en multiples tenants algun dia)
+      const existingByEmail = db.prepare('SELECT * FROM users WHERE email=?').get(investor.email) as any;
+      if (existingByEmail) {
+        // Reusamos el user. Reset de password.
+        db.prepare(`UPDATE users SET password_hash=?, full_name=COALESCE(NULLIF(full_name,''), ?), is_active=1, updated_at=? WHERE id=?`)
+          .run(hash, investor.full_name, now(), existingByEmail.id);
+        userId = existingByEmail.id;
+        user = db.prepare('SELECT * FROM users WHERE id=?').get(userId);
+      } else {
+        // Crear user nuevo
+        userId = uuid();
+        db.prepare(`INSERT INTO users (id, email, password_hash, full_name, is_active, platform_role, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 1, 'none', ?, ?)`)
+          .run(userId, investor.email, hash, investor.full_name, now(), now());
+        user = db.prepare('SELECT * FROM users WHERE id=?').get(userId);
+      }
+      // Vincular investor -> user
+      db.prepare("UPDATE investors SET user_id=?, updated_at=datetime('now') WHERE id=?").run(userId, req.params.id);
+    } else {
+      // Solo reset password
+      db.prepare(`UPDATE users SET password_hash=?, is_active=1, updated_at=? WHERE id=?`).run(hash, now(), userId);
+    }
+
+    // Asegurar membership en este tenant con rol 'investor'
+    const existing = db.prepare('SELECT * FROM tenant_memberships WHERE user_id=? AND tenant_id=?').get(userId, req.tenant.id) as any;
+    if (!existing) {
+      db.prepare(`INSERT INTO tenant_memberships (id, user_id, tenant_id, branch_id, roles, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, NULL, ?, 1, ?, ?)`)
+        .run(uuid(), userId, req.tenant.id, JSON.stringify(['investor']), now(), now());
+    } else {
+      const currentRoles: string[] = (() => { try { return JSON.parse(existing.roles || '[]') } catch { return [] } })();
+      if (!currentRoles.includes('investor')) currentRoles.push('investor');
+      db.prepare(`UPDATE tenant_memberships SET roles=?, is_active=1, updated_at=? WHERE id=?`)
+        .run(JSON.stringify(currentRoles), now(), existing.id);
+    }
+
+    res.json({
+      success: true,
+      email: investor.email,
+      tempPassword,
+      message: 'Cuenta del portal lista. Comparte la contrasena con el inversionista una sola vez; no la guardamos visible despues.'
+    });
+  } catch (e: any) {
+    console.error('POST /investors/:id/grant-portal-access error:', e);
+    res.status(500).json({ error: e.message || 'Failed' });
+  }
+});
+
 export default router;

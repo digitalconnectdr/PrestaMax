@@ -3,7 +3,7 @@ import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { PageLoadingState } from '@/components/ui/Loading'
-import { ArrowLeft, Users, Link2, TrendingUp, X, CheckCircle2, History, Ban } from 'lucide-react'
+import { ArrowLeft, Users, Link2, TrendingUp, X, CheckCircle2, History, Ban, KeyRound, Copy } from 'lucide-react'
 import api, { isAccessDenied } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { usePermission } from '@/hooks/usePermission'
@@ -32,6 +32,9 @@ const InvestorDetailPage: React.FC = () => {
   const [bankAccounts, setBankAccounts] = useState<any[]>([])
   const [payoutForm, setPayoutForm] = useState({ bankAccountId: '', paymentMethod: 'bank_transfer', reference: '', notes: '' })
   const [confirming, setConfirming] = useState(false)
+
+  const [portalCreds, setPortalCreds] = useState<{ email: string; tempPassword: string } | null>(null)
+  const [grantingAccess, setGrantingAccess] = useState(false)
 
   const canView    = can('investors.view')
   const canAssign  = can('investors.assign')
@@ -130,6 +133,28 @@ const InvestorDetailPage: React.FC = () => {
     finally { setConfirming(false) }
   }
 
+  const handleGrantPortalAccess = async () => {
+    const action = (investor?.userId || investor?.user_id) ? 'resetear la contraseña del' : 'crear el acceso al portal del'
+    if (!confirm(`¿${action} inversionista? Se generará una nueva contraseña temporal que debes compartir UNA SOLA VEZ.`)) return
+    setGrantingAccess(true)
+    try {
+      const res = await api.post(`/investors/${id}/grant-portal-access`)
+      setPortalCreds({ email: res.data.email, tempPassword: res.data.tempPassword })
+      load()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Error al generar acceso')
+    } finally {
+      setGrantingAccess(false)
+    }
+  }
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => toast.success('Copiado al portapapeles'),
+      () => toast.error('No se pudo copiar')
+    )
+  }
+
   const handleVoidPayout = async (payoutId: string, amount: number) => {
     if (!confirm(`¿Anular esta liquidación de ${formatCurrency(amount)}? Se revertirá el egreso y los pagos quedarán pendientes de liquidar nuevamente.`)) return
     try {
@@ -188,6 +213,37 @@ const InvestorDetailPage: React.FC = () => {
           <div><span className="text-slate-500">Capital aportado:</span> <strong>{formatCurrency(Number(capitalContrib) || 0)}</strong></div>
         </div>
         {investor.notes && <div className="mt-3 p-3 bg-slate-50 rounded-lg text-sm text-slate-700"><strong>Notas:</strong> {investor.notes}</div>}
+
+        {canPayouts && (
+          <div className="mt-4 pt-4 border-t border-slate-200">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2 text-sm">
+                <KeyRound className="w-4 h-4 text-slate-500" />
+                <span className="text-slate-600">
+                  {(investor.userId || investor.user_id)
+                    ? <>Acceso al portal: <strong className="text-emerald-700">activo</strong></>
+                    : <>Acceso al portal: <strong className="text-slate-500">no creado</strong></>}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleGrantPortalAccess}
+                disabled={grantingAccess || !investor.email}
+                title={!investor.email ? 'El inversionista debe tener email registrado' : ''}
+              >
+                {grantingAccess
+                  ? 'Generando…'
+                  : (investor.userId || investor.user_id)
+                    ? 'Resetear contraseña'
+                    : 'Crear acceso al portal'}
+              </Button>
+            </div>
+            {!investor.email && (
+              <p className="text-xs text-amber-600 mt-2">El inversionista debe tener un email registrado para acceder al portal.</p>
+            )}
+          </div>
+        )}
       </Card>
 
       <Card>
@@ -340,6 +396,34 @@ const InvestorDetailPage: React.FC = () => {
               </>
             )}
             <div className="flex gap-2 mt-4"><Button variant="outline" className="flex-1" onClick={() => setShowAssign(false)}>Cancelar</Button><Button className="flex-1" onClick={handleAssign} disabled={!assigningLoanId}>Asignar</Button></div>
+          </Card>
+        </div>
+      )}
+
+      {portalCreds && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <Card className="w-full max-w-md my-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="section-title flex items-center gap-2"><KeyRound className="w-5 h-5 text-amber-600" />Credenciales del portal</h2>
+              <button onClick={() => setPortalCreds(null)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm text-amber-800">
+              <strong>Importante:</strong> Esta contraseña se muestra una sola vez. Cópiala y compártesela al inversionista por un canal seguro.
+            </div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Email (usuario)</label>
+            <div className="flex gap-2 mb-3">
+              <input type="text" readOnly value={portalCreds.email} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 font-mono" />
+              <button onClick={() => copyToClipboard(portalCreds.email)} className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600"><Copy className="w-4 h-4" /></button>
+            </div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Contraseña temporal</label>
+            <div className="flex gap-2 mb-3">
+              <input type="text" readOnly value={portalCreds.tempPassword} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 font-mono text-amber-700 font-bold" />
+              <button onClick={() => copyToClipboard(portalCreds.tempPassword)} className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600"><Copy className="w-4 h-4" /></button>
+            </div>
+            <p className="text-xs text-slate-500">El inversionista debe ingresar a <strong>{window.location.origin}/login</strong> con estas credenciales. Lo redirigiremos automáticamente a su portal.</p>
+            <div className="mt-4">
+              <Button className="w-full" onClick={() => setPortalCreds(null)}>Entendido</Button>
+            </div>
           </Card>
         </div>
       )}

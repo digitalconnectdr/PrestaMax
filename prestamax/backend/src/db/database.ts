@@ -730,6 +730,9 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_investor_payouts_status   ON investor_payouts(status);
   `);
   try { db.exec(`ALTER TABLE payments ADD COLUMN liquidated_in_payout_id TEXT`); } catch(_) {}
+  // Fase 2: vinculo entre user y investor para el portal del inversionista
+  try { db.exec(`ALTER TABLE investors ADD COLUMN user_id TEXT`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)`); } catch(_) {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_payments_payout ON payments(liquidated_in_payout_id)`); } catch(_) {}
 
 

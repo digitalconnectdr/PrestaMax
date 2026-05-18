@@ -34,6 +34,7 @@ import LoanCalculatorPage from '@/pages/calculator/LoanCalculatorPage'
 import BillingPage from '@/pages/billing/BillingPage'
 import InvestorsPage from '@/pages/investors/InvestorsPage'
 import InvestorDetailPage from '@/pages/investors/InvestorDetailPage'
+import PortalInvestorPage from '@/pages/portal_investor/PortalInvestorPage'
 
 import AppLayout from '@/components/layout/AppLayout'
 
@@ -52,13 +53,25 @@ const PermissionRoute: React.FC<{ perm: PermKey; children: React.ReactNode }> = 
 const AppRoutes: React.FC = () => {
   const { state } = useAuth()
 
+  // Si el usuario logueado tiene rol 'investor' en su tenant actual, redirigir al portal.
+  const currentTenant = (state.user as any)?.currentTenant
+  const userRoles: string[] = currentTenant?.roles || []
+  const isInvestorOnly = userRoles.length > 0 && userRoles.every(r => r === 'investor')
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/apply/:token" element={<LoanRequestPublicPage />} />
 
-      {state.isAuthenticated && (
+      {state.isAuthenticated && isInvestorOnly && (
+        <>
+          <Route path="/portal" element={<PortalInvestorPage />} />
+          <Route path="*" element={<Navigate to="/portal" replace />} />
+        </>
+      )}
+
+      {state.isAuthenticated && !isInvestorOnly && (
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
 
