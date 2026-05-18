@@ -11,8 +11,11 @@ router.get('/', authenticate, requireTenant, requirePermission('investors.view')
     const { status } = req.query as any;
     let where = 'WHERE tenant_id=?';
     const params: any[] = [req.tenant.id];
-    if (status === 'active')   { where += ' AND is_active=1'; }
-    if (status === 'inactive') { where += ' AND is_active=0'; }
+    // Por defecto solo muestra activos. Use ?status=all para incluir inactivos,
+    // o ?status=inactive para solo ver inactivos.
+    if (!status || status === 'active') { where += ' AND is_active=1'; }
+    else if (status === 'inactive')     { where += ' AND is_active=0'; }
+    // status === 'all' => no filter
     const rows = db.prepare(`
       SELECT i.*,
         (SELECT COUNT(*) FROM loans l WHERE l.investor_id=i.id AND l.tenant_id=?) AS loan_count,
@@ -99,14 +102,27 @@ router.put('/:id', authenticate, requireTenant, requirePermission('investors.edi
   }
 });
 
-// ─── DELETE /api/investors/:id — desactivar inversionista (soft) ────────────
+// ─── DELETE /api/investors/:id — eliminar inversionista ─────────────────────
+// Si NO tiene prestamos asignados ni payouts -> hard delete (se elimina de BD).
+// Si SI tiene historial -> soft delete (is_active=0) para preservar auditoria.
 router.delete('/:id', authenticate, requireTenant, requirePermission('investors.delete'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     const inv = db.prepare('SELECT id FROM investors WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id);
     if (!inv) return res.status(404).json({ error: 'Inversionista no encontrado' });
+
+    const loanCount   = (db.prepare('SELECT COUNT(*) as c FROM loans WHERE investor_id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any).c;
+    const payoutCount = (db.prepare('SELECT COUNT(*) as c FROM investor_payouts WHERE investor_id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any).c;
+
+    if (loanCount === 0 && payoutCount === 0) {
+      // Sin historial: borrado real
+      db.prepare('DELETE FROM investors WHERE id=? AND tenant_id=?').run(req.params.id, req.tenant.id);
+      return res.json({ success: true, hardDeleted: true });
+    }
+
+    // Con historial: soft delete (no se puede borrar para preservar auditoria)
     db.prepare("UPDATE investors SET is_active=0, updated_at=datetime('now') WHERE id=?").run(req.params.id);
-    res.json({ success: true });
+    res.json({ success: true, hardDeleted: false, reason: 'tiene historial', loanCount, payoutCount });
   } catch (e: any) {
     console.error('DELETE /investors/:id error:', e);
     res.status(500).json({ error: e.message || 'Failed' });

@@ -135,13 +135,14 @@ const InvestorsPage: React.FC = () => {
   }
 
   const handleDelete = async (inv: Investor) => {
-    if (!confirm(`¿Desactivar al inversionista "${inv.fullName}"? Los préstamos asignados a él se mantendrán intactos.`)) return
+    if (!confirm(`¿Eliminar al inversionista "${inv.fullName}"?\n\n• Si nunca tuvo préstamos ni liquidaciones, se eliminará permanentemente.\n• Si tiene historial, quedará desactivado para preservar la auditoría (los préstamos no se afectan).`)) return
     try {
-      await api.delete(`/investors/${inv.id}`)
-      toast.success('Inversionista desactivado')
+      const res = await api.delete(`/investors/${inv.id}`)
+      const hard = res?.data?.hardDeleted ?? (res?.data as any)?.hard_deleted
+      toast.success(hard ? 'Inversionista eliminado' : 'Inversionista desactivado (tiene historial, se preserva)')
       load()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al desactivar')
+      toast.error(err?.response?.data?.error || 'Error al eliminar')
     }
   }
 
