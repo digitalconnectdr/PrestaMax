@@ -94,7 +94,9 @@ router.get('/', authenticate, requireTenant, requirePermission('loans.view'), (r
     // Soporta status como un valor unico o lista comma-separated:
     //   ?status=active          -> filtra solo 'active'
     //   ?status=active,in_mora  -> filtra ambos
-    if (status) {
+    if (status === 'all') {
+      // sin filtro de status
+    } else if (status) {
       const statuses = String(status).split(',').map((s: string) => s.trim()).filter(Boolean);
       if (statuses.length === 1) {
         where += ' AND l.status=?';
@@ -103,6 +105,10 @@ router.get('/', authenticate, requireTenant, requirePermission('loans.view'), (r
         where += ` AND l.status IN (${statuses.map(() => '?').join(',')})`;
         params.push(...statuses);
       }
+    } else {
+      // Por defecto ocultar anulados y cancelados.
+      // Use ?status=voided,cancelled o ?status=all para verlos.
+      where += " AND l.status NOT IN ('voided','cancelled')";
     }
     if (client_id) { where+=' AND l.client_id=?'; params.push(client_id); }
     if (collector_id) { where+=' AND l.collector_id=?'; params.push(collector_id); }
@@ -719,6 +725,68 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('loans.v
   } catch (e) {
     console.error('POST /loans/:id/void error:', e)
     res.status(500).json({ error: (e as any)?.message || 'Error al anular prestamo' })
+  }
+})
+
+// ─── DELETE /api/loans/:id — eliminar prestamo ──────────────────────────────
+// Si el prestamo NO tiene pagos, recibos, contratos firmados ni payouts asignados,
+// se elimina fisicamente de la BD (incluyendo sus installments, promesas y notas).
+// Si SI tiene movimientos, devuelve error 400 sugiriendo usar Anular en su lugar.
+router.delete('/:id', authenticate, requireTenant, requirePermission('loans.void'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb()
+    const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant!.id) as any
+    if (!loan) return res.status(404).json({ error: 'Prestamo no encontrado' })
+
+    // Validar que no tiene movimientos historicos
+    const paymentCount  = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE loan_id=? AND tenant_id=?').get(req.params.id, req.tenant!.id) as any).c
+    const receiptCount  = (db.prepare('SELECT COUNT(*) as c FROM receipts WHERE loan_id=? AND tenant_id=?').get(req.params.id, req.tenant!.id) as any).c
+    const contractSign  = (db.prepare("SELECT COUNT(*) as c FROM contracts WHERE loan_id=? AND tenant_id=? AND status='signed'").get(req.params.id, req.tenant!.id) as any).c
+
+    if (paymentCount > 0 || receiptCount > 0 || contractSign > 0) {
+      return res.status(400).json({
+        error: 'No se puede eliminar: el prestamo tiene movimientos. Use Anular para preservar el historial.',
+        paymentCount, receiptCount, signedContractCount: contractSign
+      })
+    }
+
+    // Si fue desembolsado, revertir el banco antes de borrar
+    const wasDisbursed = ['active','in_mora','disbursed','restructured'].includes(loan.status)
+    const disbAmount   = parseFloat(loan.disbursed_amount) || 0
+    let bankReversed = false
+    if (wasDisbursed && disbAmount > 0 && loan.disbursement_bank_account_id) {
+      const bankAcc = db.prepare('SELECT id FROM bank_accounts WHERE id=? AND tenant_id=?').get(loan.disbursement_bank_account_id, req.tenant!.id)
+      if (bankAcc) {
+        db.prepare('UPDATE bank_accounts SET current_balance=current_balance+?, loaned_balance=MAX(0, loaned_balance-?) WHERE id=? AND tenant_id=?')
+          .run(disbAmount, disbAmount, loan.disbursement_bank_account_id, req.tenant!.id)
+        bankReversed = true
+      }
+    }
+
+    // Borrar todas las filas dependientes y luego el prestamo
+    db.exec('BEGIN')
+    try {
+      db.prepare('DELETE FROM installments WHERE loan_id=?').run(req.params.id)
+      db.prepare('DELETE FROM payment_promises WHERE loan_id=?').run(req.params.id)
+      db.prepare('DELETE FROM collection_notes WHERE loan_id=?').run(req.params.id)
+      db.prepare('DELETE FROM contracts WHERE loan_id=? AND tenant_id=?').run(req.params.id, req.tenant!.id)
+      db.prepare('DELETE FROM loans WHERE id=? AND tenant_id=?').run(req.params.id, req.tenant!.id)
+
+      db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
+        uuid(), req.tenant!.id, (req as any).user.id, (req as any).user.full_name,
+        'deleted', 'loan', req.params.id,
+        `Elimino el prestamo ${loan.loan_number||req.params.id}` + (bankReversed ? ` (reverso bancario: ${disbAmount.toFixed(2)})` : '')
+      )
+      db.exec('COMMIT')
+    } catch (txErr) {
+      db.exec('ROLLBACK')
+      throw txErr
+    }
+
+    res.json({ success: true, hardDeleted: true, bank_reversed: bankReversed, refunded_amount: bankReversed ? disbAmount : 0 })
+  } catch (e: any) {
+    console.error('DELETE /loans/:id error:', e)
+    res.status(500).json({ error: e?.message || 'Error al eliminar prestamo' })
   }
 })
 

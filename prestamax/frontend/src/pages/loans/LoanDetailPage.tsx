@@ -409,6 +409,20 @@ const LoanDetailPage: React.FC = () => {
     }
   }
 
+  const handleDeleteLoan = async () => {
+    if (!loan) return
+    if (!confirm(`¿Eliminar el préstamo "${loan.loanNumber}"?\n\nEsto solo funciona si NO tiene pagos, recibos ni contratos firmados.\nSi tiene movimientos, use "Anular" en su lugar para preservar el historial.\n\nSe revertirá el desembolso a la cuenta bancaria si aplica.`)) return
+    try {
+      const res = await api.delete(`/loans/${id}`)
+      const refunded = res?.data?.refundedAmount ?? res?.data?.refunded_amount ?? 0
+      const reversed = res?.data?.bankReversed ?? res?.data?.bank_reversed
+      toast.success(`Préstamo eliminado${reversed ? ` · Se devolvieron ${formatCurrency(refunded)} al banco` : ''}`)
+      navigate('/loans')
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'No se puede eliminar (tiene movimientos)')
+    }
+  }
+
   const handleWriteOff = async () => {
     if (!writeOffReason.trim()) { toast.error('Ingresa el motivo del castigo'); return }
     try {
@@ -989,6 +1003,16 @@ const LoanDetailPage: React.FC = () => {
                 >
                   <Trash2 className="w-4 h-4" />
                   Anular Préstamo
+                </button>
+              )}
+              {can('loans.void') && (
+                <button
+                  onClick={handleDeleteLoan}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-red-400 rounded-lg text-sm text-white bg-red-600 hover:bg-red-700 transition-colors font-medium mt-1"
+                  title="Solo funciona si el prestamo no tiene movimientos"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Eliminar permanentemente
                 </button>
               )}
             </div>
