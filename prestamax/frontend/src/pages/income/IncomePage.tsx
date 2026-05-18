@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { usePermission } from '@/hooks/usePermission'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
-import { TrendingUp, TrendingDown, Plus, X, Trash2, BarChart3 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Plus, X, Trash2, BarChart3, Briefcase, ExternalLink } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import api, { isAccessDenied } from '@/lib/api'
 import toast from 'react-hot-toast'
@@ -22,6 +23,11 @@ interface Entry {
   reference: string | null
   notes: string | null
   registeredByName: string
+  investorPayoutId?: string | null
+  investorId?: string | null
+  investorName?: string | null
+  payoutPeriodFrom?: string | null
+  payoutPeriodTo?: string | null
 }
 
 interface BankAccount {
@@ -45,10 +51,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   nomina: 'Nómina', alquiler: 'Alquiler', servicios: 'Servicios públicos', marketing: 'Marketing',
   operaciones: 'Operaciones', impuestos: 'Impuestos', suministros: 'Suministros',
   delivery: 'Delivery / Transporte', otros: 'Otros',
+  investor_payout: 'Liquidación a inversionista',
 }
 
 const IncomePage: React.FC = () => {
   const { can } = usePermission()
+  const navigate = useNavigate()
   const [entries, setEntries] = useState<Entry[]>([])
   const [summary, setSummary] = useState<Summary>({ totalIncome: 0, totalExpenses: 0 })
   const [isLoading, setIsLoading] = useState(true)
@@ -235,8 +243,28 @@ const IncomePage: React.FC = () => {
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-slate-600">{CATEGORY_LABELS[entry.category] || entry.category}</td>
-                    <td className="py-3 px-4 font-medium">{entry.description}</td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {entry.category === 'investor_payout' ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-100 border border-purple-200 rounded-full px-2 py-0.5">
+                          <Briefcase className="w-3 h-3" />Liquidación inversionista
+                        </span>
+                      ) : (
+                        CATEGORY_LABELS[entry.category] || entry.category
+                      )}
+                    </td>
+                    <td className="py-3 px-4 font-medium">
+                      <div>{entry.description}</div>
+                      {entry.investorId && (
+                        <button
+                          onClick={() => navigate(`/investors/${entry.investorId}`)}
+                          className="mt-0.5 inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 hover:underline"
+                          title="Ver detalle del inversionista"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Ver inversionista{entry.investorName ? `: ${entry.investorName}` : ''}
+                        </button>
+                      )}
+                    </td>
                     <td className={`py-3 px-4 text-right font-semibold ${entry.type === 'income' ? 'text-emerald-700' : 'text-red-700'}`}>
                       {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
                     </td>

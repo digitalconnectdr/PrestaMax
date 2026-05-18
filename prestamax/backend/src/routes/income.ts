@@ -16,9 +16,16 @@ router.get('/', authenticate, requireTenant, requirePermission('income.view'), (
     if (to_date) { where += ' AND ie.transaction_date<=?'; params.push(to_date + 'T23:59:59'); }
     const total = (db.prepare(`SELECT COUNT(*) as c FROM income_expenses ie ${where}`).get(...params) as any).c;
     const data = db.prepare(`
-      SELECT ie.*, u.full_name as registered_by_name
+      SELECT ie.*, u.full_name as registered_by_name,
+             ip.id as investor_payout_id,
+             ip.investor_id as investor_id,
+             inv.full_name as investor_name,
+             ip.period_from as payout_period_from,
+             ip.period_to as payout_period_to
       FROM income_expenses ie
       LEFT JOIN users u ON u.id=ie.registered_by
+      LEFT JOIN investor_payouts ip ON ip.income_expense_id=ie.id
+      LEFT JOIN investors inv ON inv.id=ip.investor_id
       ${where} ORDER BY ie.transaction_date DESC LIMIT ? OFFSET ?
     `).all(...params, parseInt(limit), skip);
     // Summary totals for current filters
