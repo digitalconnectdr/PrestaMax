@@ -120,13 +120,14 @@ router.get('/:id', authenticate, requireTenant, requirePermission('investors.vie
     const investor = db.prepare('SELECT * FROM investors WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id);
     if (!investor) return res.status(404).json({ error: 'Inversionista no encontrado' });
     const loans = db.prepare(`
-      SELECT l.id, l.loan_number, l.status, l.principal_amount, l.disbursed_amount,
-             l.total_balance, l.currency, l.disbursement_date,
-             c.full_name as client_name
+      SELECT l.id, l.loan_number, l.status, l.disbursed_amount, l.principal_balance,
+             l.interest_balance, l.mora_balance, l.total_balance, l.currency,
+             l.disbursement_date, l.maturity_date,
+             c.full_name AS client_name
       FROM loans l
-      LEFT JOIN clients c ON c.id=l.client_id
+      JOIN clients c ON c.id=l.client_id
       WHERE l.investor_id=? AND l.tenant_id=?
-      ORDER BY l.created_at DESC
+      ORDER BY l.disbursement_date DESC
     `).all(req.params.id, req.tenant.id);
     res.json({ ...investor, loans });
   } catch (e: any) {
