@@ -730,6 +730,8 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_investor_payouts_status   ON investor_payouts(status);
   `);
   try { db.exec(`ALTER TABLE payments ADD COLUMN liquidated_in_payout_id TEXT`); } catch(_) {}
+  // Fase Auditoria P0 #2: persistir moneda del pago (heredada del prestamo)
+  try { db.exec(`ALTER TABLE payments ADD COLUMN currency TEXT`); } catch(_) {}
   // Fase 2: vinculo entre user y investor para el portal del inversionista
   try { db.exec(`ALTER TABLE investors ADD COLUMN user_id TEXT`); } catch(_) {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)`); } catch(_) {}

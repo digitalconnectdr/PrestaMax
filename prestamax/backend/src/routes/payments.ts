@@ -394,13 +394,15 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       return res.status(400).json({ error: `Este préstamo ya está "${loan.status}" y no acepta más pagos` });
     }
 
-    // Multi-currency: validate bank account currency matches loan currency
+    // ── Validacion estricta de moneda (P0 Audit fix) ───────────────────────────
+    const loanCurrency = (loan.currency || 'DOP').toUpperCase();
     if (bank_account_id) {
       const bankAcc = db.prepare('SELECT currency FROM bank_accounts WHERE id=? AND tenant_id=?').get(bank_account_id, req.tenant.id) as any;
-      const loanCurrency = loan.currency || 'DOP';
-      if (bankAcc && bankAcc.currency !== loanCurrency) {
+      if (bankAcc && (bankAcc.currency || 'DOP').toUpperCase() !== loanCurrency) {
         return res.status(400).json({ error: `Este préstamo es en ${loanCurrency}. La cuenta bancaria seleccionada está en ${bankAcc.currency}. Selecciona una cuenta en ${loanCurrency}.` });
       }
+    } else if (loanCurrency !== 'DOP') {
+      return res.status(400).json({ error: `Este préstamo es en ${loanCurrency}. Debes seleccionar una cuenta bancaria en ${loanCurrency} para registrar el pago.` });
     }
 
     const pDate = new Date(payment_date || new Date());
@@ -424,12 +426,13 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       const payment_number2 = `PAG-${new Date().getFullYear()}-${String(count2 + 1).padStart(6, '0')}`;
       const payId2 = uuid();
       db.prepare(`INSERT INTO payments (id,tenant_id,loan_id,registered_by,collector_id,payment_number,payment_date,amount,
-        applied_mora,applied_charges,applied_interest,applied_capital,payment_method,bank_account_id,reference,type,notes) VALUES
-        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        applied_mora,applied_charges,applied_interest,applied_capital,payment_method,bank_account_id,reference,type,notes,currency) VALUES
+        (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
         payId2, req.tenant.id, loan_id, req.user.id, collector_id || null,
         payment_number2, pDate.toISOString(), totalCharge,
         moraAmount, r2(prorrogaFee), 0, 0,
-        payment_method, bank_account_id || null, reference || null, 'prorroga', notes || null
+        payment_method, bank_account_id || null, reference || null, 'prorroga', notes || null,
+        loanCurrency
       );
 
       // -- Payment items for receipt breakdown -----------------------
@@ -504,12 +507,13 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     // Currently 0 — tracked separately via payment_items if needed.
     const appliedCharges = 0;
     db.prepare(`INSERT INTO payments (id,tenant_id,loan_id,registered_by,collector_id,payment_number,payment_date,amount,
-      applied_mora,applied_charges,applied_interest,applied_capital,payment_method,bank_account_id,reference,type,notes) VALUES
-      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      applied_mora,applied_charges,applied_interest,applied_capital,payment_method,bank_account_id,reference,type,notes,currency) VALUES
+      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       payId, req.tenant.id, loan_id, req.user.id, collector_id || null,
       payment_number, pDate.toISOString(), amount,
       r2(totalMora), appliedCharges, r2(totalInterest), r2(totalPrincipal),
-      payment_method, bank_account_id || null, reference || null, payment_type, notes || null
+      payment_method, bank_account_id || null, reference || null, payment_type, notes || null,
+      loanCurrency
     );
 
     const insertItem = db.prepare('INSERT INTO payment_items (id,payment_id,concept,amount) VALUES (?,?,?,?)');

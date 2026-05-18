@@ -221,9 +221,34 @@ router.get('/:id/liquidation-report', authenticate, requireTenant, requirePermis
     const totalMora     = r2(payments.reduce((s, p) => s + (p.applied_mora     || 0), 0));
     const totalGross    = r2(totalInterest + totalMora);
 
+    // ── Calculo dual segun model_type del inversionista ────────────────────────
+    // fixed_rate: el inversionista recibe una tasa mensual fija sobre su capital
+    //   aportado, INDEPENDIENTE de cuanto se cobro de los prestamos. Sin comision.
+    // equity:     el inversionista recibe (gross_interes + gross_mora) menos la
+    //   comision del administrador. Es la logica original.
+    const modelType    = investor.model_type || 'equity';
     const commissionPct = parseFloat(investor.commission_percent) || 0;
-    const commission    = r2(totalGross * (commissionPct / 100));
-    const toInvestor    = r2(totalGross - commission);
+
+    let commission = 0;
+    let toInvestor = 0;
+    let fixedRateGross = 0;
+    let monthsInPeriod = 0;
+
+    if (modelType === 'fixed_rate') {
+      const fixedRateMonthly = parseFloat(investor.fixed_rate_monthly) || 0;
+      const capital          = parseFloat(investor.capital_contributed) || 0;
+      // Meses transcurridos en el periodo (usa 30.44 dias por mes promedio).
+      const msDiff = new Date(to).getTime() - new Date(from).getTime();
+      monthsInPeriod = Math.max(0, msDiff / (1000 * 60 * 60 * 24 * 30.44));
+      fixedRateGross = r2(capital * (fixedRateMonthly / 100) * monthsInPeriod);
+      // En fixed_rate NO hay comision (la tasa ya es neta)
+      commission  = 0;
+      toInvestor  = fixedRateGross;
+    } else {
+      // equity (default)
+      commission = r2(totalGross * (commissionPct / 100));
+      toInvestor = r2(totalGross - commission);
+    }
 
     const activeLoans = db.prepare(`
       SELECT COUNT(*) as n, COALESCE(SUM(principal_balance),0) as outstanding
@@ -243,6 +268,7 @@ router.get('/:id/liquidation-report', authenticate, requireTenant, requirePermis
       from, to,
       includeLiquidated,
       payments_count: payments.length,
+      model_type: modelType,
       totals: {
         gross_interest:    totalInterest,
         gross_mora:        totalMora,
@@ -251,6 +277,11 @@ router.get('/:id/liquidation-report', authenticate, requireTenant, requirePermis
         commission_percent: commissionPct,
         commission_amount: commission,
         net_to_investor:   toInvestor,
+        // Solo para fixed_rate:
+        fixed_rate_monthly: parseFloat(investor.fixed_rate_monthly) || 0,
+        capital_contributed: parseFloat(investor.capital_contributed) || 0,
+        months_in_period:   r2(monthsInPeriod),
+        fixed_rate_gross:   fixedRateGross,
       },
       active_loans: {
         count: activeLoans?.n || 0,
@@ -304,8 +335,23 @@ router.post('/:id/payouts', authenticate, requireTenant, requirePermission('inve
     const grossCapital  = r2(pendingPayments.reduce((s, p) => s + (p.applied_capital  || 0), 0));
     const grossTotal    = r2(grossInterest + grossMora);
     const commissionPct = parseFloat(investor.commission_percent) || 0;
-    const commissionAmt = r2(grossTotal * (commissionPct / 100));
-    const netAmount     = r2(grossTotal - commissionAmt);
+
+    // ── Calculo dual: fixed_rate (tasa fija sobre capital) vs equity (% del cobrado) ──
+    const payoutModelType = investor.model_type || 'equity';
+    let commissionAmt = 0;
+    let netAmount     = 0;
+
+    if (payoutModelType === 'fixed_rate') {
+      const fixedRateMonthly = parseFloat(investor.fixed_rate_monthly) || 0;
+      const capital          = parseFloat(investor.capital_contributed) || 0;
+      const msDiff = new Date(to).getTime() - new Date(from).getTime();
+      const monthsInPeriod = Math.max(0, msDiff / (1000 * 60 * 60 * 24 * 30.44));
+      commissionAmt = 0;
+      netAmount     = r2(capital * (fixedRateMonthly / 100) * monthsInPeriod);
+    } else {
+      commissionAmt = r2(grossTotal * (commissionPct / 100));
+      netAmount     = r2(grossTotal - commissionAmt);
+    }
 
     if (netAmount <= 0) {
       return res.status(400).json({ error: 'El monto neto a entregar es cero o negativo' });

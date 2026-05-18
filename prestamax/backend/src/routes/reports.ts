@@ -44,22 +44,37 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
       FROM loans WHERE tenant_id=? AND investor_id IS NOT NULL
         AND status IN ('active','current','overdue','in_mora')
     `).get(tid) as any).v;
-    // Pasivo: agrupa pagos pendientes por inversionista, aplica su comision, suma neto
+    // Pasivo: por inversionista, calcula segun model_type.
+    //   fixed_rate: capital × tasa × meses_desde_ultimo_payout
+    //   equity:     (interes + mora cobrado sin liquidar) × (1 - comision%)
     const pasivoRows = db.prepare(`
-      SELECT i.id as investor_id, i.commission_percent,
+      SELECT i.id as investor_id,
+             i.model_type, i.commission_percent,
+             i.fixed_rate_monthly, i.capital_contributed,
              COALESCE(SUM(p.applied_interest), 0) as gross_interest,
-             COALESCE(SUM(p.applied_mora), 0) as gross_mora
+             COALESCE(SUM(p.applied_mora), 0) as gross_mora,
+             (SELECT MAX(paid_at) FROM investor_payouts WHERE investor_id=i.id AND tenant_id=? AND status='paid') as last_payout_at,
+             i.created_at as investor_created_at
       FROM investors i
       LEFT JOIN loans l ON l.investor_id=i.id AND l.tenant_id=?
       LEFT JOIN payments p ON p.loan_id=l.id AND p.is_voided=0 AND p.liquidated_in_payout_id IS NULL
       WHERE i.tenant_id=? AND i.is_active=1
       GROUP BY i.id
-    `).all(tid, tid) as any[];
+    `).all(tid, tid, tid) as any[];
     let pasivoInversionistas = 0;
+    const nowTs = Date.now();
     for (const r of pasivoRows) {
-      const gross = (r.gross_interest || 0) + (r.gross_mora || 0);
-      const commission = gross * ((r.commission_percent || 0) / 100);
-      pasivoInversionistas += (gross - commission);
+      if ((r.model_type || 'equity') === 'fixed_rate') {
+        // Desde el ultimo payout (o desde la creacion si no hay payouts)
+        const sinceTs = r.last_payout_at ? new Date(r.last_payout_at).getTime() : new Date(r.investor_created_at || nowTs).getTime();
+        const months = Math.max(0, (nowTs - sinceTs) / (1000 * 60 * 60 * 24 * 30.44));
+        const owed = (r.capital_contributed || 0) * ((r.fixed_rate_monthly || 0) / 100) * months;
+        pasivoInversionistas += owed;
+      } else {
+        const gross = (r.gross_interest || 0) + (r.gross_mora || 0);
+        const commission = gross * ((r.commission_percent || 0) / 100);
+        pasivoInversionistas += (gross - commission);
+      }
     }
     pasivoInversionistas = Math.round(pasivoInversionistas * 100) / 100;
 
