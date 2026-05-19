@@ -252,6 +252,13 @@ router.get('/:id', authenticate, requireTenant, requirePermission('loans.view'),
     loan.computed_mora = r2(computedMora);
     // Override mora_balance with real-time computed value so frontend cards are accurate
     loan.mora_balance = loan.computed_mora;
+    // P1 Audit fix: persistir mora_balance recalculado para que el dashboard,
+    // reporte de cartera y otros queries que leen loans.mora_balance directo
+    // tengan cifras actualizadas, no las del ultimo pago.
+    try {
+      db.prepare("UPDATE loans SET mora_balance=?, updated_at=datetime('now') WHERE id=?")
+        .run(loan.computed_mora, loan.id);
+    } catch (_) { /* no-critical */ }
     res.json(loan);
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to get loan' }); }
 });
@@ -681,6 +688,27 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('loans.v
     if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' })
     if (['cancelled', 'paid', 'voided'].includes(loan.status)) {
       return res.status(400).json({ error: `El préstamo ya está en estado "${loan.status}"` })
+    }
+
+    // P1 Audit fix: bloquear void si los pagos del prestamo estan asociados
+    // a una liquidacion activa al inversionista. Forzar anular el payout primero
+    // para preservar consistencia de cuentas.
+    if (loan.investor_id) {
+      const blockingPayouts = db.prepare(`
+        SELECT DISTINCT ip.id, ip.period_from, ip.period_to, ip.net_amount
+        FROM payments p
+        JOIN investor_payouts ip ON ip.id = p.liquidated_in_payout_id
+        WHERE p.loan_id=? AND p.tenant_id=? AND p.is_voided=0
+          AND ip.status='paid'
+      `).all(req.params.id, req.tenant!.id) as any[]
+      if (blockingPayouts.length > 0) {
+        return res.status(409).json({
+          error: 'No se puede anular: este préstamo tiene pagos ya incluidos en una liquidación pagada al inversionista. Anula primero la liquidación correspondiente.',
+          blockingPayouts: blockingPayouts.map(p => ({
+            id: p.id, period_from: p.period_from, period_to: p.period_to, net_amount: p.net_amount
+          }))
+        })
+      }
     }
 
     // ── Reverso del desembolso a la cuenta bancaria de origen ──────────────

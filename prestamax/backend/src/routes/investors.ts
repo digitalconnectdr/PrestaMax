@@ -489,9 +489,25 @@ router.post('/:id/grant-portal-access', authenticate, requireTenant, requirePerm
     let user = userId ? db.prepare('SELECT * FROM users WHERE id=?').get(userId) as any : null;
 
     if (!user) {
-      // Buscar user existente por email (un user puede ser inversionista en multiples tenants algun dia)
+      // Buscar user existente por email
       const existingByEmail = db.prepare('SELECT * FROM users WHERE email=?').get(investor.email) as any;
       if (existingByEmail) {
+        // P1 Audit fix: si el user ya pertenece a OTRO tenant (como dueño,
+        // operador, cobrador, o inversionista de otro), NO podemos reusarlo
+        // porque haria reset del password del primario. Bloqueamos y forzamos
+        // al admin a usar otro email para este inversionista.
+        const conflict = db.prepare(`
+          SELECT tm.tenant_id, tm.roles
+          FROM tenant_memberships tm
+          WHERE tm.user_id=? AND tm.is_active=1 AND tm.tenant_id != ?
+          LIMIT 1
+        `).get(existingByEmail.id, req.tenant.id) as any;
+        if (conflict) {
+          return res.status(409).json({
+            error: 'Este email ya pertenece a otro tenant. Usa un email distinto para este inversionista (por ejemplo agrega +inv al alias gmail/outlook).',
+            conflictTenant: true,
+          });
+        }
         // Reusamos el user. Reset de password.
         db.prepare(`UPDATE users SET password_hash=?, full_name=COALESCE(NULLIF(full_name,''), ?), is_active=1, updated_at=? WHERE id=?`)
           .run(hash, investor.full_name, now(), existingByEmail.id);

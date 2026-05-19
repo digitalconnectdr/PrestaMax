@@ -15,7 +15,7 @@ router.get('/', authenticate, requireTenant, requirePermission('clients.view'), 
     if (search) { where += ' AND (c.full_name LIKE ? OR c.id_number LIKE ? OR c.phone_personal LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
     const total = (db.prepare(`SELECT COUNT(*) as c FROM clients c ${where}`).get(...params) as any).c;
     const data = db.prepare(`
-      SELECT c.*, (SELECT COUNT(*) FROM loans WHERE client_id=c.id) as loan_count
+      SELECT c.*, (SELECT COUNT(*) FROM loans WHERE client_id=c.id AND tenant_id=c.tenant_id) as loan_count
       FROM clients c ${where} ORDER BY c.created_at DESC LIMIT ? OFFSET ?
     `).all(...params, parseInt(limit), skip);
     res.json({ data, total, page: parseInt(page), limit: parseInt(limit) });
@@ -68,7 +68,7 @@ router.get('/:id', authenticate, requireTenant, requirePermission('clients.view'
     const db = getDb();
     const client = db.prepare('SELECT * FROM clients WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
     if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
-    client.loans = db.prepare(`SELECT l.*, p.name as product_name, p.type as product_type FROM loans l JOIN loan_products p ON p.id=l.product_id WHERE l.client_id=? ORDER BY l.created_at DESC`).all(client.id);
+    client.loans = db.prepare(`SELECT l.*, p.name as product_name, p.type as product_type FROM loans l JOIN loan_products p ON p.id=l.product_id WHERE l.client_id=? AND l.tenant_id=? ORDER BY l.created_at DESC`).all(client.id, req.tenant.id);
     client.references = db.prepare('SELECT * FROM client_references WHERE client_id=?').all(client.id);
     client.guarantors = db.prepare('SELECT * FROM guarantors WHERE client_id=?').all(client.id);
     client.documents = db.prepare('SELECT * FROM client_documents WHERE client_id=?').all(client.id);
@@ -146,7 +146,7 @@ router.get('/:id/score', authenticate, requireTenant, requirePermission('clients
     const db = getDb();
     const client = db.prepare('SELECT * FROM clients WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
     if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
-    const loans = db.prepare('SELECT * FROM loans WHERE client_id=?').all(client.id) as any[];
+    const loans = db.prepare('SELECT * FROM loans WHERE client_id=? AND tenant_id=?').all(client.id, req.tenant.id) as any[];
     const installments = loans.length ? db.prepare(`SELECT * FROM installments WHERE loan_id IN (${loans.map(()=>'?').join(',')})`)
       .all(...loans.map((l:any)=>l.id)) as any[] : [];
     const paidLoans = loans.filter((l:any)=>l.status==='liquidated').length;
