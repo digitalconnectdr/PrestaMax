@@ -715,6 +715,15 @@ router.put('/users/:membershipId/permissions', authenticate, requireTenant, requ
     if (requesterLevel < 3) {
       return res.status(403).json({ error: 'Solo administradores pueden modificar permisos' });
     }
+    // Audit fix: role hierarchy — no editar perms de alguien con rol >= que tu.
+    // Permitido editarse a uno mismo (self-edit).
+    if (req.user.id !== membership.user_id) {
+      const targetRoles: string[] = (() => { try { return JSON.parse(membership.roles || '[]') } catch(_) { return [] } })();
+      const targetLevel = maxRoleLevel(targetRoles);
+      if (requesterLevel <= targetLevel) {
+        return res.status(403).json({ error: 'No puedes modificar permisos de un usuario con rol igual o superior al tuyo' });
+      }
+    }
     const explicit = req.body.explicit || req.body.permissions || {};
     // Validate that all keys are known PermKeys to prevent garbage data
     const validPermKeys = new Set(PERM_DEFS.map((p: any) => p.key));

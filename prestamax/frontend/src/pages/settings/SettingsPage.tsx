@@ -378,6 +378,12 @@ const SettingsPage: React.FC = () => {
       const res = await api.put(`/settings/users/${permMember.id}/permissions`, { explicit: permExplicit })
       setPermEffective(res.data.effective || [])
       toast.success('Permisos actualizados correctamente')
+      // Si el admin se esta editando a si mismo, refrescar tenant para que
+      // los nuevos permisos se apliquen en la UI inmediatamente (sin logout).
+      const isSelfEdit = permMember.userId === state.user?.id || (permMember as any).user_id === state.user?.id
+      if (isSelfEdit) {
+        try { await refreshCurrentTenant() } catch(_) {}
+      }
     } catch(err: any) { toast.error(err?.response?.data?.error || 'Error al guardar permisos') }
     finally { setIsSavingPerms(false) }
   }

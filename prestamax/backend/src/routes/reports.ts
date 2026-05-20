@@ -144,7 +144,7 @@ router.get('/advanced', authenticate, requireTenant, requirePermission('reports.
         SUM(applied_mora) as mora_collected
       FROM payments
       WHERE tenant_id=? AND is_voided=0
-        AND payment_date >= ? AND payment_date <= ?
+        AND date(payment_date) >= date(?) AND date(payment_date) <= date(?)
       GROUP BY strftime('%Y-%m', payment_date)
       ORDER BY month
     `).all(tid, fromDate, toDate);
@@ -156,7 +156,7 @@ router.get('/advanced', authenticate, requireTenant, requirePermission('reports.
         SUM(disbursed_amount) as amount_disbursed
       FROM loans
       WHERE tenant_id=? AND disbursement_date IS NOT NULL
-        AND disbursement_date >= ? AND disbursement_date <= ?
+        AND date(disbursement_date) >= date(?) AND date(disbursement_date) <= date(?)
       GROUP BY strftime('%Y-%m', disbursement_date)
       ORDER BY month
     `).all(tid, fromDate, toDate);
@@ -165,7 +165,7 @@ router.get('/advanced', authenticate, requireTenant, requirePermission('reports.
     const monthlyClients = db.prepare(`
       SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as new_clients
       FROM clients
-      WHERE tenant_id=? AND created_at >= ? AND created_at <= ?
+      WHERE tenant_id=? AND date(created_at) >= date(?) AND date(created_at) <= date(?)
       GROUP BY strftime('%Y-%m', created_at)
       ORDER BY month
     `).all(tid, fromDate, toDate);
@@ -184,9 +184,9 @@ router.get('/advanced', authenticate, requireTenant, requirePermission('reports.
 
     // YTD stats
     const yearStart = `${now.getFullYear()}-01-01`
-    const ytdCollected = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date >= ?`).get(tid, yearStart) as any).v
-    const ytdDisbursed = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount),0) as v FROM loans WHERE tenant_id=? AND disbursement_date >= ?`).get(tid, yearStart) as any).v
-    const ytdNewClients = (db.prepare(`SELECT COUNT(*) as c FROM clients WHERE tenant_id=? AND created_at >= ?`).get(tid, yearStart) as any).c
+    const ytdCollected = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM payments WHERE tenant_id=? AND is_voided=0 AND date(payment_date) >= date(?)`).get(tid, yearStart) as any).v
+    const ytdDisbursed = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount),0) as v FROM loans WHERE tenant_id=? AND date(disbursement_date) >= date(?)`).get(tid, yearStart) as any).v
+    const ytdNewClients = (db.prepare(`SELECT COUNT(*) as c FROM clients WHERE tenant_id=? AND date(created_at) >= date(?)`).get(tid, yearStart) as any).c
 
     // Business health alerts
     const moraRate = (() => {
@@ -616,7 +616,13 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
   try {
     const db  = getDb();
     const tid = req.tenant.id;
-    const today = new Date();
+    // Snapshot a fecha. Si periodMonth=YYYY-MM, usar ultimo dia del mes (corte regulatorio).
+    let today = new Date();
+    const periodMonth = req.query.periodMonth as string;
+    if (periodMonth && /^\d{4}-\d{2}$/.test(periodMonth)) {
+      const [y, m] = periodMonth.split('-').map(Number);
+      today = new Date(y, m, 0); // dia 0 del mes siguiente = ultimo dia del mes pedido
+    }
     const todayStr = today.toISOString().slice(0, 10);
 
     // ── Helper: map PrestaMax values to DataCrédito codes ──────────────────────
@@ -639,11 +645,11 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
     };
     const mapEstatus = (status: string): string => {
       switch (status) {
-        case 'active': case 'current': return 'V';
+        case 'active': case 'current': case 'disbursed': case 'restructured': return 'V';
         case 'overdue': case 'in_mora': return 'V'; // Vigente con atraso
-        case 'paid': return 'C';
-        case 'defaulted': case 'charged_off': return 'X';
-        case 'cancelled': return 'C';
+        case 'paid': case 'liquidated': return 'C';            // Cancelado/Cerrado
+        case 'defaulted': case 'charged_off': case 'written_off': return 'X'; // Castigado
+        case 'cancelled': case 'voided': return 'A';           // Anulado (no se reporta normalmente)
         default: return 'V';
       }
     };
@@ -704,7 +710,7 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
       JOIN clients c ON l.client_id = c.id
       JOIN loan_products lp ON l.product_id = lp.id
       WHERE l.tenant_id = ?
-        AND l.status NOT IN ('draft','rejected','pending_approval')
+        AND l.status NOT IN ('draft','rejected','pending_approval','voided','cancelled')
       ORDER BY c.last_name, c.first_name, l.disbursement_date
     `).all(tid) as any[];
 
@@ -714,12 +720,12 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
 
     // ── Build one row per loan ────────────────────────────────────────────────
     const rows = loans.map(loan => {
-      // Last payment
+      // Last payment (filtrado por tenant_id para defense-in-depth)
       const lastPay = db.prepare(`
         SELECT amount, payment_date FROM payments
-        WHERE loan_id=? AND is_voided=0
+        WHERE loan_id=? AND tenant_id=? AND is_voided=0
         ORDER BY payment_date DESC LIMIT 1
-      `).get(loan.id) as any;
+      `).get(loan.id, tid) as any;
 
       // Installment amount (monthly quota)
       const firstInst = db.prepare(`
