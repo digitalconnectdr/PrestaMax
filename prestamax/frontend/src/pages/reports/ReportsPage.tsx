@@ -918,7 +918,19 @@ const ReportsPage: React.FC = () => {
                               <td className="py-3 px-4 text-right text-slate-600">{formatCurrency(bankData.cashPayments?.capitalReceived || 0)}</td>
                               <td className="py-3 px-4 text-right text-blue-600">{formatCurrency(bankData.cashPayments?.interestReceived || 0)}</td>
                               <td className="py-3 px-4 text-right text-red-600">{formatCurrency(bankData.cashPayments?.moraReceived || 0)}</td>
-                              <td className="py-3 px-4 text-center text-slate-500 text-xs">{bankData.cashPayments?.paymentCount || 0}</td>
+                              <td className="py-3 px-4 text-center">
+                                {(bankData.cashPayments?.paymentCount || 0) > 0 ? (
+                                  <button
+                                    onClick={() => openTxModal('cash', 'Efectivo')}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+                                    title="Ver historial de pagos en efectivo"
+                                  >
+                                    {bankData.cashPayments?.paymentCount || 0} →
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-500 text-xs">0</span>
+                                )}
+                              </td>
                             </tr>
                           </tbody>
                         </table>

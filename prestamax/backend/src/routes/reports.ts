@@ -293,6 +293,28 @@ router.get('/bank-accounts/:id/transactions', authenticate, requireTenant, requi
     const start = from || new Date(Date.now()-30*86400000).toISOString().slice(0,10);
     const end   = to   || new Date().toISOString().slice(0,10);
 
+    // Caso especial: ':id=cash' lista pagos SIN cuenta bancaria (efectivo)
+    if (req.params.id === 'cash') {
+      const transactions = db.prepare(`
+        SELECT p.id, p.payment_number, p.payment_date, p.amount,
+               p.applied_capital, p.applied_interest, p.applied_mora,
+               p.payment_method, p.reference, p.type, p.is_voided,
+               l.loan_number, c.full_name as client_name
+        FROM payments p
+        JOIN loans l ON l.id=p.loan_id
+        JOIN clients c ON c.id=l.client_id
+        WHERE p.bank_account_id IS NULL AND p.tenant_id=?
+          AND date(p.payment_date) BETWEEN date(?) AND date(?)
+        ORDER BY p.payment_date DESC
+        LIMIT ?
+      `).all(tid, start, end, parseInt(limit));
+      return res.json({
+        account: { id: 'cash', bankName: 'Efectivo', accountNumber: null, accountHolder: 'Pagos sin cuenta bancaria', currentBalance: null },
+        transactions,
+        period: { from: start, to: end },
+      });
+    }
+
     // Verify account belongs to tenant
     const account = db.prepare('SELECT * FROM bank_accounts WHERE id=? AND tenant_id=?').get(req.params.id, tid) as any;
     if (!account) return res.status(404).json({ error: 'Cuenta bancaria no encontrada' });
@@ -306,7 +328,7 @@ router.get('/bank-accounts/:id/transactions', authenticate, requireTenant, requi
       JOIN loans l ON l.id=p.loan_id
       JOIN clients c ON c.id=l.client_id
       WHERE p.bank_account_id=? AND p.tenant_id=?
-        AND date(p.payment_date) BETWEEN ? AND ?
+        AND date(p.payment_date) BETWEEN date(?) AND date(?)
       ORDER BY p.payment_date DESC
       LIMIT ?
     `).all(req.params.id, tid, start, end, parseInt(limit));
