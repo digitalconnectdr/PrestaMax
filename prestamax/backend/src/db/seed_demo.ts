@@ -107,10 +107,29 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
     const term     = randInt(6, 24);
     const type     = rand(TYPES);
     const investorId = i <= 30 ? rand(investorIds) : null; // 30% asignados a inversionista
-    const disbDate   = ['under_review', 'rejected'].includes(status) ? null : randDate(180);
+
+    // Fecha de desembolso: para in_mora forzar 180-365 dias atras (cuotas vencidas reales).
+    // Para active mas reciente. Para under_review/rejected NO hay disbursement_date.
+    let disbDate: string | null = null;
+    if (status === 'in_mora') {
+      const d = new Date();
+      d.setDate(d.getDate() - randInt(180, 365)); // bien atras para tener atrasos
+      disbDate = d.toISOString();
+    } else if (status === 'liquidated') {
+      const d = new Date();
+      d.setDate(d.getDate() - randInt(365, 720)); // viejo y pagado
+      disbDate = d.toISOString();
+    } else if (!['under_review', 'rejected'].includes(status)) {
+      const d = new Date();
+      d.setDate(d.getDate() - randInt(30, 150));
+      disbDate = d.toISOString();
+    }
 
     const loanNumber = `PRE-2026-${String(i).padStart(5, '0')}`;
     const loanId = uuid();
+
+    // Calcular cuanto interes total tendria el prestamo (informativo)
+    const totalInterest = r2(amount * (rate / 100) * term);
 
     db.prepare(`INSERT INTO loans (
       id, tenant_id, branch_id, client_id, product_id, loan_number, status,
@@ -118,18 +137,18 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
       term, term_unit, payment_frequency, amortization_type,
       application_date, approval_date, disbursement_date, first_payment_date,
       principal_balance, interest_balance, mora_balance, total_balance,
-      total_paid, days_overdue, collector_id, currency, investor_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'monthly', ?, 'months', 'monthly', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 'DOP', ?)`).run(
+      total_paid, days_overdue, collector_id, currency, investor_id,
+      mora_rate_daily, mora_grace_days
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'monthly', ?, 'months', 'monthly', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 'DOP', ?, 0.001, 3)`).run(
       loanId, opts.tenantId, opts.branchId, clientId, opts.productId, loanNumber, status,
       amount, amount, status === 'rejected' || status === 'under_review' ? null : amount,
       rate, term, type,
       randDate(540),
       ['under_review', 'rejected'].includes(status) ? null : randDate(180),
       disbDate, disbDate,
-      // balances iniciales — se ajustan abajo según status
       status === 'liquidated' ? 0 : amount,
       0,
-      status === 'in_mora' ? randInt(500, 5000) : 0,
+      0, // mora_balance se calcula al final
       status === 'liquidated' ? 0 : amount,
       opts.collectorId,
       investorId,
@@ -156,6 +175,33 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
     }
     createdLoans++;
   }
+
+  // ── Recalcular days_overdue y mora_balance para todos los prestamos ────────
+  // Esto persiste valores correctos para que dashboard y reportes los lean.
+  const allLoans = db.prepare(`
+    SELECT id, mora_rate_daily, mora_grace_days FROM loans
+    WHERE tenant_id=? AND disbursement_date IS NOT NULL
+  `).all(opts.tenantId) as any[];
+
+  const today = new Date();
+  for (const loan of allLoans) {
+    const insts = db.prepare(`SELECT * FROM installments WHERE loan_id=? AND status NOT IN ('paid','waived','cancelled')`).all(loan.id) as any[];
+    let maxDays = 0;
+    let totalMora = 0;
+    for (const inst of insts) {
+      const due = new Date(inst.due_date);
+      const days = Math.max(0, Math.floor((today.getTime() - due.getTime()) / 86400000));
+      const moraDays = Math.max(0, days - (loan.mora_grace_days || 3));
+      if (moraDays > 0) {
+        if (days > maxDays) maxDays = days;
+        const baseAmount = (inst.principal_amount + inst.interest_amount) - (inst.paid_total || 0);
+        totalMora += Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays;
+      }
+    }
+    db.prepare('UPDATE loans SET days_overdue=?, mora_balance=? WHERE id=?')
+      .run(maxDays, r2(totalMora), loan.id);
+  }
+  console.log('✅ days_overdue y mora_balance recalculados');
   console.log(`✅ ${createdLoans} prestamos creados (mix de estados)`);
 
   // ── Generar pagos historicos (6 meses) para algunos prestamos activos ──────
@@ -166,28 +212,44 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
   `).all(opts.tenantId) as any[];
 
   let paymentCount = 0;
-  for (const loan of activeLoans) {
-    const numPagos = randInt(1, 6); // entre 1 y 6 pagos historicos
+  // Distribuir pagos: la MITAD en los ultimos 30 dias (para que aparezcan en filtros default
+  // como dashboard, reporte mensual, etc.) y la otra mitad en los meses 1-6.
+  for (let idx = 0; idx < activeLoans.length; idx++) {
+    const loan = activeLoans[idx];
+    const numPagos = randInt(1, 6);
     const installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY installment_number LIMIT ?').all(loan.id, numPagos) as any[];
+    const recentLoan = idx % 2 === 0; // alternar: la mitad de los prestamos tienen pagos recientes
     for (let p = 0; p < installments.length; p++) {
       const inst = installments[p];
       const payAmount = r2(inst.total_amount);
       const payDate = new Date();
-      payDate.setDate(payDate.getDate() - (numPagos - p) * 30);
+      if (recentLoan) {
+        // Pagos en ultimos 30 dias, escalonados
+        payDate.setDate(payDate.getDate() - randInt(1, 30));
+      } else {
+        // Pagos en meses 1-6, escalonados por orden p
+        payDate.setDate(payDate.getDate() - (numPagos - p) * 30 - randInt(0, 10));
+      }
+      // Mix de metodos de pago para que aparezcan en el reporte por cuenta bancaria
+      const method = idx % 3 === 0 ? 'transfer' : (idx % 3 === 1 ? 'cash' : 'card');
 
       db.prepare(`INSERT INTO payments (
         id, tenant_id, loan_id, registered_by, payment_number, payment_date, amount,
         applied_mora, applied_charges, applied_interest, applied_capital,
         payment_method, type, currency
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 'cash', 'regular', 'DOP')`).run(
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, 'regular', 'DOP')`).run(
         uuid(), opts.tenantId, loan.id, opts.officerId,
         `PAG-2026-${String(paymentCount + 1).padStart(6, '0')}`,
         payDate.toISOString(), payAmount,
         inst.interest_amount, inst.principal_amount,
+        method,
       );
 
       db.prepare('UPDATE installments SET status=?, paid_total=?, paid_principal=?, paid_interest=? WHERE id=?')
         .run('paid', inst.total_amount, inst.principal_amount, inst.interest_amount, inst.id);
+
+      // Actualizar total_paid del prestamo
+      db.prepare('UPDATE loans SET total_paid = total_paid + ? WHERE id=?').run(payAmount, loan.id);
 
       paymentCount++;
     }
