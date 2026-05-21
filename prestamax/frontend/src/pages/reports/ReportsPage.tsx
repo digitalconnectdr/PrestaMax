@@ -135,6 +135,15 @@ const ReportsPage: React.FC = () => {
   const [advancedSeries, setAdvancedSeries] = useState<'all' | 'capital' | 'interest' | 'mora' | 'total'>('all')
 
   useEffect(() => {
+    // Validar que las fechas sean YYYY-MM-DD completas antes de fetch.
+    // Esto evita el bug donde el date picker nativo dispara onChange
+    // con valores parciales mientras el usuario navega meses.
+    const isValidDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d || '')
+    const datesValid = (activeTab === 'advanced')
+      ? (isValidDate(advancedFrom) && isValidDate(advancedTo))
+      : (isValidDate(fromDate) && isValidDate(toDate))
+    if (!datesValid) return
+
     const load = async () => {
       setIsLoading(true)
       try {
@@ -153,13 +162,17 @@ const ReportsPage: React.FC = () => {
           setIncomeData(res.data)
         }
       } catch (err) {
-        if (isAccessDenied(err)) return // Sin permiso: ignorar silenciosamente
+        if (isAccessDenied(err)) return
         toast.error('Error al cargar reportes')
       } finally {
         setIsLoading(false)
       }
     }
-    load()
+    // Debounce 600ms: si el usuario sigue cambiando la fecha (navegando meses
+    // en el date picker), el fetch anterior se cancela. Asi el calendario
+    // nativo no se cierra prematuramente por re-render.
+    const handler = setTimeout(load, 600)
+    return () => clearTimeout(handler)
   }, [activeTab, fromDate, toDate, advancedFrom, advancedTo])
 
   const TABS = [
