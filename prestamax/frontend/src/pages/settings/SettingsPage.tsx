@@ -65,7 +65,7 @@ const parseRoles = (rolesStr: string): string[] => { try { return JSON.parse(rol
 const SettingsPage: React.FC = () => {
   const location = useLocation()
   const navigate = useNavigate()
-  const { state: tenantState } = useContext(TenantContext)
+  const { state: tenantState, refreshCurrentTenant } = useContext(TenantContext)
   const activeTab = PATH_TO_TAB[location.pathname] || 'general'
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -380,8 +380,9 @@ const SettingsPage: React.FC = () => {
       toast.success('Permisos actualizados correctamente')
       // Si el admin se esta editando a si mismo, refrescar tenant para que
       // los nuevos permisos se apliquen en la UI inmediatamente (sin logout).
-      const isSelfEdit = permMember.userId === state.user?.id || (permMember as any).user_id === state.user?.id
-      if (isSelfEdit) {
+      const currentUserId = (tenantState.currentTenant as any)?.userId
+      const memberUserId  = (permMember as any).userId ?? (permMember as any).user_id
+      if (currentUserId && memberUserId === currentUserId) {
         try { await refreshCurrentTenant() } catch(_) {}
       }
     } catch(err: any) { toast.error(err?.response?.data?.error || 'Error al guardar permisos') }

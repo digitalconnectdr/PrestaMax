@@ -9,6 +9,7 @@ import { Users, Plus, X, Edit2, Trash2, Eye } from 'lucide-react'
 import api, { isAccessDenied } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { usePermission } from '@/hooks/usePermission'
+import { useConfirm } from '@/hooks/useConfirm'
 import { formatCurrency } from '@/lib/utils'
 
 interface Investor {
@@ -43,6 +44,7 @@ const EMPTY_FORM = {
 
 const InvestorsPage: React.FC = () => {
   const { can } = usePermission()
+  const { confirm, ConfirmHost } = useConfirm()
   const navigate = useNavigate()
   const [investors, setInvestors] = useState<Investor[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -135,7 +137,13 @@ const InvestorsPage: React.FC = () => {
   }
 
   const handleDelete = async (inv: Investor) => {
-    if (!confirm(`¿Eliminar al inversionista "${inv.fullName}"?\n\n• Si nunca tuvo préstamos ni liquidaciones, se eliminará permanentemente.\n• Si tiene historial, quedará desactivado para preservar la auditoría (los préstamos no se afectan).`)) return
+    const ok = await confirm({
+      title: `¿Eliminar a "${inv.fullName}"?`,
+      message: 'Si el inversionista nunca tuvo préstamos ni liquidaciones, se eliminará permanentemente.\nSi tiene historial, quedará desactivado para preservar la auditoría (los préstamos no se afectan).',
+      confirmText: 'Eliminar',
+      variant: 'danger',
+    })
+    if (!ok) return
     try {
       const res = await api.delete(`/investors/${inv.id}`)
       const hard = res?.data?.hardDeleted ?? (res?.data as any)?.hard_deleted
@@ -164,6 +172,7 @@ const InvestorsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmHost />
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -212,7 +221,7 @@ const InvestorsPage: React.FC = () => {
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-3 px-4 font-semibold text-slate-700">Nombre</th>
                   <th className="text-left py-3 px-4 font-semibold text-slate-700">Modelo</th>

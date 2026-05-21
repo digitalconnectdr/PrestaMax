@@ -217,7 +217,7 @@ const IncomePage: React.FC = () => {
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-3 px-4 font-semibold text-slate-700">Fecha</th>
                   <th className="text-center py-3 px-4 font-semibold text-slate-700">Tipo</th>

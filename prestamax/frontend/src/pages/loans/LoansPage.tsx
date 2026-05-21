@@ -436,7 +436,7 @@ const LoansPage: React.FC = () => {
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
                   {([
                     { key: 'loanNumber', label: 'Préstamo', align: 'left' },
