@@ -384,6 +384,68 @@ const ReportsPage: React.FC = () => {
     }
   }
 
+  const exportTxModalCSV = () => {
+    if (!txData?.transactions?.length || !txModal) { toast.error('No hay transacciones'); return }
+    const rows = txData.transactions.map((tx: AccountTransaction) => ({
+      paymentNumber: tx.paymentNumber,
+      paymentDate:   new Date(tx.paymentDate).toLocaleDateString('es-DO'),
+      clientName:    tx.clientName,
+      loanNumber:    tx.loanNumber,
+      capitalFmt:    fmtCurrencyRaw(tx.appliedCapital || 0),
+      interestFmt:   fmtCurrencyRaw(tx.appliedInterest || 0),
+      moraFmt:       fmtCurrencyRaw(tx.appliedMora || 0),
+      totalFmt:      fmtCurrencyRaw(tx.amount),
+      status:        tx.isVoided ? 'Anulado' : 'OK',
+    }))
+    const safe = txModal.accountName.replace(/[^a-zA-Z0-9]+/g, '_')
+    downloadCSV(`transacciones_${safe}_${fromDate}_${toDate}`, [
+      { key: 'paymentNumber', label: 'Núm. Pago' },
+      { key: 'paymentDate',   label: 'Fecha' },
+      { key: 'clientName',    label: 'Cliente' },
+      { key: 'loanNumber',    label: 'Préstamo' },
+      { key: 'capitalFmt',    label: 'Capital' },
+      { key: 'interestFmt',   label: 'Interés' },
+      { key: 'moraFmt',       label: 'Mora' },
+      { key: 'totalFmt',      label: 'Total' },
+      { key: 'status',        label: 'Estado' },
+    ], rows)
+    toast.success('CSV descargado')
+  }
+
+  const exportTxModalPDF = () => {
+    if (!txData?.transactions?.length || !txModal) { toast.error('No hay transacciones'); return }
+    const rows = txData.transactions.map((tx: AccountTransaction) => ({
+      paymentNumber: tx.paymentNumber,
+      paymentDate:   new Date(tx.paymentDate).toLocaleDateString('es-DO'),
+      clientName:    `${tx.clientName} · ${tx.loanNumber}`,
+      capitalFmt:    fmtCurrencyRaw(tx.appliedCapital || 0),
+      interestFmt:   fmtCurrencyRaw(tx.appliedInterest || 0),
+      moraFmt:       fmtCurrencyRaw(tx.appliedMora || 0),
+      totalFmt:      fmtCurrencyRaw(tx.amount),
+      status:        tx.isVoided ? 'Anulado' : 'OK',
+    }))
+    const totalSum = txData.transactions.reduce((s: number, t: AccountTransaction) => s + (t.isVoided ? 0 : t.amount), 0)
+    printToPDF({
+      title: `Transacciones · ${txModal.accountName}`,
+      subtitle: `Período: ${fromDate} al ${toDate}`,
+      headers: [
+        { key: 'paymentNumber', label: 'Núm. Pago' },
+        { key: 'paymentDate',   label: 'Fecha' },
+        { key: 'clientName',    label: 'Cliente / Préstamo' },
+        { key: 'capitalFmt',    label: 'Capital',  align: 'right' },
+        { key: 'interestFmt',   label: 'Interés',  align: 'right' },
+        { key: 'moraFmt',       label: 'Mora',     align: 'right' },
+        { key: 'totalFmt',      label: 'Total',    align: 'right' },
+        { key: 'status',        label: 'Estado',   align: 'center' },
+      ],
+      rows,
+      summary: [
+        { label: 'Total transacciones', value: String(txData.transactions.length) },
+        { label: 'Total recibido (no anuladas)', value: fmtCurrencyRaw(totalSum) },
+      ],
+    })
+  }
+
   // Income/Expense exports
   const exportIncomeTxCSV = () => {
     if (!incomeData?.recent.length) { toast.error('No hay datos'); return }
@@ -1229,7 +1291,25 @@ const ReportsPage: React.FC = () => {
               )}
             </div>
 
-            <div className="px-6 py-3 border-t border-slate-200 flex-shrink-0">
+            <div className="px-6 py-3 border-t border-slate-200 flex-shrink-0 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {txData && txData.transactions.length > 0 && (
+                  <>
+                    <button
+                      onClick={exportTxModalCSV}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <FileText className="w-3.5 h-3.5"/>CSV
+                    </button>
+                    <button
+                      onClick={exportTxModalPDF}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-blue-300 text-blue-700 hover:bg-blue-50 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <FileText className="w-3.5 h-3.5"/>PDF
+                    </button>
+                  </>
+                )}
+              </div>
               <button
                 onClick={() => { setTxModal(null); setTxData(null) }}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
