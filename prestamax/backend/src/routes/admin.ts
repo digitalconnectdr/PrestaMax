@@ -4,6 +4,7 @@ import { getDb, uuid, now } from '../db/database';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import path from 'path';
 import fs from 'fs';
+import { seedDemo } from '../db/seed_demo';
 
 const router = Router();
 
@@ -839,5 +840,74 @@ router.delete('/tenants/:id/purge-data', authenticate, requirePlatformAdmin, (re
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed to purge tenant data' }); }
 });
 
+
+
+// ── POST: Seed demo data on a tenant (platform_owner only) ───────────────────
+// Genera 50 clientes, 10 inversionistas, 100 prestamos, ~200 pagos y 3 payouts
+// para el tenant especificado. Util para demos en vivo sin contaminar el tenant
+// de operacion real. Idempotente parcial: agrega encima de lo existente.
+router.post('/tenants/:id/seed-demo', authenticate, requirePlatformAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    if (req.user?.platform_role !== 'platform_owner') {
+      return res.status(403).json({ error: 'Solo el propietario de la plataforma puede poblar datos demo' });
+    }
+    const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(req.params.id) as any;
+    if (!tenant) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    // Verificar dependencias del seed (product, branch, owner)
+    const product = db.prepare("SELECT id FROM loan_products WHERE tenant_id=? LIMIT 1").get(tenant.id) as any;
+    const branch  = db.prepare("SELECT id FROM branches WHERE tenant_id=? LIMIT 1").get(tenant.id) as any;
+    const owner   = db.prepare("SELECT user_id FROM tenant_memberships WHERE tenant_id=? AND roles LIKE '%tenant_owner%' LIMIT 1").get(tenant.id) as any;
+    const coll    = db.prepare("SELECT user_id FROM tenant_memberships WHERE tenant_id=? AND roles LIKE '%cobrador%' LIMIT 1").get(tenant.id) as any;
+    if (!product) return res.status(400).json({ error: 'El tenant no tiene productos de prestamo configurados. Crea al menos uno primero.' });
+    if (!branch)  return res.status(400).json({ error: 'El tenant no tiene sucursales. Crea al menos una primero.' });
+    if (!owner)   return res.status(400).json({ error: 'El tenant no tiene un usuario owner.' });
+
+    // Capturar contadores ANTES del seed para reportar diferencia
+    const before = {
+      clients:    (db.prepare('SELECT COUNT(*) as c FROM clients WHERE tenant_id=?').get(tenant.id) as any).c,
+      loans:      (db.prepare('SELECT COUNT(*) as c FROM loans WHERE tenant_id=?').get(tenant.id) as any).c,
+      payments:   (db.prepare('SELECT COUNT(*) as c FROM payments WHERE tenant_id=?').get(tenant.id) as any).c,
+      investors:  (db.prepare('SELECT COUNT(*) as c FROM investors WHERE tenant_id=?').get(tenant.id) as any).c,
+      payouts:    (db.prepare('SELECT COUNT(*) as c FROM investor_payouts WHERE tenant_id=?').get(tenant.id) as any).c,
+    };
+
+    await seedDemo({
+      tenantId: tenant.id,
+      productId: product.id,
+      branchId: branch.id,
+      officerId: owner.user_id,
+      collectorId: coll?.user_id || owner.user_id,
+    });
+
+    const after = {
+      clients:    (db.prepare('SELECT COUNT(*) as c FROM clients WHERE tenant_id=?').get(tenant.id) as any).c,
+      loans:      (db.prepare('SELECT COUNT(*) as c FROM loans WHERE tenant_id=?').get(tenant.id) as any).c,
+      payments:   (db.prepare('SELECT COUNT(*) as c FROM payments WHERE tenant_id=?').get(tenant.id) as any).c,
+      investors:  (db.prepare('SELECT COUNT(*) as c FROM investors WHERE tenant_id=?').get(tenant.id) as any).c,
+      payouts:    (db.prepare('SELECT COUNT(*) as c FROM investor_payouts WHERE tenant_id=?').get(tenant.id) as any).c,
+    };
+
+    const added = {
+      clients:   after.clients   - before.clients,
+      loans:     after.loans     - before.loans,
+      payments:  after.payments  - before.payments,
+      investors: after.investors - before.investors,
+      payouts:   after.payouts   - before.payouts,
+    };
+
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
+      uuid(), tenant.id, req.user.id, req.user.full_name,
+      'seed_demo', 'tenant', tenant.id,
+      `Poblo datos demo: +${added.clients} clientes, +${added.loans} prestamos, +${added.investors} inversionistas, +${added.payments} pagos, +${added.payouts} payouts`
+    );
+
+    res.json({ success: true, tenant: { id: tenant.id, name: tenant.name }, before, after, added });
+  } catch (e: any) {
+    console.error('POST /admin/tenants/:id/seed-demo error:', e);
+    res.status(500).json({ error: e.message || 'Failed to seed demo' });
+  }
+});
 
 export { router };

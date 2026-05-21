@@ -13,6 +13,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { PERM_BY_MODULE, PERM_DEFS, PermKey } from '@/lib/permissions'
 import api from '@/lib/api'
+import { useConfirm } from '@/hooks/useConfirm'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -199,6 +200,8 @@ const PlatformAdminPage: React.FC = () => {
   const [resetPwValue, setResetPwValue] = useState('')
   // Purge tenant data
   const [purgeModal, setPurgeModal] = useState<{ tenantId: string; tenantName: string } | null>(null)
+  const [seedingTenantId, setSeedingTenantId] = useState<string | null>(null)
+  const { confirm: confirmDialog, ConfirmHost: ConfirmHostAdmin } = useConfirm()
   const [purgeConfirmName, setPurgeConfirmName] = useState('')
   const [isPurging, setIsPurging] = useState(false)
   const [showResetPw, setShowResetPw] = useState(false)
@@ -327,6 +330,28 @@ const PlatformAdminPage: React.FC = () => {
       toast.error(err?.response?.data?.error || 'Error al eliminar datos')
     } finally {
       setIsPurging(false)
+    }
+  }
+
+  const handleSeedDemo = async (tenantId: string, tenantName: string) => {
+    const ok = await confirmDialog({
+      title: `¿Poblar "${tenantName}" con datos demo?`,
+      message: 'Se agregaran al tenant: 50 clientes, 100 prestamos, 10 inversionistas (5 fixed_rate + 5 equity), ~200 pagos historicos y 3 payouts ya hechos.\n\nLos datos se SUMAN encima de lo que ya existe (no reemplaza ni borra).',
+      confirmText: 'Poblar demo',
+      variant: 'warning',
+    })
+    if (!ok) return
+    try {
+      setSeedingTenantId(tenantId)
+      const res = await api.post(`/admin/tenants/${tenantId}/seed-demo`)
+      const added = res.data?.added || {}
+      toast.success(`Datos demo agregados a ${tenantName}: +${added.clients||0} clientes, +${added.loans||0} prestamos, +${added.investors||0} inv., +${added.payments||0} pagos, +${added.payouts||0} payouts.`)
+      const tenantsRes = await api.get('/admin/tenants')
+      setTenants(tenantsRes.data || [])
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Error al poblar datos demo')
+    } finally {
+      setSeedingTenantId(null)
     }
   }
 
@@ -644,6 +669,7 @@ const PlatformAdminPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmHostAdmin />
       <div className="flex items-center gap-3">
         <div className="p-2 bg-blue-900 rounded-lg">
           <ShieldCheck className="w-6 h-6 text-white"/>
@@ -1624,13 +1650,24 @@ const PlatformAdminPage: React.FC = () => {
                                 <p className="text-xs text-slate-500">{t.email} · Plan: {plans.find(p => p.id === t.planId)?.name || 'Sin plan'} · {t.subscriptionStatus}</p>
                               </div>
                             </div>
-                            <button
-                              onClick={() => { setPurgeModal({ tenantId: t.id, tenantName: t.name }); setPurgeConfirmName('') }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 transition-colors border border-red-200"
-                            >
-                              <Trash2 className="w-3.5 h-3.5"/>
-                              Borrar datos
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleSeedDemo(t.id, t.name)}
+                                disabled={seedingTenantId === t.id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 transition-colors border border-purple-200 disabled:opacity-50"
+                                title="Genera 50 clientes, 100 préstamos, 10 inversionistas y pagos demo"
+                              >
+                                <Database className="w-3.5 h-3.5"/>
+                                {seedingTenantId === t.id ? 'Poblando…' : 'Poblar demo'}
+                              </button>
+                              <button
+                                onClick={() => { setPurgeModal({ tenantId: t.id, tenantName: t.name }); setPurgeConfirmName('') }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 transition-colors border border-red-200"
+                              >
+                                <Trash2 className="w-3.5 h-3.5"/>
+                                Borrar datos
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
