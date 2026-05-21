@@ -421,23 +421,6 @@ const ReportsPage: React.FC = () => {
     })
   }
 
-  const DateFilter = () => (
-    <Card className="mb-4">
-      <div className="flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Desde</label>
-          <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Hasta</label>
-          <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-      </div>
-    </Card>
-  )
-
   return (
     <div className="space-y-6">
       <div>
@@ -457,7 +440,7 @@ const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {isLoading ? <PageLoadingState /> : TABS.length === 0 ? (
+      {isLoading && !data && !advanced && !bankData && !incomeData ? <PageLoadingState /> : TABS.length === 0 ? (
         <EmptyState 
           icon={BarChart3} 
           title="Sin acceso a reportes" 
@@ -468,7 +451,20 @@ const ReportsPage: React.FC = () => {
           {/* ── DASHBOARD ── */}
           {activeTab === 'dashboard' && data && (
             <div className="space-y-6">
-              <DateFilter />
+              <Card className="mb-4">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+              </Card>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Stat icon={DollarSign} title="Cartera Total" value={formatCurrency(data.kpis.totalPortfolio)} color="blue" />
@@ -804,7 +800,20 @@ const ReportsPage: React.FC = () => {
           {/* ── BANK ACCOUNTS ── */}
           {activeTab === 'bank_accounts' && (
             <div className="space-y-6">
-              <DateFilter />
+              <Card className="mb-4">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+              </Card>
               {bankData ? (
                 <>
                   {/* Summary cards */}
@@ -952,7 +961,20 @@ const ReportsPage: React.FC = () => {
 
           {activeTab === 'income_expenses' && (
             <div className="space-y-6">
-              <DateFilter />
+              <Card className="mb-4">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+              </Card>
               {incomeData ? (
                 <>
                   {/* Summary */}
