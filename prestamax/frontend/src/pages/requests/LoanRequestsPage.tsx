@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { usePermission } from '@/hooks/usePermission'
+import { useConfirm } from '@/hooks/useConfirm'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import EmptyState from '@/components/ui/EmptyState'
@@ -58,6 +59,7 @@ const STATUS_CONFIG = {
 
 const LoanRequestsPage: React.FC = () => {
   const { can } = usePermission()
+  const { confirm, ConfirmHost } = useConfirm()
   const [requests, setRequests] = useState<LoanRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<string>('all')
@@ -196,7 +198,8 @@ const LoanRequestsPage: React.FC = () => {
   }
 
   const handleRegenerateToken = async () => {
-    if (!confirm('¿Regenerar el link? El link anterior dejará de funcionar.')) return
+    const ok_ = await confirm({ title: 'Confirmar', message: '¿Regenerar el link? El link anterior dejará de funcionar.', variant: 'warning' })
+    if (!ok_) return
     setIsRegenerating(true)
     try {
       await api.post('/loan-requests/settings/regenerate-token', {})
@@ -210,6 +213,7 @@ const LoanRequestsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmHost />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

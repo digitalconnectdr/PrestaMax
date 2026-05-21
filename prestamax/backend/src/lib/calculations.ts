@@ -214,3 +214,146 @@ export function calcInvestorLiquidation(params: InvestorLiquidationParams): Inve
   const net     = r2(grossTotal - comm);
   return { grossTotal, commissionAmount: comm, netToInvestor: net, monthsInPeriod: 0 };
 }
+
+
+// ─── allocatePayment — distribuye un pago entre cuotas pendientes ────────────
+// Orden de prioridad: mora total -> interés cuota -> capital cuota.
+// El overpayment (sobrante) va a la siguiente cuota o al capital, según opción.
+export interface AllocInstallment {
+  id: string;
+  status: string;
+  due_date: string;
+  deferred_due_date?: string | null;
+  principal_amount: number;
+  interest_amount: number;
+  paid_principal?: number;
+  paid_interest?: number;
+  paid_mora?: number;
+  paid_total?: number;
+}
+
+export interface AllocUpdate {
+  id: string;
+  addPrincipal: number;
+  addInterest: number;
+  addMora: number;
+}
+
+export interface AllocResult {
+  updates: AllocUpdate[];
+  totalInterest: number;
+  totalPrincipal: number;
+  totalMora: number;
+  excessToCapital: number;
+  remaining: number;
+}
+
+export function allocatePayment(
+  installments: AllocInstallment[],
+  amount: number,
+  paymentType: string,        // 'regular' | 'interest_only' | 'capital_only' | 'full_payoff'
+  overpaymentAction: string,  // 'apply_to_capital' | 'apply_to_next_installment'
+  mora: number,
+): AllocResult {
+  let remaining = amount;
+  const updates: AllocUpdate[] = [];
+  let totalInterest = 0, totalPrincipal = 0, totalMora = 0, excessToCapital = 0;
+
+  // Cuotas pendientes ordenadas por fecha efectiva
+  const pending = installments
+    .filter(i => !['paid', 'waived'].includes(i.status))
+    .sort((a, b) => {
+      const dA = a.deferred_due_date || a.due_date;
+      const dB = b.deferred_due_date || b.due_date;
+      return new Date(dA).getTime() - new Date(dB).getTime();
+    });
+
+  // 1. Aplicar mora primero (cargo total acumulado)
+  if (mora > 0 && remaining > 0 && paymentType !== 'capital_only') {
+    const moraApply = Math.min(remaining, mora);
+    totalMora += moraApply;
+    remaining = r2(remaining - moraApply);
+    // Distribuir mora proporcionalmente — para simplicidad la agregamos a la primera pendiente
+    if (pending.length > 0) {
+      updates.push({ id: pending[0].id, addPrincipal: 0, addInterest: 0, addMora: moraApply });
+    }
+  }
+
+  // 2. Aplicar interés y capital cuota por cuota
+  for (const inst of pending) {
+    if (remaining <= 0) break;
+    const pendInterest = Math.max(0, r2(inst.interest_amount - (inst.paid_interest || 0)));
+    const pendPrincipal = Math.max(0, r2(inst.principal_amount - (inst.paid_principal || 0)));
+
+    let addInt = 0, addPrin = 0;
+
+    if (paymentType !== 'capital_only' && pendInterest > 0 && remaining > 0) {
+      addInt = Math.min(remaining, pendInterest);
+      remaining = r2(remaining - addInt);
+      totalInterest += addInt;
+    }
+
+    if (paymentType !== 'interest_only' && pendPrincipal > 0 && remaining > 0) {
+      addPrin = Math.min(remaining, pendPrincipal);
+      remaining = r2(remaining - addPrin);
+      totalPrincipal += addPrin;
+    }
+
+    if (addInt > 0 || addPrin > 0) {
+      updates.push({ id: inst.id, addPrincipal: addPrin, addInterest: addInt, addMora: 0 });
+    }
+  }
+
+  // 3. Si sobra dinero (overpayment)
+  if (remaining > 0.01 && overpaymentAction === 'apply_to_capital' && paymentType !== 'interest_only') {
+    excessToCapital = r2(remaining);
+    remaining = 0;
+  }
+
+  return {
+    updates,
+    totalInterest: r2(totalInterest),
+    totalPrincipal: r2(totalPrincipal),
+    totalMora: r2(totalMora),
+    excessToCapital,
+    remaining: r2(Math.max(0, remaining)),
+  };
+}
+
+// ─── agingBuckets — distribución de mora por edad ────────────────────────────
+export interface AgingLoan {
+  days_overdue?: number;
+  total_balance?: number;
+  mora_balance?: number;
+}
+
+export interface AgingResult {
+  current: number;
+  d1_7: number;
+  d8_15: number;
+  d16_30: number;
+  over30: number;
+  amounts: { current: number; d1_7: number; d8_15: number; d16_30: number; over30: number };
+}
+
+export function agingBuckets(loans: AgingLoan[]): AgingResult {
+  const aging: AgingResult = {
+    current: 0, d1_7: 0, d8_15: 0, d16_30: 0, over30: 0,
+    amounts: { current: 0, d1_7: 0, d8_15: 0, d16_30: 0, over30: 0 },
+  };
+  for (const l of loans) {
+    const d = l.days_overdue || 0;
+    if (d === 0)      { aging.current++; aging.amounts.current += l.total_balance || 0; }
+    else if (d <= 7)  { aging.d1_7++;    aging.amounts.d1_7    += l.mora_balance || 0; }
+    else if (d <= 15) { aging.d8_15++;   aging.amounts.d8_15   += l.mora_balance || 0; }
+    else if (d <= 30) { aging.d16_30++;  aging.amounts.d16_30  += l.mora_balance || 0; }
+    else              { aging.over30++;  aging.amounts.over30  += l.mora_balance || 0; }
+  }
+  return aging;
+}
+
+// ─── moraRate — calcula la tasa de mora sobre cartera activa ─────────────────
+export function moraRate(activeBalance: number, moraBalance: number): number {
+  if (activeBalance <= 0) return 0;
+  return (moraBalance / activeBalance) * 100;
+}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePermission } from '@/hooks/usePermission'
+import { useConfirm } from '@/hooks/useConfirm'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -42,6 +43,7 @@ const ContractsPage: React.FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { can } = usePermission()
+  const { confirm, ConfirmHost } = useConfirm()
   const [contracts, setContracts] = useState<Contract[]>([])
   const [loans, setLoans] = useState<Loan[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -136,7 +138,8 @@ const ContractsPage: React.FC = () => {
   }
 
   const handleDelete = async (contract: Contract) => {
-    if (!confirm(`¿Eliminar contrato ${contract.contractNumber}? Esta acción no se puede deshacer.`)) return
+    const ok_ = await confirm({ title: 'Confirmar', message: `¿Eliminar contrato ${contract.contractNumber}? Esta acción no se puede deshacer.`, variant: 'warning' })
+    if (!ok_) return
     try {
       await api.delete(`/contracts/${contract.id}`)
       toast.success('Contrato eliminado')
@@ -163,6 +166,7 @@ const ContractsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmHost />
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>

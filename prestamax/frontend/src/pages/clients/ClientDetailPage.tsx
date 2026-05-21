@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { usePermission } from '@/hooks/usePermission'
+import { useConfirm } from '@/hooks/useConfirm'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { PageLoadingState } from '@/components/ui/Loading'
@@ -103,6 +104,7 @@ const EMPTY_GUAR = { fullName: '', idNumber: '', phone: '', address: '' }
 
 const ClientDetailPage: React.FC = () => {
   const { id } = useParams()
+  const { confirm, ConfirmHost } = useConfirm()
   const navigate = useNavigate()
   const { can } = usePermission()
   const [client, setClient] = useState<Client | null>(null)
@@ -188,7 +190,8 @@ const ClientDetailPage: React.FC = () => {
 
   const handleBlock = async () => {
     if (!client) return
-    if (!confirm(`¿Desactivar al cliente ${client.fullName}? No podrán registrarse nuevos préstamos.`)) return
+    const ok_ = await confirm({ title: 'Confirmar', message: `¿Desactivar al cliente ${client.fullName}? No podrán registrarse nuevos préstamos.`, variant: 'warning' })
+    if (!ok_) return
     try {
       await api.delete(`/clients/${client.id}`)
       toast.success('Cliente desactivado')
@@ -207,6 +210,7 @@ const ClientDetailPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmHost />
       {/* Header */}
       <div className="flex items-start gap-4">
         <button onClick={() => navigate('/clients')} className="p-2 hover:bg-slate-100 rounded-lg transition-colors mt-1">

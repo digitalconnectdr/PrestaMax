@@ -7,12 +7,14 @@ import { ArrowLeft, Users, Link2, TrendingUp, X, CheckCircle2, History, Ban, Key
 import api, { isAccessDenied } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { usePermission } from '@/hooks/usePermission'
+import { useConfirm } from '@/hooks/useConfirm'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 const InvestorDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { can } = usePermission()
+  const { confirm, ConfirmHost } = useConfirm()
 
   const [investor, setInvestor] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -98,7 +100,8 @@ const InvestorDetailPage: React.FC = () => {
   }
 
   const handleUnassign = async (loanId: string) => {
-    if (!confirm('¿Desvincular este préstamo del inversionista?')) return
+    const ok_ = await confirm({ title: 'Confirmar', message: '¿Desvincular este préstamo del inversionista?', variant: 'warning' })
+    if (!ok_) return
     try {
       await api.post(`/investors/${id}/unassign-loan`, { loanId })
       toast.success('Préstamo desvinculado'); load(); loadReport()
@@ -135,7 +138,8 @@ const InvestorDetailPage: React.FC = () => {
 
   const handleGrantPortalAccess = async () => {
     const action = (investor?.userId || investor?.user_id) ? 'resetear la contraseña del' : 'crear el acceso al portal del'
-    if (!confirm(`¿${action} inversionista? Se generará una nueva contraseña temporal que debes compartir UNA SOLA VEZ.`)) return
+    const ok_ = await confirm({ title: 'Confirmar', message: `¿${action} inversionista? Se generará una nueva contraseña temporal que debes compartir UNA SOLA VEZ.`, variant: 'warning' })
+    if (!ok_) return
     setGrantingAccess(true)
     try {
       const res = await api.post(`/investors/${id}/grant-portal-access`)
@@ -156,7 +160,8 @@ const InvestorDetailPage: React.FC = () => {
   }
 
   const handleVoidPayout = async (payoutId: string, amount: number) => {
-    if (!confirm(`¿Anular esta liquidación de ${formatCurrency(amount)}? Se revertirá el egreso y los pagos quedarán pendientes de liquidar nuevamente.`)) return
+    const ok_ = await confirm({ title: 'Confirmar', message: `¿Anular esta liquidación de ${formatCurrency(amount)}? Se revertirá el egreso y los pagos quedarán pendientes de liquidar nuevamente.`, variant: 'warning' })
+    if (!ok_) return
     try {
       await api.post(`/investors/payouts/${payoutId}/void`)
       toast.success('Liquidación anulada'); loadReport(); loadPayouts()
@@ -191,6 +196,7 @@ const InvestorDetailPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmHost />
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/investors')} className="p-2 rounded-lg hover:bg-slate-100">
           <ArrowLeft className="w-5 h-5 text-slate-600" />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { usePermission } from '@/hooks/usePermission'
+import { useConfirm } from '@/hooks/useConfirm'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -53,6 +54,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const WhatsAppPage: React.FC = () => {
   const { can } = usePermission()
+  const { confirm, ConfirmHost } = useConfirm()
   const [messages, setMessages] = useState<WhatsAppMessage[]>([])
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -221,7 +223,8 @@ const WhatsAppPage: React.FC = () => {
   }
 
   const handleDeleteTemplate = async (id: string) => {
-    if (!confirm('¿Eliminar esta plantilla?')) return
+    const ok_ = await confirm({ title: 'Confirmar', message: '¿Eliminar esta plantilla?', variant: 'warning' })
+    if (!ok_) return
     try {
       await api.delete(`/whatsapp/templates/${id}`)
       setTemplates(prev => prev.filter(t => t.id !== id))
@@ -251,6 +254,7 @@ const WhatsAppPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmHost />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

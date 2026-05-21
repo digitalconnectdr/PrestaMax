@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { usePermission } from '@/hooks/usePermission'
+import { useConfirm } from '@/hooks/useConfirm'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -32,6 +33,7 @@ const PaymentMethodLabel: Record<string, string> = { cash: 'Efectivo', transfer:
 
 const ReceiptsPage: React.FC = () => {
   const { can } = usePermission()
+  const { confirm, ConfirmHost } = useConfirm()
   const [receipts, setReceipts] = useState<Receipt[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -64,7 +66,8 @@ const ReceiptsPage: React.FC = () => {
   useEffect(() => { fetchReceipts() }, [])
 
   const handleReprint = async (receipt: Receipt) => {
-    if (!confirm(`¿Reimprimir recibo ${receipt.receiptNumber}?`)) return
+    const ok_ = await confirm({ title: 'Confirmar', message: `¿Reimprimir recibo ${receipt.receiptNumber}?`, variant: 'warning' })
+    if (!ok_) return
     try {
       setReprintingId(receipt.id)
       await api.post(`/receipts/${receipt.id}/reprint`, {})
@@ -160,6 +163,7 @@ const ReceiptsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ConfirmHost />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="page-title">Recibos</h1>
