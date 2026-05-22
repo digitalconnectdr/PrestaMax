@@ -299,11 +299,11 @@ const LoanCalculatorPage: React.FC = () => {
 
   if (!can('calculator.use')) return <Navigate to="/dashboard" replace />
 
-  const buildWhatsAppText = () => {
+  const buildWhatsAppText = (overrideInfo?: any) => {
     if (!result) return ''
     const tenant   = (tenantState.currentTenant as any) || {}
     const user     = (authState.user as any) || {}
-    const info     = tenantInfo || {}
+    const info     = overrideInfo || tenantInfo || {}
     const tName    = info.name || info.legalName || tenant.tenantName || tenant.name || tenant.legalName || 'Prestamista'
     const tPhone   = info.phone || tenant.tenantPhone || tenant.phone || ''
     const tEmail   = info.email || tenant.tenantEmail || tenant.email || ''
@@ -537,10 +537,22 @@ const LoanCalculatorPage: React.FC = () => {
 
               {/* Action buttons */}
               <div className="flex gap-3">
-                <a href={`https://wa.me/?text=${buildWhatsAppText()}`} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+                <button
+                  onClick={async () => {
+                    // Fetch JIT del tenant-info para garantizar datos frescos
+                    let info = tenantInfo
+                    try {
+                      const r = await api.get('/settings/tenant-info')
+                      info = r.data || tenantInfo
+                      setTenantInfo(info)
+                    } catch { /* fallback al state */ }
+                    const txt = buildWhatsAppText(info)
+                    window.open(`https://wa.me/?text=${txt}`, '_blank')
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                >
                   <MessageCircle className="w-4 h-4"/>Compartir por WhatsApp
-                </a>
+                </button>
                 <button onClick={exportCSV}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors">
                   <Download className="w-4 h-4"/>Exportar CSV

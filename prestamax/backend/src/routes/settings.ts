@@ -25,6 +25,17 @@ function getRequesterRoleLevel(db: any, userId: string, tenantId: string): numbe
 }
 
 // GET all settings for tenant
+// GET /settings/tenant-info — info publica del tenant (no requiere settings.general)
+// Cualquier miembro del tenant puede leer el nombre, telefono, email y direccion
+// para mostrar en mensajes (WhatsApp, recibos, etc.).
+router.get('/tenant-info', authenticate, requireTenant, (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const tenant = db.prepare('SELECT id, name, slug, phone, email, address, currency, logo_url, representative_name, city, rnc FROM tenants WHERE id=?').get(req.tenant.id);
+    res.json(tenant || {});
+  } catch(e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
 router.get('/', authenticate, requireTenant, requirePermission('settings.general'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb(); const tid = req.tenant.id;
