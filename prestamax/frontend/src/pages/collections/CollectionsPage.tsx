@@ -203,7 +203,7 @@ const CollectionsPage: React.FC = () => {
   const getStatusBadge = (loan: CollectionLoan) => {
     if (loan.collectionStatus === 'overdue') {
       return (
-        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-semibold">
+        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-semibold whitespace-nowrap">
           <AlertCircle className="w-3 h-3"/>
           {loan.daysOverdueReal > 0 ? `${loan.daysOverdueReal} días en mora` : 'En mora'}
         </span>
@@ -350,14 +350,14 @@ const CollectionsPage: React.FC = () => {
         <div className="space-y-3">
           {filtered.map(loan => (
             <Card key={loan.id} className={getCardStyle(loan.collectionStatus)}>
-              <div className="flex items-start gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-slate-800">{loan.clientName}</span>
                     <span className="text-xs font-mono text-slate-400">{loan.loanNumber}</span>
                     {getStatusBadge(loan)}
                   </div>
-                  <div className="flex flex-wrap gap-4 mt-1.5 text-sm">
+                  <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:gap-4 gap-1 mt-1.5 text-sm">
                     <span className="text-slate-500">Saldo: <strong className="text-slate-800">{formatCurrency(loan.totalBalance)}</strong></span>
                     {(loan.moraBalance || 0) > 0 && (
                       <span className="text-red-600 font-semibold">Mora: {formatCurrency(loan.moraBalance)}</span>
@@ -422,7 +422,7 @@ const CollectionsPage: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+                <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-start sm:justify-end mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                   {loan.phonePersonal && (
                     <a href={`tel:${loan.phonePersonal}`} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title="Llamar">
                       <Phone className="w-4 h-4"/>

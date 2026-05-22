@@ -1,5 +1,8 @@
 import React, { useState, useCallback } from 'react'
 import { Navigate } from 'react-router-dom'
+import { useAuth } from '@/hooks/useAuth'
+import { useContext } from 'react'
+import { TenantContext } from '@/contexts/TenantContext'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
@@ -238,6 +241,8 @@ const TERM_UNIT_LABEL: Record<string, string> = { months: 'meses', biweekly: 'qu
 
 const LoanCalculatorPage: React.FC = () => {
   const { can } = usePermission()
+  const { state: authState } = useAuth()
+  const { state: tenantState } = useContext(TenantContext)
   const [mode, setMode] = useState<'rate' | 'profit'>('rate')
   const [form, setForm] = useState({
     amount: '',
@@ -294,21 +299,40 @@ const LoanCalculatorPage: React.FC = () => {
 
   const buildWhatsAppText = () => {
     if (!result) return ''
+    const tenant   = (tenantState.currentTenant as any) || {}
+    const user     = (authState.user as any) || {}
+    const tName    = tenant.tenantName || tenant.name || tenant.legalName || 'Prestamista'
+    const tPhone   = tenant.tenantPhone || tenant.phone || ''
+    const tEmail   = tenant.tenantEmail || tenant.email || ''
+    const officer  = user.fullName || user.full_name || ''
+    const dateStr  = new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })
+
     const lines = [
-      `*SIMULACION DE PRESTAMO*`,
+      `🏦 *${tName.toUpperCase()}*`,
+      tPhone ? `📞 ${tPhone}` : null,
+      tEmail ? `✉️ ${tEmail}` : null,
       ``,
-      `Monto: ${formatCurrency(parseFloat(form.amount))}`,
-      `Tasa: ${result.computedRate.toFixed(2)}% ${(RATE_TYPE_LABEL[form.rateType] || 'mensual').toLowerCase()}`,
-      `Plazo: ${form.term} ${TERM_UNIT_LABEL[form.termUnit] || form.termUnit}`,
-      `Frecuencia: ${FREQ_LABEL[form.freq]}`,
-      `Tipo: ${AMORT_LABEL[form.amortType]}`,
+      `*COTIZACIÓN DE PRÉSTAMO*`,
+      `📅 ${dateStr}`,
       ``,
-      `Cuota: ${formatCurrency(result.monthlyPayment)}`,
-      `Total a pagar: ${formatCurrency(result.totalPayment)}`,
-      `Total intereses: ${formatCurrency(result.totalInterest)}`,
+      `*Condiciones propuestas:*`,
+      `• Monto del préstamo: *${formatCurrency(parseFloat(form.amount))}*`,
+      `• Tasa de interés: *${result.computedRate.toFixed(2)}% ${(RATE_TYPE_LABEL[form.rateType] || 'mensual').toLowerCase()}*`,
+      `• Plazo: *${form.term} ${TERM_UNIT_LABEL[form.termUnit] || form.termUnit}*`,
+      `• Frecuencia de pago: *${FREQ_LABEL[form.freq]}*`,
+      `• Modalidad: *${AMORT_LABEL[form.amortType]}*`,
       ``,
-      `_Simulacion generada por PrestaMax_`,
-    ]
+      `*Resumen financiero:*`,
+      `💰 Cuota: *${formatCurrency(result.monthlyPayment)}*`,
+      `📊 Total a pagar: *${formatCurrency(result.totalPayment)}*`,
+      `📈 Total intereses: *${formatCurrency(result.totalInterest)}*`,
+      ``,
+      officer ? `Atendido por: *${officer}*` : null,
+      ``,
+      `_Esta es una simulación referencial. Las condiciones finales pueden variar según evaluación crediticia._`,
+      ``,
+      `Para más información, contáctanos.`,
+    ].filter(Boolean)
     return encodeURIComponent(lines.join('\n'))
   }
 

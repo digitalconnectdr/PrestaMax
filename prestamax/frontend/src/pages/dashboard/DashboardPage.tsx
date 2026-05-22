@@ -71,9 +71,17 @@ const STATUS_LABELS: Record<string, string> = {
   in_mora: 'En Mora',
   overdue: 'Vencido',
   pending_review: 'En Revisión',
+  under_review: 'En Revisión',
   liquidated: 'Liquidado',
   draft: 'Borrador',
   disbursed: 'Desembolsado',
+  voided: 'Anulado',
+  rejected: 'Rechazado',
+  cancelled: 'Cancelado',
+  written_off: 'Incobrable',
+  restructured: 'Reestructurado',
+  paid: 'Pagado',
+  current: 'Al día',
 }
 
 const DashboardPage: React.FC = () => {

@@ -18,6 +18,7 @@ interface Client {
   idNumber: string
   phonePersonal: string
   score: number
+  isActive?: number
 }
 
 interface LoanProduct {
