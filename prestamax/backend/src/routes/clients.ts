@@ -121,6 +121,17 @@ router.delete('/:id', authenticate, requireTenant, requirePermission('clients.de
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
 
+// Reactivar un cliente previamente desactivado.
+router.post('/:id/reactivate', authenticate, requireTenant, requirePermission('clients.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const client = db.prepare('SELECT id FROM clients WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id);
+    if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+    db.prepare('UPDATE clients SET is_active=1, updated_at=? WHERE id=? AND tenant_id=?').run(now(),req.params.id,req.tenant.id);
+    res.json({ success: true, message: 'Cliente reactivado' });
+  } catch(e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
 router.post('/:id/references', authenticate, requireTenant, requirePermission('clients.edit'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();

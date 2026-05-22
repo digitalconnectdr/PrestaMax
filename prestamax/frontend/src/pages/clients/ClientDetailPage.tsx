@@ -190,14 +190,37 @@ const ClientDetailPage: React.FC = () => {
 
   const handleBlock = async () => {
     if (!client) return
-    const ok_ = await confirm({ title: 'Confirmar', message: `¿Desactivar al cliente ${client.fullName}? No podrán registrarse nuevos préstamos.`, variant: 'warning' })
+    const ok_ = await confirm({
+      title: `¿Desactivar a ${client.fullName}?`,
+      message: 'Una vez desactivado:\n• NO podrás crearle nuevos préstamos (el sistema lo rechaza).\n• Los préstamos vigentes que tenga continúan operando normalmente (cobros, pagos, contratos).\n• Puedes reactivarlo en cualquier momento desde esta misma página.',
+      confirmText: 'Desactivar',
+      variant: 'danger',
+    })
     if (!ok_) return
     try {
       await api.delete(`/clients/${client.id}`)
       toast.success('Cliente desactivado')
-      navigate('/clients')
+      reloadClient()
     } catch {
       toast.error('Error al desactivar cliente')
+    }
+  }
+
+  const handleReactivate = async () => {
+    if (!client) return
+    const ok_ = await confirm({
+      title: `¿Reactivar a ${client.fullName}?`,
+      message: 'El cliente volverá a estar disponible para nuevos préstamos.',
+      confirmText: 'Reactivar',
+      variant: 'success',
+    })
+    if (!ok_) return
+    try {
+      await api.post(`/clients/${client.id}/reactivate`)
+      toast.success('Cliente reactivado')
+      reloadClient()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Error al reactivar cliente')
     }
   }
 
@@ -479,14 +502,23 @@ const ClientDetailPage: React.FC = () => {
                     <Edit2 className="w-4 h-4"/>Editar Datos
                   </Button>
                 )}
-                {can('clients.delete') && (
-                  client.isActive ? (
+                {client.isActive ? (
+                  can('clients.delete') && (
                     <button onClick={handleBlock} className="w-full text-sm px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 flex items-center gap-2 justify-center transition-colors">
                       <Lock className="w-4 h-4"/>Desactivar Cliente
                     </button>
-                  ) : (
-                    <span className="block text-center text-xs text-slate-400 py-2">Cliente inactivo</span>
                   )
+                ) : (
+                  <div className="space-y-2">
+                    <div className="text-center text-xs text-slate-500 py-1 bg-slate-50 rounded">
+                      Cliente desactivado — no acepta nuevos préstamos
+                    </div>
+                    {can('clients.edit') && (
+                      <button onClick={handleReactivate} className="w-full text-sm px-3 py-2 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 justify-center transition-colors">
+                        <Lock className="w-4 h-4"/>Reactivar Cliente
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </Card>

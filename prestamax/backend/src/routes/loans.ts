@@ -142,6 +142,15 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
     // ─────────────────────────────────────────────────────────────────────────
 
     const db = getDb(); const id = uuid();
+    // Validar que el cliente existe en este tenant Y esté activo (defense + business rule)
+    const client = db.prepare('SELECT id, full_name, is_active FROM clients WHERE id=? AND tenant_id=?').get(d.client_id, req.tenant.id) as any;
+    if (!client) return res.status(404).json({ error: 'Cliente no encontrado en esta empresa' });
+    if (client.is_active === 0) {
+      return res.status(403).json({
+        error: `El cliente "${client.full_name}" está desactivado. Reactívalo desde su perfil antes de crear un nuevo préstamo.`,
+        code: 'CLIENT_INACTIVE',
+      });
+    }
     const count = (db.prepare('SELECT COUNT(*) as c FROM loans WHERE tenant_id=?').get(req.tenant.id) as any).c;
     const loan_number = `PRE-${new Date().getFullYear()}-${String(count+1).padStart(5,'0')}`;
     const product = db.prepare('SELECT * FROM loan_products WHERE id=?').get(d.product_id) as any;

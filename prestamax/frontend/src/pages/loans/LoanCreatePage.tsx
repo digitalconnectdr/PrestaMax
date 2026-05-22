@@ -193,6 +193,8 @@ const LoanCreatePage: React.FC = () => {
   }, [])
 
   const filteredClients = clients.filter((c) => {
+    // No mostrar clientes inactivos: el backend los rechaza al crear el prestamo
+    if (c.isActive === 0) return false
     const q = clientSearch.toLowerCase()
     return (
       (c.fullName || `${c.firstName} ${c.lastName}`).toLowerCase().includes(q) ||
