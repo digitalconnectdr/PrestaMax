@@ -8,6 +8,7 @@ import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
 import { Calculator, MessageCircle, Download, RefreshCw, Percent, DollarSign } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import api from '@/lib/api'
 import { usePermission } from '@/hooks/usePermission'
 
 interface Installment {
@@ -243,6 +244,7 @@ const LoanCalculatorPage: React.FC = () => {
   const { can } = usePermission()
   const { state: authState } = useAuth()
   const { state: tenantState } = useContext(TenantContext)
+  const [tenantInfo, setTenantInfo] = useState<any>(null)
   const [mode, setMode] = useState<'rate' | 'profit'>('rate')
   const [form, setForm] = useState({
     amount: '',
@@ -301,9 +303,10 @@ const LoanCalculatorPage: React.FC = () => {
     if (!result) return ''
     const tenant   = (tenantState.currentTenant as any) || {}
     const user     = (authState.user as any) || {}
-    const tName    = tenant.tenantName || tenant.name || tenant.legalName || 'Prestamista'
-    const tPhone   = tenant.tenantPhone || tenant.phone || ''
-    const tEmail   = tenant.tenantEmail || tenant.email || ''
+    const info     = tenantInfo || {}
+    const tName    = info.name || info.legalName || tenant.tenantName || tenant.name || tenant.legalName || 'Prestamista'
+    const tPhone   = info.phone || tenant.tenantPhone || tenant.phone || ''
+    const tEmail   = info.email || tenant.tenantEmail || tenant.email || ''
     const officer  = user.fullName || user.full_name || ''
     const dateStr  = new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })
 

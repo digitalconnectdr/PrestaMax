@@ -82,7 +82,19 @@ interface IncomeExpenseReport {
 
 const STATUS_COLORS: Record<string, string> = {
   active: '#3b82f6', in_mora: '#ef4444', pending_review: '#f59e0b',
-  approved: '#10b981', liquidated: '#8b5cf6', draft: '#94a3b8',
+  under_review: '#f59e0b', approved: '#10b981', liquidated: '#8b5cf6',
+  draft: '#94a3b8', voided: '#64748b', rejected: '#ef4444',
+  cancelled: '#94a3b8', written_off: '#7f1d1d', restructured: '#a855f7',
+  paid: '#10b981', current: '#3b82f6', disbursed: '#10b981',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Activo', approved: 'Aprobado', in_mora: 'En Mora',
+  overdue: 'Vencido', pending_review: 'En Revisión', under_review: 'En Revisión',
+  liquidated: 'Liquidado', draft: 'Borrador', disbursed: 'Desembolsado',
+  voided: 'Anulado', rejected: 'Rechazado', cancelled: 'Cancelado',
+  written_off: 'Incobrable', restructured: 'Reestructurado',
+  paid: 'Pagado', current: 'Al día',
 }
 
 const MOM_COLOR = (val: number) => val >= 0 ? '#10b981' : '#ef4444'
@@ -596,7 +608,7 @@ const ReportsPage: React.FC = () => {
                   <h3 className="section-title mb-4">Distribución por Estado</h3>
                   <ResponsiveContainer width="100%" height={250}>
                     <PieChart>
-                      <Pie data={data.statusDistribution.map(i => ({ name: i.status, value: i.count }))}
+                      <Pie data={data.statusDistribution.map(i => ({ name: STATUS_LABELS[i.status] || i.status, value: i.count }))}
                         cx="50%" cy="50%" outerRadius={90} dataKey="value"
                         label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
                         {data.statusDistribution.map((entry, i) => (
@@ -740,18 +752,18 @@ const ReportsPage: React.FC = () => {
               {/* YTD */}
               <Card>
                 <h3 className="section-title mb-4">Acumulado del Año (YTD)</h3>
-                <div className="grid grid-cols-3 gap-6">
-                  <div className="text-center">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
+                  <div className="text-center sm:text-left sm:border-r border-slate-200 sm:pr-4">
                     <p className="text-xs text-slate-500 uppercase font-medium">Cobranza YTD</p>
-                    <p className="text-xl font-bold text-emerald-700 mt-1">{formatCurrency(advanced.ytd.collected)}</p>
+                    <p className="text-lg sm:text-xl font-bold text-emerald-700 mt-1 break-words">{formatCurrency(advanced.ytd.collected)}</p>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center sm:text-left sm:border-r border-slate-200 sm:pr-4">
                     <p className="text-xs text-slate-500 uppercase font-medium">Desembolsado YTD</p>
-                    <p className="text-xl font-bold text-blue-700 mt-1">{formatCurrency(advanced.ytd.disbursed)}</p>
+                    <p className="text-lg sm:text-xl font-bold text-blue-700 mt-1 break-words">{formatCurrency(advanced.ytd.disbursed)}</p>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center sm:text-left">
                     <p className="text-xs text-slate-500 uppercase font-medium">Nuevos Clientes YTD</p>
-                    <p className="text-xl font-bold text-slate-700 mt-1">{advanced.ytd.newClients}</p>
+                    <p className="text-lg sm:text-xl font-bold text-slate-700 mt-1">{advanced.ytd.newClients}</p>
                   </div>
                 </div>
               </Card>
