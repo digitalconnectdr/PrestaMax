@@ -310,25 +310,27 @@ const LoanCalculatorPage: React.FC = () => {
     const officer  = user.fullName || user.full_name || ''
     const dateStr  = new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })
 
+    // Fechas claves
+    const fmtDate = (d: Date) => d.toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })
+    const firstPay = form.firstDate ? new Date(form.firstDate + 'T12:00:00') : new Date()
+
     const lines = [
       `🏦 *${tName.toUpperCase()}*`,
-      tPhone ? `📞 ${tPhone}` : null,
+      tPhone ? `📞 Tel: ${tPhone}` : null,
       tEmail ? `✉️ ${tEmail}` : null,
       ``,
       `*COTIZACIÓN DE PRÉSTAMO*`,
-      `📅 ${dateStr}`,
+      `📅 Fecha de solicitud: *${dateStr}*`,
+      `🗓️ Primer pago: *${fmtDate(firstPay)}*`,
       ``,
       `*Condiciones propuestas:*`,
       `• Monto del préstamo: *${formatCurrency(parseFloat(form.amount))}*`,
-      `• Tasa de interés: *${result.computedRate.toFixed(2)}% ${(RATE_TYPE_LABEL[form.rateType] || 'mensual').toLowerCase()}*`,
       `• Plazo: *${form.term} ${TERM_UNIT_LABEL[form.termUnit] || form.termUnit}*`,
       `• Frecuencia de pago: *${FREQ_LABEL[form.freq]}*`,
-      `• Modalidad: *${AMORT_LABEL[form.amortType]}*`,
       ``,
       `*Resumen financiero:*`,
       `💰 Cuota: *${formatCurrency(result.monthlyPayment)}*`,
       `📊 Total a pagar: *${formatCurrency(result.totalPayment)}*`,
-      `📈 Total intereses: *${formatCurrency(result.totalInterest)}*`,
       ``,
       officer ? `Atendido por: *${officer}*` : null,
       ``,

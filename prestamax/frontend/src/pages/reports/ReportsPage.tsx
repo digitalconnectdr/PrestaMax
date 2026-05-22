@@ -606,16 +606,17 @@ const ReportsPage: React.FC = () => {
 
                 <Card>
                   <h3 className="section-title mb-4">Distribución por Estado</h3>
-                  <ResponsiveContainer width="100%" height={250}>
+                  <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie data={data.statusDistribution.map(i => ({ name: STATUS_LABELS[i.status] || i.status, value: i.count }))}
-                        cx="50%" cy="50%" outerRadius={90} dataKey="value"
-                        label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                        cx="50%" cy="45%" outerRadius={80} dataKey="value"
+                        label={false} labelLine={false}>
                         {data.statusDistribution.map((entry, i) => (
                           <Cell key={i} fill={STATUS_COLORS[entry.status] || '#8884d8'} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip formatter={(value: any, name: any) => [`${value} préstamo(s)`, name]} />
+                      <Legend verticalAlign="bottom" height={60} iconSize={10} wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }} formatter={(value: string, entry: any) => `${value}: ${entry.payload?.value || 0}`} />
                     </PieChart>
                   </ResponsiveContainer>
                 </Card>

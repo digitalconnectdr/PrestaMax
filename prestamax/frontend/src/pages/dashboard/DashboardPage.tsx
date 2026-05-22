@@ -244,23 +244,23 @@ const DashboardPage: React.FC = () => {
         <Card>
           <h3 className="section-title mb-4">Préstamos por Estado</h3>
           {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
                   data={pieData}
                   cx="50%"
-                  cy="50%"
+                  cy="45%"
                   labelLine={false}
-                  label={({ name, value }) => `${name}: ${value}`}
-                  outerRadius={90}
+                  label={false}
+                  outerRadius={80}
                   dataKey="value"
                 >
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
-                <Tooltip />
-                <Legend />
+                <Tooltip formatter={(value: any, name: any) => [`${value} préstamo(s)`, name]} />
+                <Legend verticalAlign="bottom" height={60} iconSize={10} wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }} formatter={(value: string, entry: any) => `${value}: ${entry.payload?.value || 0}`} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
