@@ -314,28 +314,31 @@ const LoanCalculatorPage: React.FC = () => {
     const fmtDate = (d: Date) => d.toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })
     const firstPay = form.firstDate ? new Date(form.firstDate + 'T12:00:00') : new Date()
 
+    // WhatsApp colapsa lineas vacias consecutivas. Usamos \u200B (zero-width
+    // space) como contenido invisible para forzar la linea en blanco visible.
+    const BLANK = '\u200B'
     const lines = [
       `🏦 *${tName.toUpperCase()}*`,
       tPhone ? `📞 Tel: ${tPhone}` : null,
       tEmail ? `✉️ ${tEmail}` : null,
-      ``,
+      BLANK,
       `*COTIZACIÓN DE PRÉSTAMO*`,
       `📅 Fecha de solicitud: *${dateStr}*`,
       `🗓️ Primer pago: *${fmtDate(firstPay)}*`,
-      ``,
+      BLANK,
       `*Condiciones propuestas:*`,
       `• Monto del préstamo: *${formatCurrency(parseFloat(form.amount))}*`,
       `• Plazo: *${form.term} ${TERM_UNIT_LABEL[form.termUnit] || form.termUnit}*`,
       `• Frecuencia de pago: *${FREQ_LABEL[form.freq]}*`,
-      ``,
+      BLANK,
       `*Resumen financiero:*`,
       `💰 Cuota: *${formatCurrency(result.monthlyPayment)}*`,
       `📊 Total a pagar: *${formatCurrency(result.totalPayment)}*`,
-      ``,
+      BLANK,
       officer ? `Atendido por: *${officer}*` : null,
-      ``,
+      BLANK,
       `_Esta es una simulación referencial. Las condiciones finales pueden variar según evaluación crediticia._`,
-      ``,
+      BLANK,
       `Para más información, contáctanos.`,
     ].filter(Boolean)
     return encodeURIComponent(lines.join('\n'))
