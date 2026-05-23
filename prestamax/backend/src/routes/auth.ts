@@ -100,6 +100,34 @@ router.put('/profile', authenticate, async (req: AuthRequest, res: Response) => 
   } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 
+// GET /auth/subscription-status — devuelve el estado de suscripcion SIN bloquear
+// si esta expirado. Usa authenticate + header X-Tenant-Id manual. Util para
+// que el banner de "suscripcion expirada" sepa si debe seguir mostrando o no.
+router.get('/subscription-status', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const tenantId = req.headers['x-tenant-id'] as string;
+    if (!tenantId) return res.json({ expired: false, status: 'none', requiresTenantHeader: true });
+    const tenant = db.prepare('SELECT id, subscription_status, subscription_end, plan_id FROM tenants WHERE id=? AND is_active=1').get(tenantId) as any;
+    if (!tenant) return res.json({ expired: false, status: 'none', notFound: true });
+    const plan = tenant.plan_id ? db.prepare('SELECT name FROM plans WHERE id=?').get(tenant.plan_id) as any : null;
+    const subEnd = tenant.subscription_end ? new Date(tenant.subscription_end) : null;
+    const today  = new Date();
+    const isExpired = tenant.subscription_status === 'expired' || (subEnd != null && subEnd < today);
+    const msLeft = subEnd ? (subEnd.getTime() - today.getTime()) : null;
+    const daysLeft = msLeft != null ? Math.floor(msLeft / 86400000) : null;
+    res.json({
+      expired: isExpired,
+      status: tenant.subscription_status || 'unknown',
+      expiresAt: tenant.subscription_end || null,
+      daysLeft,
+      planName: plan?.name || null,
+    });
+  } catch (e: any) {
+    res.json({ expired: false, status: 'error', error: e.message });
+  }
+});
+
 router.post('/register-tenant', async (req: Request, res: Response) => {
   try {
     const { company_name, admin_name, admin_email, admin_password, phone, currency = 'DOP', plan_id } = req.body;
