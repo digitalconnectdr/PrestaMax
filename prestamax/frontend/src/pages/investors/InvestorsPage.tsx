@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
 import { Users, Plus, X, Edit2, Trash2, Eye } from 'lucide-react'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { usePermission } from '@/hooks/usePermission'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -65,7 +65,7 @@ const InvestorsPage: React.FC = () => {
       const res = await api.get('/investors')
       setInvestors(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar inversionistas')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar inversionistas')
     } finally {
       setIsLoading(false)
     }

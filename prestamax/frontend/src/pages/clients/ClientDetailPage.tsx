@@ -8,7 +8,7 @@ import { PageLoadingState } from '@/components/ui/Loading'
 import LoanStatusBadge from '@/components/shared/LoanStatusBadge'
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, User, Briefcase, Edit2, Plus, Lock, Users2, Shield, Info, TrendingUp, CheckCircle2, Clock, AlertTriangle } from 'lucide-react'
 import { formatDate, formatCurrency, getScoreLabel, getScoreColor, getScoreBarColor, getScoreBgColor } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface Client {

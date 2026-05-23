@@ -10,7 +10,7 @@ import {
   Printer, MessageCircle, User, RotateCcw
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { AuthContext } from '@/contexts/AuthContext'
 import { TenantContext } from '@/contexts/TenantContext'
@@ -245,7 +245,7 @@ const PaymentsPage: React.FC = () => {
       setPayments(res.data.data || [])
       if (res.data.counts) setVoidedCounts(res.data.counts)
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar pagos')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar pagos')
     } finally {
       setIsLoading(false)
     }

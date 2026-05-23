@@ -9,7 +9,7 @@ import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
 import { FileCheck, Eye, PenLine, Plus, CheckCircle, Clock, Printer, Trash2 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface Contract {
@@ -60,7 +60,7 @@ const ContractsPage: React.FC = () => {
       const res = await api.get('/contracts')
       setContracts(res.data || [])
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar contratos')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar contratos')
     } finally {
       setIsLoading(false)
     }

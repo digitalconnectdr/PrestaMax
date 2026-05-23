@@ -7,7 +7,7 @@ import Input from '@/components/ui/Input'
 import { PageLoadingState } from '@/components/ui/Loading'
 import { MessageCircle, Send, Clock, CheckCheck, AlertCircle, Phone, Edit2, Trash2, Plus, X, Info } from 'lucide-react'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface WhatsAppMessage {
@@ -93,7 +93,7 @@ const WhatsAppPage: React.FC = () => {
         setClients(clientsRes.data.data || [])
         setTenantData(settingsRes.data?.tenant || settingsRes.data || {})
       } catch (err) {
-        if (!isAccessDenied(err)) toast.error('Error al cargar mensajes de WhatsApp')
+        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar mensajes de WhatsApp')
       } finally {
         setIsLoading(false)
       }

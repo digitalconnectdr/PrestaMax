@@ -8,7 +8,7 @@ import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
 import { TrendingUp, TrendingDown, Plus, X, Trash2, BarChart3, Briefcase, ExternalLink } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface Entry {
@@ -94,7 +94,7 @@ const IncomePage: React.FC = () => {
       if (res.data.summary) setSummary(res.data.summary)
       setBankAccounts(Array.isArray(bankRes.data) ? bankRes.data.filter((a:any)=>a.isActive) : [])
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar registros')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar registros')
     } finally {
       setIsLoading(false)
     }

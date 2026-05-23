@@ -6,7 +6,7 @@ import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
 import { Phone, MessageCircle, DollarSign, AlertCircle, ChevronDown, ChevronUp, FileText, X, RefreshCw, Calendar, CheckCircle, Clock, Users, StickyNote, ClipboardList, Briefcase } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import CollectionTasksTab from './CollectionTasksTab'
 
@@ -83,7 +83,7 @@ const CollectionsPage: React.FC = () => {
       setScope(data.scope || 'all')
       setBankAccounts(Array.isArray(bankRes.data) ? bankRes.data : [])
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar cartera de cobranza')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar cartera de cobranza')
     } finally {
       setIsLoading(false)
     }

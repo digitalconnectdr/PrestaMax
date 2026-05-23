@@ -9,7 +9,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { ReceiptText, Printer, FileDown, FileText } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { downloadCSV, printToPDF, fmtCurrencyRaw, fmtDateRaw } from '@/lib/exportUtils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface Receipt {
@@ -57,7 +57,7 @@ const ReceiptsPage: React.FC = () => {
       const res = await api.get('/receipts?limit=200')
       setReceipts(res.data.data || [])
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar recibos')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar recibos')
     } finally {
       setIsLoading(false)
     }

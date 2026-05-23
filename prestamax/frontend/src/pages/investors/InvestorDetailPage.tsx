@@ -4,7 +4,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { PageLoadingState } from '@/components/ui/Loading'
 import { ArrowLeft, Users, Link2, TrendingUp, X, CheckCircle2, History, Ban, KeyRound, Copy } from 'lucide-react'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { usePermission } from '@/hooks/usePermission'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -48,7 +48,7 @@ const InvestorDetailPage: React.FC = () => {
       const res = await api.get(`/investors/${id}`)
       setInvestor(res.data)
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar inversionista')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar inversionista')
       navigate('/investors')
     } finally { setIsLoading(false) }
   }

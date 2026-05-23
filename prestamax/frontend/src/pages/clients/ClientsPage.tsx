@@ -10,7 +10,7 @@ import ScoreBadge from '@/components/shared/ScoreBadge'
 import { Users, Search, Plus, Eye, Edit, Trash2 } from 'lucide-react'
 import { Client } from '@/types'
 import { formatDate } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 const ClientsPage: React.FC = () => {
@@ -28,7 +28,7 @@ const ClientsPage: React.FC = () => {
         const response = await api.get('/clients?limit=200')
         setClients(response.data.data || [])
       } catch (error) {
-        if (!isAccessDenied(error)) toast.error('Error al cargar clientes')
+        if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error('Error al cargar clientes')
       } finally {
         setIsLoading(false)
       }

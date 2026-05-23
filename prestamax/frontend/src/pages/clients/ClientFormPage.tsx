@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { PageLoadingState } from '@/components/ui/Loading'
 import { ArrowLeft } from 'lucide-react'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface FormData {
@@ -111,7 +111,7 @@ const ClientFormPage: React.FC = () => {
             notes: client.notes || '',
           })
         } catch (error) {
-          if (!isAccessDenied(error)) toast.error('Error al cargar los datos del cliente')
+          if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error('Error al cargar los datos del cliente')
           navigate('/clients')
         } finally {
           setIsLoading(false)

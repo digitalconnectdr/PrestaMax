@@ -7,7 +7,7 @@ import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
 import { ClipboardList, Plus, X, CheckCircle, Clock, AlertCircle, MapPin, Eye } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface Promise {
@@ -57,7 +57,7 @@ const PaymentPromisesPage: React.FC = () => {
       const res = await api.get('/collections/promises')
       setPromises(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar promesas de pago')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar promesas de pago')
     } finally {
       setIsLoading(false)
     }

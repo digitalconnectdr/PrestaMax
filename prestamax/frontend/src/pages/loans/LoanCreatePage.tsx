@@ -7,7 +7,7 @@ import Input from '@/components/ui/Input'
 import { PageLoadingState } from '@/components/ui/Loading'
 import { ArrowLeft, ArrowRight, Check, DollarSign, User, Settings, Globe } from 'lucide-react'
 import { formatCurrency, SUPPORTED_CURRENCIES } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface Client {
@@ -185,7 +185,7 @@ const LoanCreatePage: React.FC = () => {
           } catch(_) { /* keep default ['DOP'] */ }
         }
       } catch (err) {
-        if (!isAccessDenied(err)) toast.error('Error al cargar datos')
+        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar datos')
       } finally {
         setIsLoading(false)
       }

@@ -10,7 +10,7 @@ import {
   User, Phone, Mail, MapPin, FileText, DollarSign, Calendar,
   RefreshCw, Copy, Link2, AlertCircle, ShieldCheck, RotateCcw
 } from 'lucide-react'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { formatDate } from '@/lib/utils'
 
@@ -86,7 +86,7 @@ const LoanRequestsPage: React.FC = () => {
     try {
       const res = await api.get('/loan-requests', { params: { status: filterStatus } })
       setRequests(res.data || [])
-    } catch(err) { if (!isAccessDenied(err)) toast.error('Error cargando solicitudes') }
+    } catch(err) { if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error cargando solicitudes') }
     finally { setIsLoading(false) }
   }
 
@@ -127,7 +127,7 @@ const LoanRequestsPage: React.FC = () => {
     try {
       const res = await api.get(`/loan-requests/${req.id}`)
       setSelectedRequest(res.data)
-    } catch(err) { if (!isAccessDenied(err)) toast.error('Error cargando detalle') }
+    } catch(err) { if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error cargando detalle') }
     finally { setIsLoadingDetail(false) }
   }
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import SubscriptionExpiredBanner from '@/components/shared/SubscriptionExpiredBanner'
 import { Toaster } from 'react-hot-toast'
 import { useAuth } from '@/hooks/useAuth'
 import { useTenant } from '@/hooks/useTenant'
@@ -48,6 +49,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ title }) => {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} title={title} />
+        <SubscriptionExpiredBanner />
 
         <main className="flex-1 overflow-y-auto bg-slate-50">
           <div className="p-4 md:p-6">

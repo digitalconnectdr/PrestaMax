@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogOut, Briefcase, Wallet, TrendingUp, History, DollarSign } from 'lucide-react'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { PageLoadingState } from '@/components/ui/Loading'
@@ -34,7 +34,7 @@ const PortalInvestorPage: React.FC = () => {
       setLoans(Array.isArray(loansR.data) ? loansR.data : [])
       setPayouts(Array.isArray(payR.data) ? payR.data : [])
     } catch (err: any) {
-      if (!isAccessDenied(err)) toast.error(err?.response?.data?.error || 'Error al cargar el portal')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(err?.response?.data?.error || 'Error al cargar el portal')
     } finally {
       setLoading(false)
     }

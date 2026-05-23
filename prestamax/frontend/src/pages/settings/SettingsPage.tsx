@@ -16,7 +16,7 @@ import {
   Shield, ShieldCheck, ShieldX, ToggleLeft, ToggleRight
 } from 'lucide-react'
 import { SUPPORTED_CURRENCIES } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 // ─── Interfaces ───────────────────────────────────────────────────
@@ -199,7 +199,7 @@ const SettingsPage: React.FC = () => {
         setSubscriptionData(res.data)
       }
     } catch (err: any) {
-      if (!isAccessDenied(err)) toast.error('Error cargando datos')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error cargando datos')
     } finally {
       setIsLoading(false)
     }

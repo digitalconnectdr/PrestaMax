@@ -12,7 +12,7 @@ import {
   Printer, FileCheck, ChevronDown, Globe
 } from 'lucide-react'
 import { formatCurrency, formatDate, getCurrencySymbol } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import EditLoanModal from './EditLoanModal'
 import { AuthContext } from '@/contexts/AuthContext'
@@ -202,7 +202,7 @@ const LoanDetailPage: React.FC = () => {
         const res = await api.get(`/loans/${id}`)
         setLoan(res.data)
       } catch (err: any) {
-        if (!isAccessDenied(err)) toast.error('Error al cargar el préstamo')
+        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar el préstamo')
         navigate('/loans')
       } finally {
         setIsLoading(false)
@@ -454,7 +454,7 @@ const LoanDetailPage: React.FC = () => {
       setContractTemplates(tpls)
       if (tpls.length > 0) setSelectedTemplateId(tpls.find((t: any) => t.isDefault || t.is_default)?.id || tpls[0].id)
     } catch (err) {
-      if (!isAccessDenied(err)) toast.error('Error al cargar plantillas')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar plantillas')
       // 403 = plan doesn't include templates; modal stays open showing empty state
     }
   }

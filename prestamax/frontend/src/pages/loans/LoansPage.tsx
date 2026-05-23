@@ -9,7 +9,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import LoanStatusBadge from '@/components/shared/LoanStatusBadge'
 import { DollarSign, Plus, Eye, AlertCircle, Upload, Download, X, CheckCircle, XCircle, FileSpreadsheet, Globe } from 'lucide-react'
 import { formatCurrency, formatDate, getCurrencySymbol } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 // ── CSV Import Modal ──────────────────────────────────────────────
@@ -360,7 +360,7 @@ const LoansPage: React.FC = () => {
         const res = await api.get(`/loans?${params.toString()}`)
         setLoans(res.data.data || [])
       } catch (err) {
-        if (!isAccessDenied(err)) toast.error('Error al cargar préstamos')
+        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar préstamos')
       } finally {
         setIsLoading(false)
       }

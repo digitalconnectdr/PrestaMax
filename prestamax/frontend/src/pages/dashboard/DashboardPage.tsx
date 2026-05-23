@@ -6,7 +6,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { PageLoadingState } from '@/components/ui/Loading'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import {
   BarChart,
@@ -95,7 +95,7 @@ const DashboardPage: React.FC = () => {
         const res = await api.get('/reports/dashboard')
         setDashboard(res.data)
       } catch (error: any) {
-        if (!isAccessDenied(error)) toast.error('Error al cargar el dashboard')
+        if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error('Error al cargar el dashboard')
         // Empty fallback when API fails
         setDashboard({
           kpis: {

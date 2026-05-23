@@ -9,7 +9,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { BarChart3, TrendingUp, AlertCircle, DollarSign, TrendingDown, Users, CheckCircle, Landmark, ArrowUpCircle, ArrowDownCircle, FileDown, FileText, Globe, Download, Info, AlertTriangle } from 'lucide-react'
 import { formatCurrency, getCurrencySymbol } from '@/lib/utils'
 import { downloadCSV, printToPDF, fmtCurrencyRaw, fmtDateRaw } from '@/lib/exportUtils'
-import api, { isAccessDenied } from '@/lib/api'
+import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -174,7 +174,7 @@ const ReportsPage: React.FC = () => {
           setIncomeData(res.data)
         }
       } catch (err) {
-        if (isAccessDenied(err)) return
+        if (isAccessDenied(err) || isSubscriptionExpired(err)) return
         toast.error('Error al cargar reportes')
       } finally {
         setIsLoading(false)
@@ -389,7 +389,7 @@ const ReportsPage: React.FC = () => {
       const res = await api.get(`/reports/bank-accounts/${accountId}/transactions?from=${fromDate}&to=${toDate}&limit=100`)
       setTxData(res.data)
     } catch (err: any) {
-      if (isAccessDenied(err)) return
+      if (isAccessDenied(err) || isSubscriptionExpired(err)) return
       toast.error('Error al cargar transacciones')
     } finally {
       setTxLoading(false)

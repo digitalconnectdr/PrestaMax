@@ -83,6 +83,18 @@ api.interceptors.response.use(
       const msg = encodeURIComponent(error.response?.data?.error || 'Tu cuenta fue desactivada')
       window.location.href = `/login?revoked=1&msg=${msg}`
     }
+    // 402 — SUBSCRIPTION_EXPIRED. Bloqueamos toda la app marcando un flag global
+    // y mostrando un banner. Las paginas deben tratar este error en silencio
+    // (igual que isAccessDenied) porque el banner ya comunica el problema.
+    if (error.response?.status === 402 && error.response?.data?.code === 'SUBSCRIPTION_EXPIRED') {
+      error.isSubscriptionExpired = true
+      // Marca global para el banner
+      try {
+        const expiredMsg = error.response?.data?.error || 'Tu suscripción ha expirado'
+        sessionStorage.setItem('prestamax_subscription_expired', expiredMsg)
+        window.dispatchEvent(new CustomEvent('prestamax:subscription-expired', { detail: { message: expiredMsg } }))
+      } catch { /* no critical */ }
+    }
     // 403 errors are access-denied — mark them so pages can handle silently
     if (error.response?.status === 403) {
       error.isAccessDenied = true
@@ -99,6 +111,18 @@ export function isAccessDenied(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const e = error as { isAccessDenied?: boolean; response?: { status?: number } }
   return e.isAccessDenied === true || e.response?.status === 403
+}
+
+/**
+ * Returns true if the error is a 402 subscription-expired response.
+ * Las paginas deben tratar esto como isAccessDenied: ignorar silenciosamente,
+ * porque el banner global ya comunica el problema al usuario.
+ */
+export function isSubscriptionExpired(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { isSubscriptionExpired?: boolean; response?: { status?: number; data?: { code?: string } } }
+  return e.isSubscriptionExpired === true ||
+    (e.response?.status === 402 && e.response?.data?.code === 'SUBSCRIPTION_EXPIRED')
 }
 
 export default api
