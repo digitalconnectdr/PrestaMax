@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Lock, Eye, Database, Share2, ShieldCheck, Bell, Trash2, Mail, Globe } from 'lucide-react'
 
-const LAST_UPDATED = '20 de abril de 2026'
+const LAST_UPDATED = '24 de mayo de 2026'
 const COMPANY = 'JPRS Digital Connect'
 const APP = 'PrestaMax'
 const EMAIL_PRIVACY = 'privacidad@prestamax.com'
@@ -38,18 +38,13 @@ const InfoBox: React.FC<{ color: 'blue' | 'green' | 'amber' | 'red'; title: stri
 
 export const PrivacyPage: React.FC = () => {
   const navigate = useNavigate()
-
   useEffect(() => { window.scrollTo(0, 0) }, [])
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
       <div className="bg-[#1e3a5f] text-white">
         <div className="max-w-4xl mx-auto px-6 py-8">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-blue-200 hover:text-white text-sm mb-6 transition-colors"
-          >
+          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-blue-200 hover:text-white text-sm mb-6 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Volver
           </button>
           <div className="flex items-start gap-4">
@@ -60,14 +55,13 @@ export const PrivacyPage: React.FC = () => {
               <h1 className="text-3xl font-bold mb-1">Política de Privacidad</h1>
               <p className="text-blue-200 text-sm">
                 Última actualización: <strong className="text-white">{LAST_UPDATED}</strong>
-                &nbsp;·&nbsp; Versión 1.0
+                &nbsp;·&nbsp; Versión 1.1
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Commitment banner */}
       <div className="bg-emerald-50 border-b border-emerald-200">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-start gap-3">
           <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
@@ -79,10 +73,7 @@ export const PrivacyPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Body */}
       <div className="max-w-4xl mx-auto px-6 py-12">
-
-        {/* Intro */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 mb-8">
           <p className="text-slate-600 leading-relaxed">
             La presente Política de Privacidad (<strong>"Política"</strong>) describe cómo{' '}
@@ -90,13 +81,10 @@ export const PrivacyPage: React.FC = () => {
             utiliza, almacena y protege la información personal en el contexto del uso de la plataforma{' '}
             <strong>{APP}</strong>. Esta Política aplica a todos los Suscriptores, cobradores, usuarios
             invitados y visitantes que interactúan con {APP}. Forma parte integral de los{' '}
-            <a href="/terms" className="text-[#1e3a5f] font-medium hover:underline">
-              Términos y Condiciones de Uso
-            </a>.
+            <a href="/terms" className="text-[#1e3a5f] font-medium hover:underline">Términos y Condiciones de Uso</a>.
           </p>
         </div>
 
-        {/* Quick reference cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
           <div className="bg-white rounded-xl border border-slate-200 p-5 text-center shadow-sm">
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -123,11 +111,8 @@ export const PrivacyPage: React.FC = () => {
 
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-2">
 
-          {/* 1 */}
           <Section icon={<Eye className="w-5 h-5" />} title="1. Responsable del Tratamiento de Datos">
-            <p>
-              El responsable del tratamiento de los datos personales recopilados a través de {APP} es:
-            </p>
+            <p>El responsable del tratamiento de los datos personales recopilados a través de {APP} es:</p>
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm space-y-1">
               <p><strong>Empresa:</strong> {COMPANY}</p>
               <p><strong>Plataforma:</strong> {APP}</p>
@@ -138,9 +123,7 @@ export const PrivacyPage: React.FC = () => {
             </div>
           </Section>
 
-          {/* 2 */}
           <Section icon={<Database className="w-5 h-5" />} title="2. Datos que Recopilamos">
-
             <p className="font-medium text-slate-700">A. Datos del Suscriptor (prestamista / empresa):</p>
             <ul className="list-disc pl-5 text-sm space-y-1">
               <li>Nombre completo o razón social, correo electrónico y número de teléfono.</li>
@@ -151,10 +134,14 @@ export const PrivacyPage: React.FC = () => {
 
             <p className="font-medium text-slate-700 mt-2">B. Datos de clientes del Suscriptor (personas a quienes se otorgan préstamos):</p>
             <ul className="list-disc pl-5 text-sm space-y-1">
-              <li>Nombre completo, cédula de identidad / pasaporte, fecha de nacimiento.</li>
-              <li>Dirección, teléfono personal y número de WhatsApp.</li>
-              <li>Información financiera: historial de préstamos, pagos, mora y score crediticio.</li>
-              <li>Documentos y contratos de préstamo (cuando el Suscriptor los cargue).</li>
+              <li>Nombre completo, cédula de identidad / pasaporte, fecha de nacimiento, género y estado civil.</li>
+              <li>Dirección personal, dirección de empresa, teléfono personal y número de WhatsApp.</li>
+              <li>Información laboral: empleo, ingresos declarados y referencias personales o comerciales.</li>
+              <li>Información financiera: historial de préstamos, pagos, mora, score crediticio interno y proyecciones.</li>
+              <li>Documentos y contratos de préstamo (cuando el Suscriptor los cargue o los genere desde plantillas).</li>
+              <li>Promesas de pago, gestiones de cobranza y comentarios de seguimiento registrados por cobradores.</li>
+              <li>Datos enviados a través de solicitudes públicas de préstamo (cuando el Suscriptor habilita ese módulo).</li>
+              <li>Mensajes generados para envío vía WhatsApp (no almacenamos el contenido entregado por WhatsApp).</li>
             </ul>
 
             <InfoBox color="amber" title="Importante sobre los datos de clientes finales">
@@ -170,7 +157,6 @@ export const PrivacyPage: React.FC = () => {
             </ul>
           </Section>
 
-          {/* 3 */}
           <Section icon={<Globe className="w-5 h-5" />} title="3. Finalidades del Tratamiento de Datos">
             <p>Procesamos los datos para los siguientes fines:</p>
             <div className="space-y-3 text-sm">
@@ -190,7 +176,6 @@ export const PrivacyPage: React.FC = () => {
             </div>
           </Section>
 
-          {/* 4 */}
           <Section icon={<Lock className="w-5 h-5" />} title="4. Aislamiento de Datos (Modelo Multi-Tenant)">
             <InfoBox color="green" title="Su información está completamente aislada">
               {APP} opera bajo una arquitectura multi-tenant estricta. Los datos de cada Prestamista se
@@ -204,7 +189,6 @@ export const PrivacyPage: React.FC = () => {
             </p>
           </Section>
 
-          {/* 5 */}
           <Section icon={<Share2 className="w-5 h-5" />} title="5. Compartición de Datos con Terceros">
             <p>
               {COMPANY} <strong>no vende, no alquila ni comercializa</strong> los datos personales de
@@ -213,13 +197,12 @@ export const PrivacyPage: React.FC = () => {
             <div className="space-y-4 text-sm">
               <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
                 <p className="font-semibold text-slate-700 mb-1">Proveedores de infraestructura</p>
-                <p className="text-slate-600">
-                  Utilizamos servicios de terceros de confianza para operar la plataforma:
-                </p>
+                <p className="text-slate-600">Utilizamos servicios de terceros de confianza para operar la plataforma:</p>
                 <ul className="list-disc pl-5 mt-2 space-y-1 text-slate-600">
                   <li><strong>Stripe</strong> — Procesamiento seguro de pagos de suscripción. Stripe tiene su propia política de privacidad.</li>
-                  <li><strong>Render / AWS</strong> — Infraestructura de servidores y base de datos.</li>
-                  <li><strong>WhatsApp Business API</strong> — Envío de mensajes de notificación cuando el Suscriptor lo activa.</li>
+                  <li><strong>Vercel</strong> — Hospedaje del frontend (interfaz web) de la plataforma.</li>
+                  <li><strong>Render</strong> — Hospedaje del backend (API) y de la base de datos SQLite.</li>
+                  <li><strong>WhatsApp</strong> — Envío de mensajes de notificación; se utiliza la cuenta del propio Suscriptor (no operada por {COMPANY}).</li>
                 </ul>
                 <p className="mt-2 text-slate-500 text-xs">
                   Todos los proveedores están sujetos a acuerdos de confidencialidad y solo acceden a los datos
@@ -237,17 +220,16 @@ export const PrivacyPage: React.FC = () => {
             </div>
           </Section>
 
-          {/* 6 */}
           <Section icon={<ShieldCheck className="w-5 h-5" />} title="6. Seguridad de los Datos">
             <p>Aplicamos las siguientes medidas técnicas y organizativas para proteger su información:</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
               {[
-                ['🔒 HTTPS / TLS', 'Toda comunicación entre su navegador y nuestros servidores está cifrada.'],
-                ['🔑 Autenticación JWT', 'Los tokens de sesión expiran automáticamente y se validan en cada solicitud.'],
-                ['👥 Permisos granulares', 'Cada usuario solo accede a las funciones que el Prestamista le autoriza explícitamente.'],
-                ['🏢 Aislamiento por tenant', 'Todas las consultas a la base de datos incluyen filtros obligatorios por tenant_id.'],
-                ['📋 Registros de auditoría', 'Las acciones críticas quedan registradas con usuario, fecha y hora.'],
-                ['🛡️ Protección de contraseñas', 'Las contraseñas se almacenan con hash bcrypt (sin texto plano).'],
+                ['HTTPS / TLS', 'Toda comunicación entre su navegador y nuestros servidores está cifrada.'],
+                ['Autenticación JWT', 'Los tokens de sesión expiran automáticamente y se validan en cada solicitud.'],
+                ['Permisos granulares', 'Cada usuario solo accede a las funciones que el Prestamista le autoriza explícitamente.'],
+                ['Aislamiento por tenant', 'Todas las consultas a la base de datos incluyen filtros obligatorios por tenant_id.'],
+                ['Registros de auditoría', 'Las acciones críticas quedan registradas con usuario, fecha y hora.'],
+                ['Protección de contraseñas', 'Las contraseñas se almacenan con hash bcrypt (sin texto plano).'],
               ].map(([title, desc]) => (
                 <div key={title as string} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <p className="font-medium text-slate-700 mb-0.5">{title}</p>
@@ -262,7 +244,6 @@ export const PrivacyPage: React.FC = () => {
             </InfoBox>
           </Section>
 
-          {/* 7 */}
           <Section icon={<Database className="w-5 h-5" />} title="7. Retención y Eliminación de Datos">
             <p>Los datos se conservan de acuerdo con las siguientes reglas:</p>
             <div className="overflow-x-auto">
@@ -297,7 +278,6 @@ export const PrivacyPage: React.FC = () => {
             </p>
           </Section>
 
-          {/* 8 */}
           <Section icon={<Bell className="w-5 h-5" />} title="8. Cookies y Tecnologías de Seguimiento">
             <p>
               {APP} utiliza cookies técnicas estrictamente necesarias para el funcionamiento de la sesión
@@ -310,7 +290,6 @@ export const PrivacyPage: React.FC = () => {
             </p>
           </Section>
 
-          {/* 9 */}
           <Section icon={<ShieldCheck className="w-5 h-5" />} title="9. Derechos del Suscriptor y sus Clientes">
             <p>
               De conformidad con la legislación aplicable en la {JURISDICTION}, el Suscriptor y, en su
@@ -326,22 +305,19 @@ export const PrivacyPage: React.FC = () => {
                 ['Limitación', 'Solicitar la limitación del tratamiento en ciertos supuestos.'],
               ].map(([right, desc]) => (
                 <div key={right as string} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="font-semibold text-slate-700 mb-0.5">✓ Derecho de {right}</p>
+                  <p className="font-semibold text-slate-700 mb-0.5">Derecho de {right}</p>
                   <p className="text-slate-500 text-xs">{desc}</p>
                 </div>
               ))}
             </div>
             <p>
               Para ejercer cualquiera de estos derechos, escriba a{' '}
-              <a href={`mailto:${EMAIL_PRIVACY}`} className="text-[#1e3a5f] font-medium hover:underline">
-                {EMAIL_PRIVACY}
-              </a>{' '}
+              <a href={`mailto:${EMAIL_PRIVACY}`} className="text-[#1e3a5f] font-medium hover:underline">{EMAIL_PRIVACY}</a>{' '}
               indicando su nombre, correo de cuenta y el derecho que desea ejercer.
               Responderemos en un plazo máximo de <strong>15 días hábiles</strong>.
             </p>
           </Section>
 
-          {/* 10 */}
           <Section icon={<Trash2 className="w-5 h-5" />} title="10. Notificación de Brechas de Seguridad">
             <p>
               En caso de detectar una brecha de seguridad que afecte datos personales de Suscriptores,
@@ -357,17 +333,15 @@ export const PrivacyPage: React.FC = () => {
             </ul>
           </Section>
 
-          {/* 11 */}
           <Section icon={<Globe className="w-5 h-5" />} title="11. Transferencias Internacionales de Datos">
             <p>
               Los servidores de {APP} pueden estar ubicados fuera de la {JURISDICTION} (en proveedores
-              como AWS o Render con centros de datos en EE.UU. u otras regiones). Al utilizar el servicio,
-              el Suscriptor consiente la transferencia y almacenamiento de sus datos en dichas ubicaciones,
-              siempre bajo los estándares de seguridad descritos en esta Política.
+              como Vercel, Render, Stripe u otros, con centros de datos en EE.UU. u otras regiones). Al
+              utilizar el servicio, el Suscriptor consiente la transferencia y almacenamiento de sus
+              datos en dichas ubicaciones, siempre bajo los estándares de seguridad descritos en esta Política.
             </p>
           </Section>
 
-          {/* 12 */}
           <Section icon={<Bell className="w-5 h-5" />} title="12. Cambios a esta Política">
             <p>
               {COMPANY} puede actualizar esta Política periódicamente. Los cambios sustanciales serán
@@ -377,7 +351,6 @@ export const PrivacyPage: React.FC = () => {
             </p>
           </Section>
 
-          {/* 13 */}
           <Section icon={<Mail className="w-5 h-5" />} title="13. Contacto — Oficial de Privacidad">
             <p>
               Para cualquier consulta, solicitud o reclamo relacionado con esta Política de Privacidad,
@@ -396,7 +369,6 @@ export const PrivacyPage: React.FC = () => {
 
         </div>
 
-        {/* Footer */}
         <div className="mt-8 text-center text-xs text-slate-400 space-y-1">
           <p>© {new Date().getFullYear()} {COMPANY}. Todos los derechos reservados.</p>
           <p>

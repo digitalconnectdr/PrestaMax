@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Shield, FileText, AlertTriangle, Users, CreditCard, Server, Scale, Mail } from 'lucide-react'
 
-const LAST_UPDATED = '20 de abril de 2026'
+const LAST_UPDATED = '24 de mayo de 2026'
 const COMPANY = 'JPRS Digital Connect'
 const APP = 'PrestaMax'
 const EMAIL_LEGAL = 'legal@prestamax.com'
@@ -30,18 +30,13 @@ const Clause: React.FC<{ number: string; title: string; children: React.ReactNod
 
 export const TermsPage: React.FC = () => {
   const navigate = useNavigate()
-
   useEffect(() => { window.scrollTo(0, 0) }, [])
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
       <div className="bg-[#1e3a5f] text-white">
         <div className="max-w-4xl mx-auto px-6 py-8">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-blue-200 hover:text-white text-sm mb-6 transition-colors"
-          >
+          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-blue-200 hover:text-white text-sm mb-6 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Volver
           </button>
           <div className="flex items-start gap-4">
@@ -52,14 +47,13 @@ export const TermsPage: React.FC = () => {
               <h1 className="text-3xl font-bold mb-1">Términos y Condiciones de Uso</h1>
               <p className="text-blue-200 text-sm">
                 Última actualización: <strong className="text-white">{LAST_UPDATED}</strong>
-                &nbsp;·&nbsp; Versión 1.0
+                &nbsp;·&nbsp; Versión 1.1
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Intro banner */}
       <div className="bg-amber-50 border-b border-amber-200">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -71,10 +65,7 @@ export const TermsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Body */}
       <div className="max-w-4xl mx-auto px-6 py-12">
-
-        {/* Intro */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 mb-8">
           <p className="text-slate-600 leading-relaxed">
             Los presentes Términos y Condiciones de Uso (<strong>"Términos"</strong>) rigen el acceso y uso de la
@@ -86,7 +77,6 @@ export const TermsPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Sections */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 space-y-2">
 
           <Section icon={<FileText className="w-5 h-5" />} title="1. Descripción del Servicio">
@@ -94,8 +84,11 @@ export const TermsPage: React.FC = () => {
               <p>
                 {APP} es una plataforma de software basada en la nube que permite a prestamistas, empresas
                 financieras y personas naturales gestionar préstamos personales, préstamos tipo "san", préstamos
-                comerciales y préstamos con garantía, incluyendo la gestión de clientes, cobradores, pagos,
-                recibos, contratos y reportes.
+                comerciales y préstamos con garantía. La plataforma incluye, entre otros, los siguientes módulos:
+                gestión de clientes, préstamos con amortización automática, pagos y recibos digitales, contratos
+                con plantillas configurables, cobranzas con asignación a cobradores, promesas de pago, calculadora
+                de préstamos, solicitudes públicas en línea, integración con WhatsApp para notificaciones,
+                reportes ejecutivos y proyecciones de cartera.
               </p>
             </Clause>
             <Clause number="1.2" title="Modelo multi-inquilino">
@@ -228,19 +221,19 @@ export const TermsPage: React.FC = () => {
             <Clause number="5.2" title="Privacidad y tratamiento de datos">
               <p>
                 El tratamiento de datos personales se rige por nuestra{' '}
-                <a href="/privacy" className="text-[#1e3a5f] font-medium hover:underline">
-                  Política de Privacidad
-                </a>
-                , la cual forma parte integral de estos Términos.
+                <a href="/privacy" className="text-[#1e3a5f] font-medium hover:underline">Política de Privacidad</a>,
+                la cual forma parte integral de estos Términos.
               </p>
             </Clause>
             <Clause number="5.3" title="Seguridad">
               <p>
                 {COMPANY} implementa medidas técnicas y organizativas razonables de seguridad cibernética
-                para proteger los datos alojados en la plataforma, incluyendo cifrado en tránsito (TLS/HTTPS),
-                autenticación con tokens JWT, y controles de acceso basados en roles y permisos granulares.
-                Sin embargo, ningún sistema es completamente inexpugnable y {COMPANY} no garantiza la
-                seguridad absoluta de los datos.
+                para proteger los datos alojados en la plataforma, incluyendo: cifrado en tránsito (TLS/HTTPS),
+                autenticación con tokens JWT firmados (HS256), contraseñas almacenadas con hashing bcrypt,
+                cabeceras de seguridad HTTP (Helmet), limitación de tasa de peticiones (rate limiting),
+                aislamiento por inquilino (multi-tenant) a nivel de base de datos y controles de acceso
+                basados en roles y permisos granulares. Sin embargo, ningún sistema es completamente
+                inexpugnable y {COMPANY} no garantiza la seguridad absoluta de los datos.
               </p>
             </Clause>
             <Clause number="5.4" title="Disponibilidad del servicio">
@@ -248,14 +241,52 @@ export const TermsPage: React.FC = () => {
                 {COMPANY} procura mantener una disponibilidad del servicio del{' '}
                 <strong>99% mensual</strong> (excluyendo mantenimientos programados). No se garantiza
                 disponibilidad ininterrumpida y {COMPANY} no se responsabiliza por interrupciones causadas
-                por fuerzas mayores, fallas de proveedores de infraestructura (AWS, Render, Supabase) u
-                otros eventos fuera de su control razonable.
+                por fuerzas mayores, fallas de proveedores de infraestructura (incluyendo, sin limitación,
+                Vercel para el frontend, Render para el backend, Stripe para procesamiento de pagos, y
+                el proveedor de mensajería de WhatsApp Business) u otros eventos fuera de su control razonable.
               </p>
             </Clause>
             <Clause number="5.5" title="Exportación y portabilidad de datos">
               <p>
                 El Suscriptor puede solicitar la exportación de sus datos en formatos estándar (CSV, PDF)
                 en cualquier momento mientras su cuenta esté activa, sin costo adicional.
+              </p>
+            </Clause>
+          </Section>
+
+          <Section icon={<Server className="w-5 h-5" />} title="5-bis. Integraciones y Servicios de Terceros">
+            <Clause number="5b.1" title="WhatsApp">
+              <p>
+                {APP} permite generar mensajes de WhatsApp (recordatorios de pago, recibos, mensajes desde
+                la calculadora, etc.). El envío del mensaje se realiza desde el dispositivo o la cuenta de
+                WhatsApp del propio Suscriptor: <strong>{COMPANY} no opera ni controla la entrega final
+                del mensaje</strong>. El Suscriptor es el único responsable de cumplir con las políticas
+                de uso de WhatsApp y con las leyes aplicables sobre comunicaciones electrónicas.
+              </p>
+            </Clause>
+            <Clause number="5b.2" title="Solicitudes públicas de préstamo">
+              <p>
+                Cuando el Suscriptor habilita el módulo de solicitudes públicas, {APP} expone una página
+                accesible mediante un enlace único para que potenciales clientes completen su información.
+                Los datos recibidos son <strong>propiedad del Suscriptor</strong>, quien es responsable de
+                obtener el consentimiento informado del solicitante para el tratamiento de sus datos
+                personales según la legislación aplicable.
+              </p>
+            </Clause>
+            <Clause number="5b.3" title="Stripe y procesamiento de pagos de suscripción">
+              <p>
+                El procesamiento de pagos de la suscripción a {APP} se realiza a través de Stripe, Inc.
+                {COMPANY} no almacena datos completos de tarjetas de crédito en sus servidores. El uso de
+                Stripe se rige por sus propios{' '}
+                <a href="https://stripe.com/legal/consumer" target="_blank" rel="noopener noreferrer" className="text-[#1e3a5f] hover:underline">términos</a> y políticas de privacidad.
+              </p>
+            </Clause>
+            <Clause number="5b.4" title="Generación de contratos y documentos">
+              <p>
+                Los contratos, recibos y documentos generados por {APP} se basan en plantillas configurables
+                por el Suscriptor. {COMPANY} <strong>no garantiza la validez jurídica</strong> de los
+                contratos generados; corresponde al Suscriptor asegurarse de que las plantillas cumplan
+                con la normativa aplicable a su actividad y jurisdicción.
               </p>
             </Clause>
           </Section>
@@ -328,7 +359,7 @@ export const TermsPage: React.FC = () => {
                 adicionales para su exportación.
               </p>
             </Clause>
-            <Clause number="8.2" title="Cancelación por {COMPANY}">
+            <Clause number="8.2" title="Cancelación por el Proveedor">
               <p>
                 {COMPANY} puede terminar o suspender el acceso del Suscriptor en cualquier momento,
                 con o sin previo aviso, si se determina una violación grave de estos Términos, fraude,
@@ -395,7 +426,6 @@ export const TermsPage: React.FC = () => {
 
         </div>
 
-        {/* Footer note */}
         <div className="mt-8 text-center text-xs text-slate-400 space-y-1">
           <p>© {new Date().getFullYear()} {COMPANY}. Todos los derechos reservados.</p>
           <p>
