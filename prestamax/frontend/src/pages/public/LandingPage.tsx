@@ -202,7 +202,7 @@ const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg flex items-center justify-center">
+              <div className="w-9 h-9 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] rounded-lg flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold text-slate-900">PrestaMax</span>
@@ -216,7 +216,7 @@ const LandingPage: React.FC = () => {
               <Link to="/login" className="text-sm text-slate-600 hover:text-slate-900">Iniciar sesión</Link>
               <Link
                 to="/register"
-                className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition"
+                className="px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#152a45] transition"
               >
                 Empezar gratis
               </Link>
@@ -242,7 +242,7 @@ const LandingPage: React.FC = () => {
               <Link
                 to="/register"
                 onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded text-center"
+                className="block px-3 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded text-center"
               >
                 Empezar gratis
               </Link>
@@ -255,13 +255,13 @@ const LandingPage: React.FC = () => {
       <section className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
           <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-emerald-700 mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700 mb-6">
               <Zap className="w-3.5 h-3.5" />
               10 días de prueba gratis · Sin tarjeta de crédito
             </div>
             <h1 className="text-4xl md:text-6xl font-bold text-slate-900 leading-tight">
               Gestiona tu negocio de préstamos
-              <span className="block text-emerald-600">de forma profesional</span>
+              <span className="block text-[#f59e0b]">de forma profesional</span>
             </h1>
             <p className="mt-6 text-lg md:text-xl text-slate-600 max-w-2xl mx-auto">
               PrestaMax es el sistema completo para administrar clientes, préstamos, cobranzas, pagos y contratos.
@@ -270,7 +270,7 @@ const LandingPage: React.FC = () => {
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <Link
                 to="/register"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/30"
               >
                 Empezar gratis
                 <ArrowRight className="w-4 h-4" />
@@ -284,15 +284,15 @@ const LandingPage: React.FC = () => {
             </div>
             <div className="mt-8 flex items-center justify-center gap-6 text-sm text-slate-500">
               <div className="flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-emerald-600" />
+                <Check className="w-4 h-4 text-[#1e3a5f]" />
                 Sin instalación
               </div>
               <div className="flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-emerald-600" />
+                <Check className="w-4 h-4 text-[#1e3a5f]" />
                 Cancela cuando quieras
               </div>
               <div className="hidden sm:flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-emerald-600" />
+                <Check className="w-4 h-4 text-[#1e3a5f]" />
                 Multi-moneda
               </div>
             </div>
@@ -300,7 +300,7 @@ const LandingPage: React.FC = () => {
 
           {/* Hero mockup illustration */}
           <div className="mt-16 relative max-w-5xl mx-auto">
-            <div className="bg-gradient-to-br from-emerald-500/10 via-blue-500/10 to-purple-500/10 rounded-2xl p-2 md:p-4 shadow-2xl">
+            <div className="bg-gradient-to-br from-[#1e3a5f]/10 via-[#f59e0b]/10 to-blue-500/10 rounded-2xl p-2 md:p-4 shadow-2xl">
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="flex items-center gap-1.5 px-4 py-3 bg-slate-50 border-b border-slate-200">
                   <div className="w-3 h-3 rounded-full bg-red-400" />
@@ -310,23 +310,23 @@ const LandingPage: React.FC = () => {
                 </div>
                 <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { label: 'Cartera activa', value: '$ 2.4M', color: 'emerald' },
-                    { label: 'Clientes', value: '347', color: 'blue' },
-                    { label: 'Préstamos activos', value: '142', color: 'purple' },
-                    { label: 'Cobrado este mes', value: '$ 412K', color: 'orange' },
+                    { label: 'Cartera activa', value: '$ 2.4M', colorClass: 'text-[#1e3a5f]' },
+                    { label: 'Clientes', value: '347', colorClass: 'text-blue-600' },
+                    { label: 'Préstamos activos', value: '142', colorClass: 'text-purple-600' },
+                    { label: 'Cobrado este mes', value: '$ 412K', colorClass: 'text-[#f59e0b]' },
                   ].map((stat, i) => (
                     <div key={i} className="p-4 bg-slate-50 rounded-lg border border-slate-100">
                       <div className="text-xs text-slate-500">{stat.label}</div>
-                      <div className={`mt-1 text-xl md:text-2xl font-bold text-${stat.color}-600`}>{stat.value}</div>
+                      <div className={`mt-1 text-xl md:text-2xl font-bold ${stat.colorClass}`}>{stat.value}</div>
                     </div>
                   ))}
                 </div>
                 <div className="px-6 pb-6">
-                  <div className="h-32 bg-gradient-to-t from-emerald-100 to-emerald-50 rounded-lg flex items-end p-3 gap-1.5">
+                  <div className="h-32 bg-gradient-to-t from-blue-100 to-slate-50 rounded-lg flex items-end p-3 gap-1.5">
                     {[40, 65, 50, 75, 60, 85, 70, 90, 75, 95, 80, 100].map((h, i) => (
                       <div
                         key={i}
-                        className="flex-1 bg-emerald-500 rounded-t opacity-80"
+                        className="flex-1 bg-[#1e3a5f] rounded-t opacity-80"
                         style={{ height: `${h}%` }}
                       />
                     ))}
@@ -343,22 +343,22 @@ const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             <div className="flex flex-col items-center gap-1">
-              <Smartphone className="w-6 h-6 text-emerald-600" />
+              <Smartphone className="w-6 h-6 text-[#1e3a5f]" />
               <div className="text-sm font-medium text-slate-900">100% Web</div>
               <div className="text-xs text-slate-500">Desde cualquier dispositivo</div>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <Lock className="w-6 h-6 text-emerald-600" />
+              <Lock className="w-6 h-6 text-[#1e3a5f]" />
               <div className="text-sm font-medium text-slate-900">Datos cifrados</div>
               <div className="text-xs text-slate-500">HTTPS y aislamiento por empresa</div>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <Cloud className="w-6 h-6 text-emerald-600" />
+              <Cloud className="w-6 h-6 text-[#1e3a5f]" />
               <div className="text-sm font-medium text-slate-900">Respaldos diarios</div>
               <div className="text-xs text-slate-500">Tu información siempre segura</div>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <ShieldCheck className="w-6 h-6 text-emerald-600" />
+              <ShieldCheck className="w-6 h-6 text-[#f59e0b]" />
               <div className="text-sm font-medium text-slate-900">Multi-país y multi-moneda</div>
               <div className="text-xs text-slate-500">12 monedas · ES / EN / PT</div>
             </div>
@@ -384,10 +384,10 @@ const LandingPage: React.FC = () => {
               return (
                 <div
                   key={i}
-                  className="p-6 bg-white rounded-xl border border-slate-200 hover:border-emerald-300 hover:shadow-md transition"
+                  className="p-6 bg-white rounded-xl border border-slate-200 hover:border-[#1e3a5f]/40 hover:shadow-md transition"
                 >
-                  <div className="w-11 h-11 bg-emerald-50 rounded-lg flex items-center justify-center">
-                    <Icon className="w-5 h-5 text-emerald-600" />
+                  <div className="w-11 h-11 bg-amber-50 rounded-lg flex items-center justify-center">
+                    <Icon className="w-5 h-5 text-[#f59e0b]" />
                   </div>
                   <h3 className="mt-4 text-lg font-semibold text-slate-900">{feature.title}</h3>
                   <p className="mt-2 text-sm text-slate-600 leading-relaxed">{feature.description}</p>
@@ -416,13 +416,13 @@ const LandingPage: React.FC = () => {
                 key={plan.name}
                 className={`relative flex flex-col p-6 bg-white rounded-2xl border-2 transition ${
                   plan.highlighted
-                    ? 'border-emerald-500 shadow-xl shadow-emerald-500/10 scale-100 md:scale-105'
+                    ? 'border-[#f59e0b] shadow-xl shadow-[#f59e0b]/20 scale-100 md:scale-105'
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
                 {plan.highlighted && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="px-3 py-1 bg-emerald-600 text-white text-xs font-medium rounded-full">
+                    <span className="px-3 py-1 bg-[#f59e0b] text-white text-xs font-medium rounded-full">
                       {plan.ctaLabel}
                     </span>
                   </div>
@@ -454,7 +454,7 @@ const LandingPage: React.FC = () => {
                 <ul className="mt-4 space-y-2 flex-1">
                   {plan.features.map((feat, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                      <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                      <Check className="w-4 h-4 text-[#1e3a5f] flex-shrink-0 mt-0.5" />
                       <span>{feat}</span>
                     </li>
                   ))}
@@ -464,7 +464,7 @@ const LandingPage: React.FC = () => {
                   to="/register"
                   className={`mt-6 block text-center px-4 py-2.5 rounded-lg font-medium transition ${
                     plan.highlighted
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      ? 'bg-[#1e3a5f] text-white hover:bg-[#152a45]'
                       : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                   }`}
                 >
@@ -481,17 +481,17 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* CTA banner */}
-      <section className="py-16 md:py-20 bg-gradient-to-br from-emerald-600 to-emerald-700">
+      <section className="py-16 md:py-20 bg-gradient-to-br from-[#1e3a5f] to-[#152a45]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-white">
             Empieza a profesionalizar tu negocio hoy
           </h2>
-          <p className="mt-4 text-lg text-emerald-50">
+          <p className="mt-4 text-lg text-blue-100">
             10 días de prueba gratis. Sin tarjeta de crédito. Configura tu cuenta en minutos.
           </p>
           <Link
             to="/register"
-            className="mt-8 inline-flex items-center gap-2 px-8 py-3 bg-white text-emerald-700 font-semibold rounded-lg hover:bg-emerald-50 transition shadow-lg"
+            className="mt-8 inline-flex items-center gap-2 px-8 py-3 bg-white text-[#1e3a5f] font-semibold rounded-lg hover:bg-slate-50 transition shadow-lg"
           >
             Crear cuenta gratis
             <ArrowRight className="w-4 h-4" />
@@ -538,7 +538,7 @@ const LandingPage: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] rounded-lg flex items-center justify-center">
                   <DollarSign className="w-4 h-4 text-white" />
                 </div>
                 <span className="text-lg font-bold text-white">PrestaMax</span>
