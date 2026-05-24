@@ -576,4 +576,16 @@ const LandingPage: React.FC = () => {
 
           <div className="mt-10 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-slate-400">
-              © {new Date().getFullYear()} PrestaMax. Todos los derecho
+              © {new Date().getFullYear()} PrestaMax. Todos los derechos reservados.
+            </p>
+            <p className="text-xs text-slate-400">
+              PrestaMax — Powered by JPRS Digital Connect
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+export default LandingPage
