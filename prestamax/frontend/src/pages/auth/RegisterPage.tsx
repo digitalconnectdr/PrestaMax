@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useTenant } from '@/hooks/useTenant'
 import Button from '@/components/ui/Button'
@@ -136,9 +136,11 @@ const RegisterPage: React.FC = () => {
       {/* Left Panel */}
       <div className="hidden lg:flex lg:w-5/12 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] text-white flex-col justify-between p-12">
         <div>
-          <h1 className="text-4xl font-bold mb-2">
-            <span className="text-[#f59e0b]">Presta</span>Max
-          </h1>
+          <Link to="/" className="inline-block hover:opacity-90 transition-opacity" title="Volver al inicio">
+            <h1 className="text-4xl font-bold mb-2">
+              <span className="text-[#f59e0b]">Presta</span>Max
+            </h1>
+          </Link>
           <p className="text-blue-200 text-lg">Gestión Profesional de Préstamos</p>
         </div>
 

@@ -174,8 +174,8 @@ const faqs = [
     a: 'No. PrestaMax es 100% web. Funciona desde cualquier navegador moderno en computadora, tableta o celular. No requiere instalación ni mantenimiento.',
   },
   {
-    q: '¿Sirve para República Dominicana?',
-    a: 'Sí. PrestaMax fue diseñado para el mercado dominicano: cálculos en RD$, integración con WhatsApp, plantillas de contratos locales y soporte en español.',
+    q: '¿En qué países y monedas funciona PrestaMax?',
+    a: 'PrestaMax es multi-país y multi-moneda. Soporta 12 monedas: Peso Dominicano (DOP), Dólar Estadounidense (USD), Euro (EUR), Gourde Haitiano (HTG), Peso Mexicano (MXN), Peso Colombiano (COP), Sol Peruano (PEN), Peso Chileno (CLP), Boliviano (BOB), Peso Uruguayo (UYU), Real Brasileño (BRL) y Quetzal Guatemalteco (GTQ). Toda la interfaz está en español, inglés y portugués.',
   },
   {
     q: '¿Qué pasa si excedo los límites de mi plan?',
@@ -265,7 +265,7 @@ const LandingPage: React.FC = () => {
             </h1>
             <p className="mt-6 text-lg md:text-xl text-slate-600 max-w-2xl mx-auto">
               PrestaMax es el sistema completo para administrar clientes, préstamos, cobranzas, pagos y contratos.
-              Diseñado para prestamistas y financieras en República Dominicana.
+              Multi-país y multi-moneda: soporte para 12 monedas de Latinoamérica, USD y EUR.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <Link
@@ -293,7 +293,7 @@ const LandingPage: React.FC = () => {
               </div>
               <div className="hidden sm:flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-emerald-600" />
-                Soporte en español
+                Multi-moneda
               </div>
             </div>
           </div>
@@ -310,10 +310,10 @@ const LandingPage: React.FC = () => {
                 </div>
                 <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { label: 'Cartera activa', value: 'RD$ 2.4M', color: 'emerald' },
+                    { label: 'Cartera activa', value: '$ 2.4M', color: 'emerald' },
                     { label: 'Clientes', value: '347', color: 'blue' },
                     { label: 'Préstamos activos', value: '142', color: 'purple' },
-                    { label: 'Cobrado este mes', value: 'RD$ 412K', color: 'orange' },
+                    { label: 'Cobrado este mes', value: '$ 412K', color: 'orange' },
                   ].map((stat, i) => (
                     <div key={i} className="p-4 bg-slate-50 rounded-lg border border-slate-100">
                       <div className="text-xs text-slate-500">{stat.label}</div>
@@ -359,8 +359,8 @@ const LandingPage: React.FC = () => {
             </div>
             <div className="flex flex-col items-center gap-1">
               <ShieldCheck className="w-6 h-6 text-emerald-600" />
-              <div className="text-sm font-medium text-slate-900">Soporte en español</div>
-              <div className="text-xs text-slate-500">Equipo local</div>
+              <div className="text-sm font-medium text-slate-900">Multi-país y multi-moneda</div>
+              <div className="text-xs text-slate-500">12 monedas · ES / EN / PT</div>
             </div>
           </div>
         </div>
@@ -544,7 +544,7 @@ const LandingPage: React.FC = () => {
                 <span className="text-lg font-bold text-white">PrestaMax</span>
               </div>
               <p className="mt-3 text-sm text-slate-400">
-                Sistema profesional de gestión de préstamos para República Dominicana.
+                Sistema profesional de gestión de préstamos multi-país y multi-moneda.
               </p>
             </div>
 
@@ -576,16 +576,4 @@ const LandingPage: React.FC = () => {
 
           <div className="mt-10 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-slate-400">
-              © {new Date().getFullYear()} PrestaMax. Todos los derechos reservados.
-            </p>
-            <p className="text-xs text-slate-400">
-              Hecho con orgullo en República Dominicana 🇩🇴
-            </p>
-          </div>
-        </div>
-      </footer>
-    </div>
-  )
-}
-
-export default LandingPage
+              © {new Date().getFullYear()} PrestaMax. Todos los derecho

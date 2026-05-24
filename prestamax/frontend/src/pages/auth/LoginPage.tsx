@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useTenant } from '@/hooks/useTenant'
 import Button from '@/components/ui/Button'
@@ -61,10 +61,12 @@ const LoginPage: React.FC = () => {
     <div className="min-h-screen flex">
       <div className="hidden md:flex md:w-1/2 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] text-white flex-col justify-between p-10 overflow-y-auto">
         <div>
-          <h1 className="text-4xl font-bold mb-3">
-            <span className="text-white">Presta</span>
-            <span className="text-[#f59e0b]">Max</span>
-          </h1>
+          <Link to="/" className="inline-block mb-3 hover:opacity-90 transition-opacity" title="Volver al inicio">
+            <h1 className="text-4xl font-bold">
+              <span className="text-white">Presta</span>
+              <span className="text-[#f59e0b]">Max</span>
+            </h1>
+          </Link>
           <p className="text-blue-200 text-base">
             {currentLocale === 'en' ? 'Personal and commercial loan management platform for professional lenders.' : currentLocale === 'pt' ? 'Plataforma de gestao de emprestimos pessoais e comerciais para credores profissionais.' : 'Plataforma de gestion de prestamos personales y comerciales para prestamistas profesionales.'}
           </p>
@@ -114,10 +116,12 @@ const LoginPage: React.FC = () => {
         </div>
         <div className="w-full max-w-sm">
           <div className="md:hidden mb-8">
-            <h1 className="text-3xl font-bold mb-1">
-              <span className="text-[#1e3a5f]">Presta</span>
-              <span className="text-[#f59e0b]">Max</span>
-            </h1>
+            <Link to="/" className="inline-block mb-1 hover:opacity-90 transition-opacity" title="Volver al inicio">
+              <h1 className="text-3xl font-bold">
+                <span className="text-[#1e3a5f]">Presta</span>
+                <span className="text-[#f59e0b]">Max</span>
+              </h1>
+            </Link>
             <p className="text-slate-500 text-sm">
               {currentLocale === 'en' ? 'Loan management platform' : currentLocale === 'pt' ? 'Plataforma de gestao de emprestimos' : 'Plataforma de gestion de prestamos'}
             </p>
