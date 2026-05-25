@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now, r2 } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { generateDraft } from '../services/whatsappService';
 
 const router = Router();
 
@@ -364,6 +365,8 @@ router.post('/:id/disburse', authenticate, requireTenant, requirePermission('loa
 
     const disbLoan = db.prepare('SELECT loan_number FROM loans WHERE id=?').get(req.params.id) as any;
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'disbursed','loan',req.params.id,`Desembolsó el préstamo ${disbLoan?.loan_number||req.params.id} por RD$${disbAmount.toLocaleString()}`,JSON.stringify({disbursed_amount:disbAmount,bank_account_id:bankAccountId}));
+    // Generar draft de WhatsApp transaccional (loan_created). Best-effort.
+    generateDraft(db, req.tenant.id, 'loan_created', { loan_id: req.params.id, user_id: req.user.id });
     res.json({ loan: db.prepare('SELECT * FROM loans WHERE id=?').get(req.params.id), installments: schedule });
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to disburse loan' }); }
 });

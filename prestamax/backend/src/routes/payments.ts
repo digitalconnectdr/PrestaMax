@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now, r2 } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { generateDraft } from '../services/whatsappService';
 
 const router = Router();
 
@@ -616,6 +617,9 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
 
     // ── Auto-update client score after payment ────────────────────────────────
     recalcClientScore(db, loan.client_id);
+
+    // ── Generar draft de WhatsApp transaccional (payment_received). Best-effort.
+    generateDraft(db, req.tenant.id, 'payment_received', { payment_id: payId, loan_id: loan.id, user_id: req.user.id });
 
     res.status(201).json({
       payment: db.prepare('SELECT * FROM payments WHERE id=?').get(payId),

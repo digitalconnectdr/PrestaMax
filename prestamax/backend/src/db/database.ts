@@ -626,6 +626,29 @@ export function initializeDatabase(): void {
     END WHERE score BETWEEN 1 AND 5`);
   } catch(_) {}
 
+  // ── Mayo 2026: WhatsApp transaccional ──
+  // is_draft=1 mensajes generados auto por eventos, aun no marcados como enviados
+  try { db.exec(`ALTER TABLE whatsapp_messages ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0`); } catch(_) {}
+  try { db.exec(`ALTER TABLE whatsapp_messages ADD COLUMN client_id TEXT`); } catch(_) {}
+  // payment_id solo se popula para evento 'payment_received'
+  try { db.exec(`ALTER TABLE whatsapp_messages ADD COLUMN payment_id TEXT`); } catch(_) {}
+
+  // Configuracion por evento, por tenant. Switch on/off + template id opcional
+  db.exec(`CREATE TABLE IF NOT EXISTS whatsapp_event_settings (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    event TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    template_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(tenant_id, event),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (template_id) REFERENCES whatsapp_templates(id)
+  )`);
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_wa_msgs_tenant_draft ON whatsapp_messages(tenant_id, is_draft)`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_wa_event_settings ON whatsapp_event_settings(tenant_id, event)`); } catch(_) {}
+
   // ── Loan requests: additional fields for auto-convert ──
   try { db.exec(`ALTER TABLE loan_requests ADD COLUMN product_id TEXT`); } catch(_) {}
   try { db.exec(`ALTER TABLE loan_requests ADD COLUMN rate REAL`); } catch(_) {}
