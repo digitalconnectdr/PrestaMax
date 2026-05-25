@@ -9,6 +9,8 @@ import { MessageCircle, Send, Clock, CheckCheck, AlertCircle, Phone, Edit2, Tras
 import { formatDate, formatCurrency } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import WhatsAppOutboxTab from './WhatsAppOutboxTab'
+import WhatsAppEventSettingsTab from './WhatsAppEventSettingsTab'
 
 interface WhatsAppMessage {
   id: string
@@ -59,7 +61,7 @@ const WhatsAppPage: React.FC = () => {
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'messages' | 'send' | 'templates'>('messages')
+  const [activeTab, setActiveTab] = useState<'outbox' | 'messages' | 'send' | 'templates' | 'settings'>('outbox')
   const [searchTerm, setSearchTerm] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [tenantData, setTenantData] = useState<any>({})
@@ -292,9 +294,11 @@ const WhatsAppPage: React.FC = () => {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-slate-200">
         {([
+          { id: 'outbox', label: 'Bandeja', show: true },
           { id: 'messages', label: 'Historial', show: true },
           { id: 'send', label: 'Enviar Mensaje', show: can('whatsapp.send') },
           { id: 'templates', label: 'Plantillas', show: can('whatsapp.templates') },
+          { id: 'settings', label: 'Configuración', show: can('whatsapp.templates') },
         ] as const).filter(t => t.show).map((tab) => (
           <button
             key={tab.id}
@@ -309,6 +313,12 @@ const WhatsAppPage: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* Outbox Tab (Fase A - drafts automaticos) */}
+      {activeTab === 'outbox' && <WhatsAppOutboxTab />}
+
+      {/* Event Settings Tab (configurar eventos transaccionales) */}
+      {activeTab === 'settings' && <WhatsAppEventSettingsTab />}
 
       {/* Messages History Tab */}
       {activeTab === 'messages' && (
