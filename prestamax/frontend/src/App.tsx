@@ -30,6 +30,7 @@ import LoanRequestPublicPage from '@/pages/public/LoanRequestPublicPage'
 import TermsPage from '@/pages/public/TermsPage'
 import PrivacyPage from '@/pages/public/PrivacyPage'
 import LandingPage from '@/pages/public/LandingPage'
+import HelpPage from '@/pages/help/HelpPage'
 import LoanRequestsPage from '@/pages/requests/LoanRequestsPage'
 import LoanCalculatorPage from '@/pages/calculator/LoanCalculatorPage'
 import BillingPage from '@/pages/billing/BillingPage'
@@ -107,6 +108,8 @@ const AppRoutes: React.FC = () => {
           <Route path="/income" element={<PermissionRoute perm="income.view"><IncomePage /></PermissionRoute>} />
           <Route path="/requests" element={<PermissionRoute perm="requests.view"><LoanRequestsPage /></PermissionRoute>} />
           <Route path="/calculator" element={<PermissionRoute perm="calculator.use"><LoanCalculatorPage /></PermissionRoute>} />
+
+          <Route path="/help" element={<HelpPage />} />
 
           <Route path="/admin" element={<PlatformAdminPage />} />
 

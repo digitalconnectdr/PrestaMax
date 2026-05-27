@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import {
   BarChart3, Users, DollarSign, CreditCard, FileText, FileCheck,
   Truck, MessageCircle, Settings, Package, Users2, MapPin, BookOpen,
-  ReceiptText, LogOut, ChevronLeft, TrendingUp, Landmark, ShieldCheck, ClipboardList, Calculator, CalendarRange, Briefcase
+  ReceiptText, LogOut, ChevronLeft, TrendingUp, Landmark, ShieldCheck, ClipboardList, Calculator, CalendarRange, Briefcase, HelpCircle
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
@@ -86,6 +86,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
         { icon: MapPin,    label: 'Sucursales',        path: '/settings/branches',     show: can('settings.branches') },
         { icon: Landmark,  label: 'Cuentas Bancarias', path: '/settings/bank-accounts',show: can('settings.bank_accounts') },
         { icon: CreditCard,label: 'Mi Suscripción',   path: '/settings/subscription', show: true },
+      ],
+    },
+    {
+      label: 'AYUDA',
+      items: [
+        { icon: HelpCircle, label: 'Guía del Sistema', path: '/help', show: true },
       ],
     },
     ...(isPlatformAdmin ? [{
