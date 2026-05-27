@@ -111,7 +111,7 @@ const FREQ_LABELS: Record<string, string> = {
 
 const AMORT_LABELS: Record<string, string> = {
   fixed_installment: 'Cuota Nivelada',
-  flat_interest: 'Interés Plano',
+  flat_interest: 'Interés',
   interest_only: 'Solo Intereses (Réditos)',
   declining_balance: 'Saldo Decreciente',
 }

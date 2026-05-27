@@ -20,7 +20,7 @@ const FREQ_OPTIONS = [
 
 const AMORT_OPTIONS = [
   { value: 'fixed_installment', label: 'Cuota Nivelada' },
-  { value: 'flat_interest',     label: 'Interés Plano' },
+  { value: 'flat_interest',     label: 'Interés' },
   { value: 'interest_only',     label: 'Solo Intereses (Réditos)' },
   { value: 'declining_balance', label: 'Saldo Decreciente' },
 ]

@@ -103,10 +103,10 @@ const KpiCard: React.FC<{
     <div className="flex items-start justify-between">
       <div className="flex-1 min-w-0">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{label}</p>
-        <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
+        <p className={`text-xl md:text-2xl font-bold mt-1 ${color} break-words`}>{value}</p>
         {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
       </div>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ml-3 ${bg}`}>
+      <div className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center flex-shrink-0 ml-2 md:ml-3 ${bg}`}>
         {icon}
       </div>
     </div>
@@ -352,7 +352,7 @@ const ProjectionPage: React.FC = () => {
           </div>
 
           {/* ── KPI Cards ──────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             <KpiCard
               label="Total a Cobrar"
               value={formatCurrency(s.totalProjected)}

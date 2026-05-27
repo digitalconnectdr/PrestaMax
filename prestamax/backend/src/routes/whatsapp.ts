@@ -6,7 +6,17 @@ const router = Router();
 router.get('/', authenticate, requireTenant, requirePermission('whatsapp.view'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    res.json(db.prepare('SELECT * FROM whatsapp_messages WHERE tenant_id=? ORDER BY created_at DESC LIMIT 100').all(req.tenant.id));
+    // Historial: solo mensajes que YA fueron enviados (is_draft=0). Los drafts pendientes
+    // viven en /api/whatsapp/outbox?status=draft. Esto evita confusion al usuario.
+    const rows = db.prepare(`
+      SELECT m.*, c.full_name as client_name, l.loan_number as loan_number
+      FROM whatsapp_messages m
+      LEFT JOIN clients c ON c.id = m.client_id
+      LEFT JOIN loans l ON l.id = m.loan_id
+      WHERE m.tenant_id=? AND m.is_draft=0
+      ORDER BY m.created_at DESC LIMIT 200
+    `).all(req.tenant.id);
+    res.json(rows);
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
 router.get('/templates', authenticate, requireTenant, requirePermission('whatsapp.templates'), (req: AuthRequest, res: Response) => {

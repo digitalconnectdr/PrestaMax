@@ -237,7 +237,7 @@ function calcSchedule(
 }
 
 const FREQ_LABEL: Record<string, string> = { monthly: 'Mensual', biweekly: 'Quincenal', weekly: 'Semanal', daily: 'Diario' }
-const AMORT_LABEL: Record<string, string> = { fixed_installment: 'Cuota Fija', interest_only: 'Solo Interes', flat_interest: 'Interes Plano' }
+const AMORT_LABEL: Record<string, string> = { fixed_installment: 'Cuota Fija', interest_only: 'Solo Interés', flat_interest: 'Interés' }
 const TERM_UNIT_LABEL: Record<string, string> = { months: 'meses', biweekly: 'quincenas', weeks: 'semanas', days: 'dias' }
 
 const LoanCalculatorPage: React.FC = () => {
@@ -254,7 +254,7 @@ const LoanCalculatorPage: React.FC = () => {
     term: '',
     termUnit: 'months',
     freq: 'monthly',
-    amortType: 'fixed_installment',
+    amortType: 'flat_interest',
     firstDate: new Date().toISOString().split('T')[0],
   })
   const [result, setResult] = useState<CalcResult | null>(null)
@@ -480,9 +480,9 @@ const LoanCalculatorPage: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Amortizacion</label>
               <select value={form.amortType} onChange={e => setForm(p => ({ ...p, amortType: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="flat_interest">Interés</option>
                 <option value="fixed_installment">Cuota Fija</option>
-                <option value="interest_only">Solo Interes</option>
-                <option value="flat_interest">Interes Plano</option>
+                <option value="interest_only">Solo Interés</option>
               </select>
             </div>
             <div>
