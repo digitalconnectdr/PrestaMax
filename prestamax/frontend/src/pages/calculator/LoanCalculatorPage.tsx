@@ -493,7 +493,7 @@ const LoanCalculatorPage: React.FC = () => {
                   <HelpCircle className="w-3.5 h-3.5" /> ¿Qué significa?
                 </button>
               </div>
-              <select value={form.amortType} onChange={e => setForm(p => ({ ...p, amortType: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={form.amortType} onChange={e => setForm(p => ({ ...p, amortType: e.target.value as any }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 {AMORTIZATION_TYPES.map(t => (
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}

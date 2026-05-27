@@ -4,6 +4,7 @@ import Button from '@/components/ui/Button'
 import { X, AlertTriangle, Settings, Calendar, Percent, RefreshCw, ShieldOff } from 'lucide-react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
+import { AMORTIZATION_TYPES } from '@/lib/amortization'
 
 interface EditLoanModalProps {
   loan: any

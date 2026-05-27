@@ -18,6 +18,7 @@ import EditLoanModal from './EditLoanModal'
 import { AuthContext } from '@/contexts/AuthContext'
 import { TenantContext } from '@/contexts/TenantContext'
 import { usePermission } from '@/hooks/usePermission'
+import { AMORT_LABELS, getAmortLabel } from '@/lib/amortization'
 
 interface Installment {
   id: string
@@ -832,7 +833,7 @@ const LoanDetailPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-slate-500 font-medium">Tipo de Amortización</p>
-                    <p className="font-semibold text-slate-900">{AMORT_LABELS[loan.amortizationType] || loan.amortizationType}</p>
+                    <p className="font-semibold text-slate-900">{getAmortLabel(loan.amortizationType)}</p>
                   </div>
                   <div>
                     <p className="text-slate-500 font-medium">Tasa Mora Diaria</p>
@@ -1082,7 +1083,7 @@ const LoanDetailPage: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Amortización</span>
-                <span className="font-medium">{AMORT_LABELS[loan.amortizationType] || loan.amortizationType}</span>
+                <span className="font-medium">{getAmortLabel(loan.amortizationType)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Frecuencia</span>

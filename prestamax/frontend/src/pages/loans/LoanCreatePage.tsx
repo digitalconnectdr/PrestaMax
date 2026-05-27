@@ -9,7 +9,7 @@ import { ArrowLeft, ArrowRight, Check, DollarSign, User, Settings, Globe } from 
 import { formatCurrency, SUPPORTED_CURRENCIES } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
-import { AMORTIZATION_TYPES, AMORT_LABELS, DEFAULT_AMORTIZATION } from '@/lib/amortization'
+import { AMORTIZATION_TYPES, AMORT_LABELS, DEFAULT_AMORTIZATION, getAmortLabel } from '@/lib/amortization'
 import AmortizationHelpModal from '@/components/shared/AmortizationHelpModal'
 import { HelpCircle } from 'lucide-react'
 
@@ -96,6 +96,7 @@ const LoanCreatePage: React.FC = () => {
   const navigate = useNavigate()
   const { can } = usePermission()
   const [step, setStep] = useState(1)
+  const [showAmortHelp, setShowAmortHelp] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
   const [products, setProducts] = useState<LoanProduct[]>([])
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
@@ -945,7 +946,7 @@ const LoanCreatePage: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Amortización</span>
-                    <span className="font-medium">{AMORT_LABELS[form.amortizationType] || form.amortizationType}</span>
+                    <span className="font-medium">{getAmortLabel(form.amortizationType)}</span>
                   </div>
                 </div>
               </div>
