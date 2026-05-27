@@ -18,12 +18,7 @@ const FREQ_OPTIONS = [
   { value: 'quarterly',  label: 'Trimestral' },
 ]
 
-const AMORT_OPTIONS = [
-  { value: 'fixed_installment', label: 'Cuota Nivelada' },
-  { value: 'flat_interest',     label: 'Interés' },
-  { value: 'interest_only',     label: 'Solo Intereses (Réditos)' },
-  { value: 'declining_balance', label: 'Saldo Decreciente' },
-]
+// AMORT_OPTIONS importado de @/lib/amortization (AMORTIZATION_TYPES)
 
 const RATE_TYPE_OPTIONS = [
   { value: 'monthly', label: 'Mensual' },
@@ -249,7 +244,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
             <div>
               <label className={labelCls}>Tipo de Amortización</label>
               <select value={form.amortizationType} onChange={e => set('amortizationType', e.target.value)} className={inputCls}>
-                {AMORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {AMORTIZATION_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
             {!isDisbursed && (

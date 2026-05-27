@@ -10,6 +10,9 @@ import { Calculator, MessageCircle, Download, RefreshCw, Percent, DollarSign } f
 import { formatCurrency } from '@/lib/utils'
 import api from '@/lib/api'
 import { usePermission } from '@/hooks/usePermission'
+import { AMORTIZATION_TYPES, AMORT_LABELS, DEFAULT_AMORTIZATION } from '@/lib/amortization'
+import AmortizationHelpModal from '@/components/shared/AmortizationHelpModal'
+import { HelpCircle } from 'lucide-react'
 
 interface Installment {
   num: number
@@ -237,7 +240,7 @@ function calcSchedule(
 }
 
 const FREQ_LABEL: Record<string, string> = { monthly: 'Mensual', biweekly: 'Quincenal', weekly: 'Semanal', daily: 'Diario' }
-const AMORT_LABEL: Record<string, string> = { fixed_installment: 'Cuota Fija', interest_only: 'Solo Interés', flat_interest: 'Interés' }
+// AMORT_LABEL movido a @/lib/amortization (AMORT_LABELS)
 const TERM_UNIT_LABEL: Record<string, string> = { months: 'meses', biweekly: 'quincenas', weeks: 'semanas', days: 'dias' }
 
 const LoanCalculatorPage: React.FC = () => {
@@ -254,10 +257,11 @@ const LoanCalculatorPage: React.FC = () => {
     term: '',
     termUnit: 'months',
     freq: 'monthly',
-    amortType: 'flat_interest',
+    amortType: DEFAULT_AMORTIZATION,
     firstDate: new Date().toISOString().split('T')[0],
   })
   const [result, setResult] = useState<CalcResult | null>(null)
+  const [showAmortHelp, setShowAmortHelp] = useState(false)
 
   const calculate = useCallback(() => {
     const amount = parseFloat(form.amount)
@@ -478,11 +482,21 @@ const LoanCalculatorPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Amortizacion</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-slate-700">Tipo de Amortización</label>
+                <button
+                  type="button"
+                  onClick={() => setShowAmortHelp(true)}
+                  className="text-xs text-[#1e3a5f] hover:text-[#152a45] flex items-center gap-1"
+                  title="Ver explicación de cada tipo"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" /> ¿Qué significa?
+                </button>
+              </div>
               <select value={form.amortType} onChange={e => setForm(p => ({ ...p, amortType: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="flat_interest">Interés</option>
-                <option value="fixed_installment">Cuota Fija</option>
-                <option value="interest_only">Solo Interés</option>
+                {AMORTIZATION_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -534,7 +548,7 @@ const LoanCalculatorPage: React.FC = () => {
                 <Card className="p-3 bg-slate-50">
                   <p className="text-xs text-slate-500 uppercase font-medium">Capital</p>
                   <p className="text-lg font-bold text-slate-700">{formatCurrency(result.totalPrincipal)}</p>
-                  <p className="text-xs text-slate-400">{AMORT_LABEL[form.amortType]}</p>
+                  <p className="text-xs text-slate-400">{AMORT_LABELS[form.amortType]}</p>
                 </Card>
               </div>
 
@@ -611,6 +625,7 @@ const LoanCalculatorPage: React.FC = () => {
           )}
         </div>
       </div>
+    <AmortizationHelpModal open={showAmortHelp} onClose={() => setShowAmortHelp(false)} highlight={form.amortType} />
     </div>
   )
 }

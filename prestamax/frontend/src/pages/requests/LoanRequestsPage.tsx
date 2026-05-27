@@ -13,6 +13,7 @@ import {
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { formatDate } from '@/lib/utils'
+import { AMORTIZATION_TYPES } from '@/lib/amortization'
 
 interface LoanRequest {
   id: string
@@ -645,9 +646,9 @@ const LoanRequestsPage: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Amortización</label>
                   <select value={convertForm.amortizationType} onChange={e => setConvertForm(f => ({ ...f, amortizationType: e.target.value }))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="fixed_installment">Cuota Nivelada</option>
-                    <option value="flat_interest">Interés</option>
-                    <option value="interest_only">Solo Intereses (Réditos)</option>
+                    {AMORTIZATION_TYPES.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

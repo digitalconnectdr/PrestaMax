@@ -109,12 +109,7 @@ const FREQ_LABELS: Record<string, string> = {
   monthly: 'Mensual', quarterly: 'Trimestral'
 }
 
-const AMORT_LABELS: Record<string, string> = {
-  fixed_installment: 'Cuota Nivelada',
-  flat_interest: 'Interés',
-  interest_only: 'Solo Intereses (Réditos)',
-  declining_balance: 'Saldo Decreciente',
-}
+// AMORT_LABELS importado de @/lib/amortization
 
 const INSTALLMENT_STATUS: Record<string, { label: string; cls: string }> = {
   pending:       { label: 'Pendiente',      cls: 'bg-slate-100 text-slate-700' },

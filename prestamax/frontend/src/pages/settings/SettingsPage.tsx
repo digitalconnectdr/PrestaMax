@@ -18,6 +18,7 @@ import {
 import { SUPPORTED_CURRENCIES } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { AMORTIZATION_TYPES } from '@/lib/amortization'
 
 // ─── Interfaces ───────────────────────────────────────────────────
 interface TenantData { name: string; email: string; phone: string; address: string; currency: string; scoreMode: string; signatureMode: string; rnc: string; representativeName: string; logoUrl: string; signatureUrl: string; city: string; notaryName: string; notaryCollegiateNumber: string; notaryOfficeAddress: string; acreedorIdNumber: string; testigo1Nombre: string; testigo1Id: string; testigo1Domicilio: string; testigo2Nombre: string; testigo2Id: string; testigo2Domicilio: string }
@@ -1135,9 +1136,9 @@ const SettingsPage: React.FC = () => {
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Amortización</label>
                       <select value={newProduct.amortizationType} onChange={e=>setNewProduct(p=>({...p,amortizationType:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="fixed_installment">Cuota Fija</option>
-                        <option value="interest_only">Solo Interés</option>
-                        <option value="flat_interest">Interés</option>
+                        {AMORTIZATION_TYPES.map(t => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
                       </select>
                     </div>
                   </div>

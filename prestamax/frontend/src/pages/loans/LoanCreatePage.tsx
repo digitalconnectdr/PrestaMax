@@ -9,6 +9,9 @@ import { ArrowLeft, ArrowRight, Check, DollarSign, User, Settings, Globe } from 
 import { formatCurrency, SUPPORTED_CURRENCIES } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { AMORTIZATION_TYPES, AMORT_LABELS, DEFAULT_AMORTIZATION } from '@/lib/amortization'
+import AmortizationHelpModal from '@/components/shared/AmortizationHelpModal'
+import { HelpCircle } from 'lucide-react'
 
 interface Client {
   id: string
@@ -41,12 +44,7 @@ interface LoanProduct {
   moraGraceDays: number
 }
 
-const AMORT_LABELS: Record<string, string> = {
-  fixed_installment: 'Cuota Nivelada',
-  flat_interest: 'Interés',
-  interest_only: 'Solo Intereses (Réditos)',
-  declining_balance: 'Saldo Decreciente',
-}
+// AMORT_LABELS movido a @/lib/amortization
 
 const FREQ_LABELS: Record<string, string> = {
   daily: 'Diaria',
@@ -129,7 +127,7 @@ const LoanCreatePage: React.FC = () => {
     rate: '',
     rateType: 'monthly',
     paymentFrequency: 'monthly',
-    amortizationType: 'fixed_installment',
+    amortizationType: DEFAULT_AMORTIZATION,
     purpose: '',
     notes: '',
     firstPaymentDate: '',
@@ -612,14 +610,24 @@ const LoanCreatePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Amortización</label>
-                <select
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-slate-700">Tipo de Amortización</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAmortHelp(true)}
+                    className="text-xs text-[#1e3a5f] hover:text-[#152a45] flex items-center gap-1"
+                    title="Ver explicación de cada tipo"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" /> ¿Qué significa?
+                  </button>
+                </div>
+<select
                   value={form.amortizationType}
                   onChange={(e) => setForm({ ...form, amortizationType: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {Object.entries(AMORT_LABELS).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
+                  {AMORTIZATION_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
               </div>
@@ -988,6 +996,7 @@ const LoanCreatePage: React.FC = () => {
           </div>
         </div>
       )}
+    <AmortizationHelpModal open={showAmortHelp} onClose={() => setShowAmortHelp(false)} highlight={form.amortizationType} />
     </div>
   )
 }
