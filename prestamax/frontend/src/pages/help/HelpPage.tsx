@@ -263,11 +263,14 @@ const HelpPage: React.FC = () => {
         <div className="flex items-start gap-3">
           <Lightbulb className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-amber-900">
-            <p className="font-semibold mb-1">¿Eres nuevo en PrestaMax?</p>
+            <p className="font-semibold mb-1">Orden recomendado para tu primer préstamo</p>
             <p className="leading-relaxed">
-              Sigue las guías de la sección <strong>"EMPEZAR"</strong> en orden (1 → 5).
-              Después explora <strong>Cobranzas</strong> y las <strong>Herramientas Complementarias</strong>
-              según tus necesidades.
+              <strong>1) Cuenta bancaria</strong> (de dónde sale el dinero) →{' '}
+              <strong>2) Producto</strong> (plantilla de préstamo — obligatorio antes de poder crear un préstamo) →{' '}
+              <strong>3) Cliente</strong> →{' '}
+              <strong>4) Préstamo</strong> →{' '}
+              <strong>5) Pago</strong> (cuando el cliente abone).
+              Después explora <strong>Cobranzas</strong> y las <strong>Herramientas Complementarias</strong>.
             </p>
           </div>
         </div>
