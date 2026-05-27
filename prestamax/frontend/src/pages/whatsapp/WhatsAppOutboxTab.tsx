@@ -93,8 +93,8 @@ const WhatsAppOutboxTab: React.FC = () => {
   const handleDiscard = async (draft: Draft) => {
     const ok = await confirm({
       title: 'Descartar draft',
-      description: '¿Eliminar este mensaje sin enviarlo? Esta acción no se puede deshacer.',
-      confirmLabel: 'Descartar',
+      message: '¿Eliminar este mensaje sin enviarlo? Esta acción no se puede deshacer.',
+      confirmText: 'Descartar',
       variant: 'danger',
     })
     if (!ok) return
@@ -111,8 +111,8 @@ const WhatsAppOutboxTab: React.FC = () => {
     if (drafts.length === 0) return
     const ok = await confirm({
       title: `Enviar ${drafts.length} mensajes`,
-      description: `Se abrirán ${drafts.length} pestañas de WhatsApp en secuencia. Tu navegador puede pedirte autorización para abrir pop-ups. ¿Continuar?`,
-      confirmLabel: `Abrir ${drafts.length} chats`,
+      message: `Se abrirán ${drafts.length} pestañas de WhatsApp en secuencia. Tu navegador puede pedirte autorización para abrir pop-ups. ¿Continuar?`,
+      confirmText: `Abrir ${drafts.length} chats`,
     })
     if (!ok) return
     drafts.forEach((d, i) => {
