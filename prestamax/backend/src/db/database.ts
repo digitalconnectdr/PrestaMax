@@ -632,6 +632,11 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE whatsapp_messages ADD COLUMN client_id TEXT`); } catch(_) {}
   // payment_id solo se popula para evento 'payment_received'
   try { db.exec(`ALTER TABLE whatsapp_messages ADD COLUMN payment_id TEXT`); } catch(_) {}
+  // installment_id para deduplicar drafts overdue_N por cuota
+  try { db.exec(`ALTER TABLE whatsapp_messages ADD COLUMN installment_id TEXT`); } catch(_) {}
+  // Cliente silenciado: no recibe mensajes automaticos (VIP, opt-out, etc)
+  try { db.exec(`ALTER TABLE clients ADD COLUMN whatsapp_silenced INTEGER NOT NULL DEFAULT 0`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_wa_msgs_installment ON whatsapp_messages(installment_id, event)`); } catch(_) {}
 
   // Configuracion por evento, por tenant. Switch on/off + template id opcional
   db.exec(`CREATE TABLE IF NOT EXISTS whatsapp_event_settings (

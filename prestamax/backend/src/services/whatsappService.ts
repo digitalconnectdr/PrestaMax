@@ -237,3 +237,164 @@ export function isEventEnabled(db: any, tenant_id: string, event: WhatsAppEvent)
     return false;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FASE B: Cron diario para overdue_1/7/15 + reglas de supresion
+// ─────────────────────────────────────────────────────────────────────────────
+
+// shouldSkipOverdue: 4 reglas de supresion para no spamear clientes
+// Devuelve true si se debe SALTAR la generacion del draft
+export function shouldSkipOverdue(
+  db: any,
+  tenant_id: string,
+  event: WhatsAppEvent,
+  data: { client_id: string; loan_id: string; installment_id: string }
+): boolean {
+  try {
+    // Regla 1: cliente silenciado explicitamente
+    const client = db.prepare('SELECT whatsapp_silenced FROM clients WHERE id=? AND tenant_id=?').get(data.client_id, tenant_id) as any;
+    if (client?.whatsapp_silenced) return true;
+
+    // Regla 2: ya existe un draft o sent para este mismo (loan, installment, event)
+    const existing = db.prepare(
+      `SELECT id FROM whatsapp_messages WHERE tenant_id=? AND loan_id=? AND installment_id=? AND event=?`
+    ).get(tenant_id, data.loan_id, data.installment_id, event) as any;
+    if (existing) return true;
+
+    // Regla 3: hay promesa de pago activa cuya fecha+1d aun no vencio
+    const promise = db.prepare(
+      `SELECT promised_date FROM payment_promises
+       WHERE loan_id=? AND status='pending'
+       ORDER BY promised_date DESC LIMIT 1`
+    ).get(data.loan_id) as any;
+    if (promise?.promised_date) {
+      const promised = new Date(promise.promised_date);
+      const cutoff = new Date(promised);
+      cutoff.setDate(cutoff.getDate() + 1); // promesa + 1 dia
+      if (cutoff >= new Date()) return true;
+    }
+
+    // Regla 4: overdue_1 + pago reciente (ultimos 3 dias) → suprimir
+    if (event === 'overdue_1') {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      const recentPay = db.prepare(
+        `SELECT id FROM payments WHERE loan_id=? AND tenant_id=? AND created_at >= ? LIMIT 1`
+      ).get(data.loan_id, tenant_id, threeDaysAgo.toISOString()) as any;
+      if (recentPay) return true;
+    }
+
+    return false;
+  } catch (e: any) {
+    console.error('[shouldSkipOverdue] error:', e?.message || e);
+    return true; // mejor saltar ante error que enviar incorrectamente
+  }
+}
+
+// generateOverdueDraft: variante que ademas guarda installment_id y respeta supresion
+export function generateOverdueDraft(
+  db: any,
+  tenant_id: string,
+  event: WhatsAppEvent,
+  data: { client_id: string; loan_id: string; installment_id: string }
+): string | undefined {
+  if (shouldSkipOverdue(db, tenant_id, event, data)) return undefined;
+  try {
+    const cfg = db.prepare(
+      `SELECT enabled, template_id FROM whatsapp_event_settings WHERE tenant_id=? AND event=?`
+    ).get(tenant_id, event) as any;
+    if (!cfg || !cfg.enabled) return undefined;
+
+    let tpl: any = null;
+    if (cfg.template_id) {
+      tpl = db.prepare(`SELECT * FROM whatsapp_templates WHERE id=? AND tenant_id=? AND is_active=1`).get(cfg.template_id, tenant_id);
+    }
+    if (!tpl) {
+      tpl = db.prepare(`SELECT * FROM whatsapp_templates WHERE tenant_id=? AND event=? AND is_active=1 ORDER BY name LIMIT 1`).get(tenant_id, event);
+    }
+    const body = tpl?.body || FALLBACK_TEMPLATES[event];
+
+    // Build context con loan_id + client_id
+    const tenant = db.prepare('SELECT id, name, phone, currency FROM tenants WHERE id=?').get(tenant_id) as any;
+    if (!tenant) return undefined;
+    const client = db.prepare('SELECT * FROM clients WHERE id=? AND tenant_id=?').get(data.client_id, tenant_id) as any;
+    if (!client) return undefined;
+    const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(data.loan_id, tenant_id) as any;
+    if (!loan) return undefined;
+    const phone = client.whatsapp || client.phone_personal || '';
+    if (!phone) return undefined;
+
+    const moneda = loan.currency || tenant.currency || 'DOP';
+    const sym = moneda === 'DOP' ? 'RD$' : moneda === 'USD' ? 'US$' : moneda === 'EUR' ? '€' : `${moneda} `;
+    const fmtAmt = (n: any) => (typeof n === 'number' ? n : parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const vars: Record<string, any> = {
+      moneda: sym.trim(),
+      empresa: { nombre: tenant.name || '', telefono: tenant.phone || '' },
+      cliente: { nombre: client.first_name || client.full_name || '', nombre_completo: client.full_name || '', whatsapp: phone },
+      prestamo: {
+        numero: loan.loan_number || '',
+        monto: fmtAmt(loan.disbursed_amount || loan.approved_amount || loan.requested_amount),
+        balance: fmtAmt(loan.total_balance),
+        mora: fmtAmt(loan.mora_balance),
+        cuotas: loan.term || '',
+      },
+    };
+
+    const interpolated = interpolate(body, vars);
+    const id = uuid();
+    db.prepare(
+      `INSERT INTO whatsapp_messages
+       (id, tenant_id, client_id, loan_id, installment_id, client_phone, event, body, status, is_draft, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1, ?)`
+    ).run(id, tenant_id, client.id, loan.id, data.installment_id, phone, event, interpolated, now());
+    return id;
+  } catch (e: any) {
+    console.error(`[generateOverdueDraft ${event}] error:`, e?.message || e);
+    return undefined;
+  }
+}
+
+// runOverdueCron: detecta cuotas vencidas hace 1, 7 o 15 dias y crea drafts
+// Usado por el cron diario en index.ts.
+export function runOverdueCron(db: any): { generated: number; skipped: number } {
+  const stats = { generated: 0, skipped: 0 };
+  try {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const targetDays: Array<{ days: number; event: WhatsAppEvent }> = [
+      { days: 1,  event: 'overdue_1' },
+      { days: 7,  event: 'overdue_7' },
+      { days: 15, event: 'overdue_15' },
+    ];
+
+    for (const { days, event } of targetDays) {
+      const dueDate = new Date(today); dueDate.setDate(dueDate.getDate() - days);
+      const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+      // Buscar installments con due_date == dueDateStr y status pendiente
+      const rows = db.prepare(
+        `SELECT i.id as installment_id, i.loan_id, l.client_id, l.tenant_id
+         FROM installments i
+         JOIN loans l ON l.id = i.loan_id
+         WHERE i.due_date = ?
+           AND i.status IN ('pending','partial','overdue')
+           AND l.is_voided = 0
+           AND l.status IN ('active','disbursed','in_mora','overdue')`
+      ).all(dueDateStr) as any[];
+
+      for (const r of rows) {
+        const id = generateOverdueDraft(db, r.tenant_id, event, {
+          client_id: r.client_id,
+          loan_id: r.loan_id,
+          installment_id: r.installment_id,
+        });
+        if (id) stats.generated++;
+        else stats.skipped++;
+      }
+    }
+    console.log(`[runOverdueCron] generated=${stats.generated} skipped=${stats.skipped}`);
+  } catch (e: any) {
+    console.error('[runOverdueCron] error:', e?.message || e);
+  }
+  return stats;
+}

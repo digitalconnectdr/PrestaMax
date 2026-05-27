@@ -157,6 +157,26 @@ app.get('/health', (_req, res) => {
 
 app.use(errorHandler);
 
+
+// ── Cron diario WhatsApp transaccional (overdue 1/7/15 dias) ──
+// Corre cada hora; internamente solo genera drafts cuando es 8am hora local
+// del servidor. Evita doble-corrida usando una bandera en memoria.
+import { runOverdueCron } from './services/whatsappService';
+let lastCronDate = '';
+setInterval(() => {
+  try {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    // Correr una vez al dia a las 8am hora del servidor
+    if (now.getHours() === 8 && lastCronDate !== todayStr) {
+      lastCronDate = todayStr;
+      const { getDb } = require('./db/database');
+      runOverdueCron(getDb());
+    }
+  } catch (e) { console.error('[whatsapp cron tick]', e); }
+}, 60 * 60 * 1000); // cada hora
+console.log('[whatsapp] cron de mora programado (chequeo cada hora, dispara a las 8am)');
+
 app.listen(PORT, () => {
   console.log(`PrestaMax API running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'development'}]`);
   console.log('Security: Helmet + Rate limits + Bot blocking + Payload sanitization active');

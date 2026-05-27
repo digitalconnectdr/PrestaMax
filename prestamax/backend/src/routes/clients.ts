@@ -175,4 +175,19 @@ router.get('/:id/score', authenticate, requireTenant, requirePermission('clients
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
+// PUT /:id/whatsapp-silenced — togglear opt-out de mensajes automaticos WhatsApp
+router.put('/:id/whatsapp-silenced', authenticate, requireTenant, requirePermission('clients.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const { silenced } = req.body;
+    const client = db.prepare('SELECT id FROM clients WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id);
+    if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+    db.prepare('UPDATE clients SET whatsapp_silenced=? WHERE id=?').run(silenced ? 1 : 0, req.params.id);
+    res.json({ id: req.params.id, whatsapp_silenced: silenced ? 1 : 0 });
+  } catch (e: any) {
+    console.error('whatsapp-silenced error:', e);
+    res.status(500).json({ error: e.message || 'Failed' });
+  }
+});
+
 export { router };

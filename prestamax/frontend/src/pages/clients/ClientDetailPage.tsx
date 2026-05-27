@@ -22,6 +22,7 @@ interface Client {
   phoneWork: string | null
   phoneFamily: string | null
   whatsapp: string | null
+  whatsappSilenced?: number | boolean
   idType: string
   idNumber: string
   birthDate: string | null
@@ -336,6 +337,25 @@ const ClientDetailPage: React.FC = () => {
                   <div>
                     <p className="text-xs text-slate-500 font-semibold uppercase">WhatsApp</p>
                     <p className="text-slate-900 font-medium mt-1">{client.whatsapp}</p>
+                    <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!client.whatsappSilenced}
+                        onChange={async (e) => {
+                          const next = e.target.checked
+                          try {
+                            await api.put(`/clients/${client.id}/whatsapp-silenced`, { silenced: next })
+                            setClient(prev => prev ? { ...prev, whatsappSilenced: next ? 1 : 0 } : prev)
+                            toast.success(next ? 'Cliente silenciado' : 'Cliente reactivado')
+                          } catch { toast.error('No se pudo actualizar') }
+                        }}
+                        className="mt-0.5"
+                      />
+                      <span className="text-slate-600">
+                        Silenciar mensajes automáticos de WhatsApp
+                        <span className="block text-slate-400 text-[11px]">No recibirá recordatorios automáticos de pago, mora ni bienvenidas.</span>
+                      </span>
+                    </label>
                   </div>
                 )}
                 {client.phoneWork && (
