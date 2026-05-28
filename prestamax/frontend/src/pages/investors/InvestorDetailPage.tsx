@@ -114,7 +114,7 @@ const InvestorDetailPage: React.FC = () => {
     setShowConfirmPayout(true)
     try {
       const res = await api.get('/settings/bank-accounts')
-      setBankAccounts((res.data || []).filter((b: any) => b.isActive ?? b.is_active))
+      setBankAccounts((res.data || []).filter((b: any) => b.isActive ?? b.isActive))
     } catch (_) { setBankAccounts([]) }
   }
 
@@ -137,7 +137,7 @@ const InvestorDetailPage: React.FC = () => {
   }
 
   const handleGrantPortalAccess = async () => {
-    const action = (investor?.userId || investor?.user_id) ? 'resetear la contraseña del' : 'crear el acceso al portal del'
+    const action = (investor?.userId || investor?.userId) ? 'resetear la contraseña del' : 'crear el acceso al portal del'
     const ok_ = await confirm({ title: 'Confirmar', message: `¿${action} inversionista? Se generará una nueva contraseña temporal que debes compartir UNA SOLA VEZ.`, variant: 'warning' })
     if (!ok_) return
     setGrantingAccess(true)
@@ -171,23 +171,23 @@ const InvestorDetailPage: React.FC = () => {
   if (isLoading) return <PageLoadingState />
   if (!investor) return null
 
-  const fullName       = investor.fullName        ?? investor.full_name ?? ''
-  const modelType      = investor.modelType       ?? investor.model_type
-  const fixedRate      = investor.fixedRateMonthly      ?? investor.fixed_rate_monthly ?? 0
-  const equityPct      = investor.equityPercentInterest ?? investor.equity_percent_interest ?? 0
-  const commissionPct  = investor.commissionPercent     ?? investor.commission_percent ?? 0
+  const fullName       = investor.fullName        ?? investor.fullName ?? ''
+  const modelType      = investor.modelType       ?? investor.modelType
+  const fixedRate      = investor.fixedRateMonthly      ?? investor.fixedRateMonthly ?? 0
+  const equityPct      = investor.equityPercentInterest ?? investor.equityPercentInterest ?? 0
+  const commissionPct  = investor.commissionPercent     ?? investor.commissionPercent ?? 0
   const idNumber       = investor.idNumber              ?? investor.id_number
-  const capitalContrib = investor.capitalContributed    ?? investor.capital_contributed ?? 0
+  const capitalContrib = investor.capitalContributed    ?? investor.capitalContributed ?? 0
   const loansList      = investor.loans || []
 
   const r = report || {}
   const tot = r.totals || {}
-  const paymentsCount = r.paymentsCount   ?? r.payments_count ?? 0
-  const grossInterest = tot.grossInterest ?? tot.gross_interest ?? 0
-  const grossMora     = tot.grossMora     ?? tot.gross_mora     ?? 0
-  const grossTotal    = tot.grossTotal    ?? tot.gross_total    ?? 0
-  const commPercent   = tot.commissionPercent ?? tot.commission_percent ?? 0
-  const commAmount    = tot.commissionAmount  ?? tot.commission_amount  ?? 0
+  const paymentsCount = r.paymentsCount   ?? r.paymentsCount ?? 0
+  const grossInterest = tot.grossInterest ?? tot.grossInterest ?? 0
+  const grossMora     = tot.grossMora     ?? tot.grossMora     ?? 0
+  const grossTotal    = tot.grossTotal    ?? tot.grossTotal    ?? 0
+  const commPercent   = tot.commissionPercent ?? tot.commissionPercent ?? 0
+  const commAmount    = tot.commissionAmount  ?? tot.commissionAmount  ?? 0
   const netToInvestor = tot.netToInvestor     ?? tot.net_to_investor    ?? 0
   const activeLoans   = r.activeLoans || r.active_loans || {}
   const activeCount   = activeLoans.count ?? 0
@@ -226,7 +226,7 @@ const InvestorDetailPage: React.FC = () => {
               <div className="flex items-center gap-2 text-sm">
                 <KeyRound className="w-4 h-4 text-slate-500" />
                 <span className="text-slate-600">
-                  {(investor.userId || investor.user_id)
+                  {(investor.userId || investor.userId)
                     ? <>Acceso al portal: <strong className="text-emerald-700">activo</strong></>
                     : <>Acceso al portal: <strong className="text-slate-500">no creado</strong></>}
                 </span>
@@ -240,7 +240,7 @@ const InvestorDetailPage: React.FC = () => {
               >
                 {grantingAccess
                   ? 'Generando…'
-                  : (investor.userId || investor.user_id)
+                  : (investor.userId || investor.userId)
                     ? 'Resetear contraseña'
                     : 'Crear acceso al portal'}
               </Button>
@@ -272,10 +272,10 @@ const InvestorDetailPage: React.FC = () => {
               </thead>
               <tbody>
                 {loansList.map((l: any) => {
-                  const ln = l.loanNumber ?? l.loan_number ?? ''
-                  const cn = l.clientName ?? l.client_name ?? ''
-                  const da = l.disbursedAmount ?? l.disbursed_amount ?? 0
-                  const ba = l.totalBalance ?? l.total_balance ?? 0
+                  const ln = l.loanNumber ?? l.loanNumber ?? ''
+                  const cn = l.clientName ?? l.clientName ?? ''
+                  const da = l.disbursedAmount ?? l.disbursedAmount ?? 0
+                  const ba = l.totalBalance ?? l.totalBalance ?? 0
                   return (
                     <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="py-2 px-3 font-mono text-xs text-blue-700">{ln}</td>
@@ -296,7 +296,7 @@ const InvestorDetailPage: React.FC = () => {
       <Card>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-600" /><h3 className="section-title">Reporte de Liquidación · Pendiente por pagar</h3></div>
-          {lastPayout && <p className="text-xs text-slate-500">Última liquidación: {formatDate(lastPayout.paid_at)} · {formatCurrency(lastPayout.net_amount || 0)}</p>}
+          {lastPayout && <p className="text-xs text-slate-500">Última liquidación: {formatDate(lastPayout.paidAt)} · {formatCurrency(lastPayout.netAmount || 0)}</p>}
         </div>
         <p className="text-xs text-slate-500 mb-3">Solo se cuentan pagos que aún no han sido incluidos en una liquidación previa, para evitar doble pago.</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
@@ -351,13 +351,13 @@ const InvestorDetailPage: React.FC = () => {
               </thead>
               <tbody>
                 {payouts.map((p: any) => {
-                  const paidAt = p.paidAt ?? p.paid_at
-                  const pFrom  = p.periodFrom ?? p.period_from
-                  const pTo    = p.periodTo   ?? p.period_to
-                  const pCount = p.paymentsCount ?? p.payments_count ?? 0
-                  const pGross = p.grossTotal ?? p.gross_total ?? 0
-                  const pComm  = p.commissionAmount ?? p.commission_amount ?? 0
-                  const pNet   = p.netAmount ?? p.net_amount ?? 0
+                  const paidAt = p.paidAt ?? p.paidAt
+                  const pFrom  = p.periodFrom ?? p.periodFrom
+                  const pTo    = p.periodTo   ?? p.periodTo
+                  const pCount = p.paymentsCount ?? p.paymentsCount ?? 0
+                  const pGross = p.grossTotal ?? p.grossTotal ?? 0
+                  const pComm  = p.commissionAmount ?? p.commissionAmount ?? 0
+                  const pNet   = p.netAmount ?? p.netAmount ?? 0
                   const isVoided = p.status === 'voided'
                   return (
                     <tr key={p.id} className={`border-b border-slate-100 hover:bg-slate-50 ${isVoided ? 'opacity-60' : ''}`}>
@@ -392,9 +392,9 @@ const InvestorDetailPage: React.FC = () => {
                 <select value={assigningLoanId} onChange={e => setAssigningLoanId(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
                   <option value="">— Seleccionar —</option>
                   {availableLoans.map((l: any) => {
-                    const ln = l.loanNumber ?? l.loan_number ?? ''
-                    const cn = l.clientName ?? l.client_name ?? ''
-                    const da = l.disbursedAmount ?? l.disbursed_amount ?? 0
+                    const ln = l.loanNumber ?? l.loanNumber ?? ''
+                    const cn = l.clientName ?? l.clientName ?? ''
+                    const da = l.disbursedAmount ?? l.disbursedAmount ?? 0
                     return <option key={l.id} value={l.id}>{ln} · {cn} · {formatCurrency(Number(da) || 0, l.currency || 'DOP')}</option>
                   })}
                 </select>
@@ -449,7 +449,7 @@ const InvestorDetailPage: React.FC = () => {
             <select value={payoutForm.bankAccountId} onChange={e => setPayoutForm(f => ({ ...f, bankAccountId: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-3">
               <option value="">— Sin afectar cuenta bancaria —</option>
               {bankAccounts.map((b: any) => {
-                const name = b.bankName ?? b.bank_name ?? 'Cuenta'
+                const name = b.bankName ?? b.bankName ?? 'Cuenta'
                 const num  = b.accountNumber ?? b.account_number ?? ''
                 const bal  = b.currentBalance ?? b.current_balance ?? 0
                 return <option key={b.id} value={b.id}>{name} {num ? `· ${num}` : ''} · Saldo: {formatCurrency(bal)}</option>
