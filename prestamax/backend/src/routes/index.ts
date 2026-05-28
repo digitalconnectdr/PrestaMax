@@ -20,6 +20,7 @@ import notificationRoutes from './notifications';
 import billingRoutes from './billing';
 import investorsRoutes from './investors';
 import portalInvestorRoutes from './portal_investor';
+import searchRoutes from './search';
 
 export const router = Router();
 
@@ -46,3 +47,4 @@ router.use('/notifications', notificationRoutes);
 router.use('/billing', billingRoutes);
 router.use('/investors', investorsRoutes);
 router.use('/portal/investor', portalInvestorRoutes);
+router.use('/search', searchRoutes);
