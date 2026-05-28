@@ -11,6 +11,8 @@ import { initializeDatabase, getDb } from './db/database';
 import { router } from './routes';
 import { webhookHandler } from './routes/billing';
 import { errorHandler } from './middleware/errorHandler';
+import { initSentry, sentryRequestHandler, sentryErrorHandler } from './lib/sentry';
+initSentry();
 import {
   sanitizeInputs,
   blockKnownBots,
@@ -42,6 +44,9 @@ const PORT = process.env.PORT || 3001;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 app.set('trust proxy', 1);
+
+// Sentry request handler — debe ir antes que otros middlewares (no-op si DSN no configurada)
+app.use(sentryRequestHandler());
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5173';
 
@@ -155,6 +160,8 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Sentry error handler — debe ir antes del errorHandler propio (no-op si DSN no configurada)
+app.use(sentryErrorHandler());
 app.use(errorHandler);
 
 
