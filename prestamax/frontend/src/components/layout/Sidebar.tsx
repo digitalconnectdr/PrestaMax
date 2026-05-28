@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import {
   BarChart3, Users, DollarSign, CreditCard, FileText, FileCheck,
   Truck, MessageCircle, Settings, Package, Users2, MapPin, BookOpen,
-  ReceiptText, LogOut, ChevronLeft, TrendingUp, Landmark, ShieldCheck, ClipboardList, Calculator, CalendarRange, Briefcase, HelpCircle
+  ReceiptText, LogOut, ChevronLeft, TrendingUp, Landmark, ShieldCheck, ClipboardList, Calculator, CalendarRange, Briefcase, HelpCircle, FileSpreadsheet
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
@@ -73,6 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       items: [
         { icon: BarChart3,     label: 'Reportes',            path: '/reports',
           show: canAny(['reports.portfolio','reports.mora','reports.collections','reports.advanced','reports.income']) },
+        { icon: FileSpreadsheet,label: 'Exportar Contabilidad',path: '/reports/accounting',     show: can('reports.dashboard') },
         { icon: CalendarRange, label: 'Proyección de Cobros', path: '/reports/projection',
           show: can('reports.projection') },
       ],

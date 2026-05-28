@@ -21,6 +21,7 @@ import billingRoutes from './billing';
 import investorsRoutes from './investors';
 import portalInvestorRoutes from './portal_investor';
 import searchRoutes from './search';
+import accountingRoutes from './accounting';
 
 export const router = Router();
 
@@ -48,3 +49,4 @@ router.use('/billing', billingRoutes);
 router.use('/investors', investorsRoutes);
 router.use('/portal/investor', portalInvestorRoutes);
 router.use('/search', searchRoutes);
+router.use('/accounting', accountingRoutes);

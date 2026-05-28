@@ -22,6 +22,7 @@ import CollectionsPage from '@/pages/collections/CollectionsPage'
 import PaymentPromisesPage from '@/pages/collections/PaymentPromisesPage'
 import ReportsPage from '@/pages/reports/ReportsPage'
 import ProjectionPage from '@/pages/reports/ProjectionPage'
+import AccountingExportPage from '@/pages/reports/AccountingExportPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
 import WhatsAppPage from '@/pages/whatsapp/WhatsAppPage'
 import IncomePage from '@/pages/income/IncomePage'
@@ -94,6 +95,7 @@ const AppRoutes: React.FC = () => {
 
           <Route path="/reports" element={<PermissionRoute perm="reports.dashboard"><ReportsPage /></PermissionRoute>} />
           <Route path="/reports/projection" element={<PermissionRoute perm="reports.projection"><ProjectionPage /></PermissionRoute>} />
+          <Route path="/reports/accounting" element={<PermissionRoute perm="reports.dashboard"><AccountingExportPage /></PermissionRoute>} />
 
           <Route path="/settings" element={<PermissionRoute perm="settings.general"><SettingsPage /></PermissionRoute>} />
           <Route path="/settings/products" element={<PermissionRoute perm="settings.products"><SettingsPage /></PermissionRoute>} />
