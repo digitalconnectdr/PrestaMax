@@ -99,8 +99,8 @@ const PortalInvestorPage: React.FC = () => {
                   <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600"><Wallet className="w-5 h-5" /></div>
                   <div>
                     <p className="text-xs text-slate-500 uppercase">Capital Colocado</p>
-                    <p className="text-2xl font-bold text-slate-800">{formatCurrency(Number(cap.active_balance) || 0)}</p>
-                    <p className="text-xs text-slate-500 mt-1">{cap.active_loans || 0} préstamo(s) activo(s)</p>
+                    <p className="text-2xl font-bold text-slate-800">{formatCurrency(Number(cap.activeBalance) || 0)}</p>
+                    <p className="text-xs text-slate-500 mt-1">{cap.activeLoans || 0} préstamo(s) activo(s)</p>
                   </div>
                 </div>
               </Card>
@@ -109,8 +109,8 @@ const PortalInvestorPage: React.FC = () => {
                   <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600"><TrendingUp className="w-5 h-5" /></div>
                   <div>
                     <p className="text-xs text-slate-500 uppercase">Ganancias Acumuladas</p>
-                    <p className="text-2xl font-bold text-emerald-700">{formatCurrency(Number(life.net_earned) || 0)}</p>
-                    <p className="text-xs text-slate-500 mt-1">{life.payments_count || 0} pago(s) recibidos</p>
+                    <p className="text-2xl font-bold text-emerald-700">{formatCurrency(Number(life.netEarned) || 0)}</p>
+                    <p className="text-xs text-slate-500 mt-1">{life.paymentsCount || 0} pago(s) recibidos</p>
                   </div>
                 </div>
               </Card>
@@ -119,8 +119,8 @@ const PortalInvestorPage: React.FC = () => {
                   <div className="p-2.5 rounded-lg bg-purple-50 text-purple-600"><DollarSign className="w-5 h-5" /></div>
                   <div>
                     <p className="text-xs text-slate-500 uppercase">Total Recibido</p>
-                    <p className="text-2xl font-bold text-purple-700">{formatCurrency(Number(rcvd.total_payouts_amount) || 0)}</p>
-                    <p className="text-xs text-slate-500 mt-1">{rcvd.total_payouts_count || 0} liquidación(es)</p>
+                    <p className="text-2xl font-bold text-purple-700">{formatCurrency(Number(rcvd.totalPayoutsAmount) || 0)}</p>
+                    <p className="text-xs text-slate-500 mt-1">{rcvd.totalPayoutsCount || 0} liquidación(es)</p>
                   </div>
                 </div>
               </Card>
@@ -144,10 +144,10 @@ const PortalInvestorPage: React.FC = () => {
             <Card>
               <h2 className="section-title mb-3">Próxima liquidación</h2>
               <div className="bg-slate-50 rounded-lg p-4 text-sm space-y-1">
-                <div className="flex justify-between"><span>Interés cobrado (vida total):</span><strong>{formatCurrency(Number(life.gross_interest) || 0)}</strong></div>
-                <div className="flex justify-between"><span>Mora cobrada (vida total):</span><strong>{formatCurrency(Number(life.gross_mora) || 0)}</strong></div>
-                <div className="flex justify-between text-slate-600"><span>− Comisión ({me.commissionPercent}%):</span><span>−{formatCurrency(Number(life.commission_amount) || 0)}</span></div>
-                <div className="flex justify-between text-slate-600"><span>− Ya recibido:</span><span>−{formatCurrency(Number(rcvd.total_payouts_amount) || 0)}</span></div>
+                <div className="flex justify-between"><span>Interés cobrado (vida total):</span><strong>{formatCurrency(Number(life.grossInterest) || 0)}</strong></div>
+                <div className="flex justify-between"><span>Mora cobrada (vida total):</span><strong>{formatCurrency(Number(life.grossMora) || 0)}</strong></div>
+                <div className="flex justify-between text-slate-600"><span>− Comisión ({me.commissionPercent}%):</span><span>−{formatCurrency(Number(life.commissionAmount) || 0)}</span></div>
+                <div className="flex justify-between text-slate-600"><span>− Ya recibido:</span><span>−{formatCurrency(Number(rcvd.totalPayoutsAmount) || 0)}</span></div>
                 <div className="flex justify-between font-bold text-emerald-700 pt-2 border-t border-slate-200">
                   <span>Pendiente neto:</span><span>{formatCurrency(Number(rcvd.pending) || 0)}</span>
                 </div>
@@ -177,13 +177,13 @@ const PortalInvestorPage: React.FC = () => {
                   <tbody>
                     {loans.map((l: any) => (
                       <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="py-2 px-3 font-mono text-xs text-blue-700">{l.loan_number}</td>
-                        <td className="py-2 px-3 text-slate-700">{l.client_name}</td>
-                        <td className="py-2 px-3 text-right text-slate-700">{formatCurrency(Number(l.disbursed_amount) || 0, l.currency || 'DOP')}</td>
-                        <td className="py-2 px-3 text-right font-semibold text-slate-900">{formatCurrency(Number(l.principal_balance) || 0, l.currency || 'DOP')}</td>
-                        <td className="py-2 px-3 text-right text-red-700">{formatCurrency(Number(l.mora_balance) || 0, l.currency || 'DOP')}</td>
+                        <td className="py-2 px-3 font-mono text-xs text-blue-700">{l.loanNumber}</td>
+                        <td className="py-2 px-3 text-slate-700">{l.clientName}</td>
+                        <td className="py-2 px-3 text-right text-slate-700">{formatCurrency(Number(l.disbursedAmount) || 0, l.currency || 'DOP')}</td>
+                        <td className="py-2 px-3 text-right font-semibold text-slate-900">{formatCurrency(Number(l.principalBalance) || 0, l.currency || 'DOP')}</td>
+                        <td className="py-2 px-3 text-right text-red-700">{formatCurrency(Number(l.moraBalance) || 0, l.currency || 'DOP')}</td>
                         <td className="py-2 px-3"><span className="text-xs text-slate-600">{l.status}</span></td>
-                        <td className="py-2 px-3 text-xs text-slate-500">{formatDate(l.disbursement_date)}</td>
+                        <td className="py-2 px-3 text-xs text-slate-500">{formatDate(l.disbursementDate)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -215,13 +215,13 @@ const PortalInvestorPage: React.FC = () => {
                   <tbody>
                     {payouts.map((p: any) => (
                       <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="py-2 px-3 text-slate-700">{formatDate(p.paid_at)}</td>
-                        <td className="py-2 px-3 text-xs text-slate-600">{formatDate(p.period_from)} – {formatDate(p.period_to)}</td>
-                        <td className="py-2 px-3 text-right text-slate-700">{p.payments_count}</td>
-                        <td className="py-2 px-3 text-right text-slate-700">{formatCurrency(Number(p.gross_total) || 0)}</td>
-                        <td className="py-2 px-3 text-right text-slate-500">−{formatCurrency(Number(p.commission_amount) || 0)}</td>
-                        <td className="py-2 px-3 text-right font-bold text-emerald-700">{formatCurrency(Number(p.net_amount) || 0)}</td>
-                        <td className="py-2 px-3 text-xs text-slate-600">{p.payment_method || '—'}</td>
+                        <td className="py-2 px-3 text-slate-700">{formatDate(p.paidAt)}</td>
+                        <td className="py-2 px-3 text-xs text-slate-600">{formatDate(p.periodFrom)} – {formatDate(p.periodTo)}</td>
+                        <td className="py-2 px-3 text-right text-slate-700">{p.paymentsCount}</td>
+                        <td className="py-2 px-3 text-right text-slate-700">{formatCurrency(Number(p.grossTotal) || 0)}</td>
+                        <td className="py-2 px-3 text-right text-slate-500">−{formatCurrency(Number(p.commissionAmount) || 0)}</td>
+                        <td className="py-2 px-3 text-right font-bold text-emerald-700">{formatCurrency(Number(p.netAmount) || 0)}</td>
+                        <td className="py-2 px-3 text-xs text-slate-600">{p.paymentMethod || '—'}</td>
                         <td className="py-2 px-3 text-xs text-slate-500">{p.reference || '—'}</td>
                       </tr>
                     ))}
