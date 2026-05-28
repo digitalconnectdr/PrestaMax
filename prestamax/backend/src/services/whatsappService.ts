@@ -19,6 +19,7 @@ import { uuid, now } from '../db/database';
 export type WhatsAppEvent =
   | 'loan_created'
   | 'payment_received'
+  | 'pre_due_3'
   | 'overdue_1'
   | 'overdue_7'
   | 'overdue_15';
@@ -26,6 +27,7 @@ export type WhatsAppEvent =
 export const WA_EVENTS: WhatsAppEvent[] = [
   'loan_created',
   'payment_received',
+  'pre_due_3',
   'overdue_1',
   'overdue_7',
   'overdue_15',
@@ -34,6 +36,7 @@ export const WA_EVENTS: WhatsAppEvent[] = [
 export const WA_EVENT_LABELS: Record<WhatsAppEvent, string> = {
   loan_created:      'Prestamo creado (bienvenida)',
   payment_received:  'Pago recibido (confirmacion)',
+  pre_due_3:         'Recordatorio 3 dias antes',
   overdue_1:         'Mora 1 dia',
   overdue_7:         'Mora 7 dias',
   overdue_15:        'Mora 15 dias',
@@ -45,6 +48,8 @@ const FALLBACK_TEMPLATES: Record<WhatsAppEvent, string> = {
     'Hola {{cliente.nombre}}, te confirmamos que tu prestamo #{{prestamo.numero}} por {{moneda}} {{prestamo.monto}} ha sido aprobado. Tu primera cuota vence el {{prestamo.primera_cuota}}. Cualquier consulta estamos a tus ordenes. — {{empresa.nombre}}',
   payment_received:
     'Hola {{cliente.nombre}}, recibimos tu pago de {{moneda}} {{pago.monto}} aplicado a tu prestamo #{{prestamo.numero}}. Tu balance restante es {{moneda}} {{prestamo.balance}}. Tu proxima cuota vence el {{prestamo.proxima_cuota}}. Gracias por tu puntualidad. — {{empresa.nombre}}',
+  pre_due_3:
+    'Hola {{cliente.nombre}}, te recordamos que tu proxima cuota del prestamo #{{prestamo.numero}} vence en 3 dias. Monto: {{moneda}} {{prestamo.proxima_cuota_monto}}. Gracias por tu puntualidad. — {{empresa.nombre}}',
   overdue_1:
     'Hola {{cliente.nombre}}, te recordamos que la cuota de tu prestamo #{{prestamo.numero}} venció ayer. Monto pendiente: {{moneda}} {{prestamo.mora}}. Ponte al dia para evitar cargos por mora. — {{empresa.nombre}}',
   overdue_7:
@@ -362,6 +367,7 @@ export function runOverdueCron(db: any): { generated: number; skipped: number } 
   try {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const targetDays: Array<{ days: number; event: WhatsAppEvent }> = [
+      { days: -3, event: 'pre_due_3' },  // 3 dias ANTES de vencer
       { days: 1,  event: 'overdue_1' },
       { days: 7,  event: 'overdue_7' },
       { days: 15, event: 'overdue_15' },

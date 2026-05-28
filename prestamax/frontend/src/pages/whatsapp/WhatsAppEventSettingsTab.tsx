@@ -30,13 +30,14 @@ interface Template {
 
 const EVENT_DESCRIPTIONS: Record<string, string> = {
   loan_created:     'Se genera un draft de bienvenida cuando desembolsas un préstamo. Incluye monto, número de cuotas y fecha de primer pago.',
+  pre_due_3:        'Recordatorio amistoso 3 días antes de que venza una cuota. Requiere cron diario (Fase B).',
   payment_received: 'Se genera un draft de confirmación cuando registras un pago. Incluye monto pagado, balance restante y próxima cuota.',
   overdue_1:        'Cuando una cuota tiene 1 día de atraso. Requiere cron diario (Fase B).',
   overdue_7:        'Cuando una cuota tiene 7 días de atraso. Requiere cron diario (Fase B).',
   overdue_15:       'Cuando una cuota tiene 15 días de atraso. Requiere cron diario (Fase B).',
 }
 
-const PHASE_B_EVENTS = ['overdue_1', 'overdue_7', 'overdue_15']
+const PHASE_B_EVENTS = ['pre_due_3', 'overdue_1', 'overdue_7', 'overdue_15']
 
 const WhatsAppEventSettingsTab: React.FC = () => {
   const [settings, setSettings] = useState<EventSetting[]>([])
