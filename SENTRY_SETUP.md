@@ -41,7 +41,61 @@ cd prestamax/frontend
 npm install @sentry/react
 ```
 
-Commit + push estos `package.json` updates.
+**Paso adicional para el frontend:** Reemplaza el contenido de `prestamax/frontend/src/lib/sentry.ts` con el siguiente código (que NO está activo por defecto para evitar romper el build cuando @sentry/react no está instalado):
+
+```typescript
+import * as Sentry from '@sentry/react';
+
+let initialized = false;
+
+export async function initSentry(): Promise<boolean> {
+  const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
+  if (!dsn) return false;
+  try {
+    Sentry.init({
+      dsn,
+      environment: import.meta.env.MODE || 'development',
+      release: import.meta.env.VITE_GIT_COMMIT || undefined,
+      tracesSampleRate: 0.1,
+      sendDefaultPii: false,
+      ignoreErrors: [
+        'ResizeObserver loop limit exceeded',
+        'Non-Error promise rejection captured',
+        'Network Error',
+      ],
+    });
+    initialized = true;
+    console.log('[sentry] inicializado');
+    return true;
+  } catch (e: any) {
+    console.warn('[sentry] no se pudo inicializar:', e?.message || e);
+    return false;
+  }
+}
+
+export function captureError(err: any, context?: { tenant_id?: string; user_id?: string; tag?: string }) {
+  if (!initialized) return;
+  Sentry.withScope((scope) => {
+    if (context?.tenant_id) scope.setTag('tenant_id', context.tenant_id);
+    if (context?.user_id) scope.setUser({ id: context.user_id });
+    if (context?.tag) scope.setTag('source', context.tag);
+    Sentry.captureException(err);
+  });
+}
+
+export function setSentryUser(user: { id: string; tenant_id?: string }) {
+  if (!initialized) return;
+  Sentry.setUser({ id: user.id });
+  if (user.tenant_id) Sentry.setTag('tenant_id', user.tenant_id);
+}
+
+export function clearSentryUser() {
+  if (!initialized) return;
+  Sentry.setUser(null);
+}
+```
+
+Commit + push estos `package.json` updates y el `sentry.ts` reemplazado.
 
 ---
 
