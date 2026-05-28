@@ -1,10 +1,11 @@
 // WhatsAppEventSettingsTab — switches por evento para activar/desactivar
 // la generacion automatica de drafts transaccionales.
 //
-// 5 eventos configurables:
-//   - loan_created      → al desembolsar un prestamo
-//   - payment_received  → al registrar un pago
-//   - overdue_1/7/15    → cuotas vencidas (los cron jobs vendran en Fase B)
+// 6 eventos configurables (TODOS activos en produccion):
+//   - loan_created      → al desembolsar un prestamo (hook sincrono)
+//   - payment_received  → al registrar un pago (hook sincrono)
+//   - pre_due_3         → 3 dias antes de vencer una cuota (cron diario 8am)
+//   - overdue_1/7/15    → cuotas vencidas (cron diario 8am)
 //
 // Default: todos OFF. El usuario los activa explicitamente.
 
@@ -30,14 +31,14 @@ interface Template {
 
 const EVENT_DESCRIPTIONS: Record<string, string> = {
   loan_created:     'Se genera un draft de bienvenida cuando desembolsas un préstamo. Incluye monto, número de cuotas y fecha de primer pago.',
-  pre_due_3:        'Recordatorio amistoso 3 días antes de que venza una cuota. Requiere cron diario (Fase B).',
+  pre_due_3:        'Recordatorio amistoso 3 días antes de que venza una cuota. El sistema lo prepara automáticamente cada día.',
   payment_received: 'Se genera un draft de confirmación cuando registras un pago. Incluye monto pagado, balance restante y próxima cuota.',
-  overdue_1:        'Cuando una cuota tiene 1 día de atraso. Requiere cron diario (Fase B).',
-  overdue_7:        'Cuando una cuota tiene 7 días de atraso. Requiere cron diario (Fase B).',
-  overdue_15:       'Cuando una cuota tiene 15 días de atraso. Requiere cron diario (Fase B).',
+  overdue_1:        'Cuando una cuota tiene 1 día de atraso. El sistema lo prepara automáticamente cada día.',
+  overdue_7:        'Cuando una cuota tiene 7 días de atraso. El sistema lo prepara automáticamente cada día.',
+  overdue_15:       'Cuando una cuota tiene 15 días de atraso. El sistema lo prepara automáticamente cada día.',
 }
 
-const PHASE_B_EVENTS = ['pre_due_3', 'overdue_1', 'overdue_7', 'overdue_15']
+const PHASE_B_EVENTS: string[] = []  // Vacio: ya implementamos el cron diario en Fase B
 
 const WhatsAppEventSettingsTab: React.FC = () => {
   const [settings, setSettings] = useState<EventSetting[]>([])
