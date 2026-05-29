@@ -66,7 +66,11 @@ api.interceptors.request.use((config) => {
 // Response interceptor: convert snake_case to camelCase + handle 401
 api.interceptors.response.use(
   (response) => {
-    response.data = camelizeKeys(response.data)
+    // Solo transformar JSON. NO tocar blobs, archivos, ArrayBuffer (CSV/PDF/etc).
+    const d = response.data
+    if (d && typeof d === 'object' && !(d instanceof Blob) && !(d instanceof ArrayBuffer) && !(typeof FormData !== 'undefined' && d instanceof FormData)) {
+      response.data = camelizeKeys(d)
+    }
     return response
   },
   (error) => {

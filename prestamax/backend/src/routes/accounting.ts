@@ -135,7 +135,7 @@ router.get('/summary', authenticate, requireTenant, requirePermission('reports.d
     const db = getDb();
     const { from, to } = parseDateRange(req);
     const interestMora = (db.prepare(`SELECT COALESCE(SUM(applied_interest), 0) as interest, COALESCE(SUM(applied_mora), 0) as mora, COUNT(*) as cnt FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
-    const capital = (db.prepare(`SELECT COALESCE(SUM(applied_principal), 0) as v FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
+    const capital = (db.prepare(`SELECT COALESCE(SUM(applied_capital), 0) as v FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
     const desembolsos = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount), 0) as v, COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND disbursement_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
     const otherIncomes = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND type='income' AND transaction_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
     const expenses = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c, category FROM income_expenses WHERE tenant_id=? AND type='expense' AND transaction_date BETWEEN ? AND ? GROUP BY category`).all(req.tenant.id, from, to) as any[]);
