@@ -147,6 +147,39 @@ router.post('/plan-inquiry', async (req: Request, res: Response) => {
       message || null, ip_address, user_agent, now(), now()
     );
 
+    // Notificacion campanita: insertar para cada admin de plataforma en cada
+    // uno de sus tenants. Asi sale el badge sin importar qué tenant esté
+    // viendo el admin al recibir el lead.
+    try {
+      // SOLO el owner de la app recibe la notif (configurable via OWNER_USER_EMAIL,
+      // default = jcpenalo@gmail.com). Asi el resto de admins no ven notifs duplicadas.
+      const ownerEmail = (process.env.OWNER_USER_EMAIL || 'jcpenalo@gmail.com').toLowerCase();
+      const platformAdmins = db.prepare(`
+        SELECT u.id as user_id, tm.tenant_id
+        FROM users u
+        JOIN tenant_memberships tm ON tm.user_id = u.id AND tm.is_active = 1
+        WHERE lower(u.email) = ? AND u.is_active = 1
+      `).all(ownerEmail) as any[];
+      const notifTitle = `Nueva solicitud de plan: ${full_name}`;
+      const notifMsg = business_name
+        ? `${business_name} (${country}) — Plan: ${plan_interest || 'asesorar'}`
+        : `${country} — Plan: ${plan_interest || 'asesorar'}`;
+      const insertNotif = db.prepare(`
+        INSERT INTO notifications (id, tenant_id, user_id, type, title, message, entity_type, entity_id, is_read, created_at)
+        VALUES (?,?,?,?,?,?,?,?,0,datetime('now'))
+      `);
+      const crypto = require('crypto');
+      for (const pa of platformAdmins) {
+        insertNotif.run(
+          crypto.randomUUID(), pa.tenant_id, pa.user_id,
+          'plan_inquiry', notifTitle, notifMsg,
+          'plan_inquiry', id
+        );
+      }
+    } catch (e: any) {
+      console.error('[plan-inquiry] notif admin fallo:', e?.message || e);
+    }
+
     sendInquiryNotification({
       id, full_name, business_name, whatsapp, email, country,
       plan_interest, portfolio_size, source, message,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { PageLoadingState } from '@/components/ui/Loading'
@@ -180,7 +181,10 @@ import { MessageSquare } from 'lucide-react'
 
 const PlatformAdminPage: React.FC = () => {
   const { state } = useAuth()
-  const [activeTab, setActiveTab] = useState('overview')
+  const [searchParams] = useSearchParams()
+  const validTabs = ['overview','tenants','plans','users','logs','backup','inquiries']
+  const initialTab = validTabs.includes(searchParams.get('tab') || '') ? (searchParams.get('tab') as string) : 'overview'
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [isLoading, setIsLoading] = useState(true)
   const [stats, setStats] = useState<PlatformStats | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])

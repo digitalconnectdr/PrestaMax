@@ -11,6 +11,12 @@ import { authenticate, requireTenant, requirePermission, AuthRequest } from '../
 
 const router = Router();
 
+function formatDate(d: any): string {
+  if (!d) return '';
+  // Maneja '2026-01-02T10:09:33.928Z', '2026-01-02 10:09:33', '2026-01-02', etc
+  return String(d).slice(0, 10);
+}
+
 function csvField(val: any): string {
   if (val === null || val === undefined) return '';
   const s = String(val);
@@ -56,7 +62,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       ORDER BY l.disbursement_date
     `).all(req.tenant.id, from, to) as any[];
     for (const d of disbursements) {
-      csv += csvLine([d.fecha, 'Desembolso', `Préstamo ${d.loan_number}`, d.cliente || '', d.loan_number, d.monto, 0, d.cuenta || '', d.loan_number]);
+      csv += csvLine([formatDate(d.fecha), 'Desembolso', `Préstamo ${d.loan_number}`, d.cliente || '', d.loan_number, d.monto, 0, d.cuenta || '', d.loan_number]);
     }
 
     const payments = db.prepare(`
@@ -71,7 +77,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       ORDER BY p.payment_date
     `).all(req.tenant.id, from, to) as any[];
     for (const p of payments) {
-      csv += csvLine([p.fecha, 'Pago Recibido', `Pago ${p.payment_number}`, p.cliente || '', p.loan_number || '', 0, p.monto, p.cuenta || '', p.payment_number]);
+      csv += csvLine([formatDate(p.fecha), 'Pago Recibido', `Pago ${p.payment_number}`, p.cliente || '', p.loan_number || '', 0, p.monto, p.cuenta || '', p.payment_number]);
     }
 
     const incomes = db.prepare(`
@@ -83,7 +89,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       ORDER BY i.transaction_date
     `).all(req.tenant.id, from, to) as any[];
     for (const i of incomes) {
-      csv += csvLine([i.fecha, 'Ingreso', `${i.category}${i.description ? ': '+i.description : ''}`, '', '', 0, i.monto, i.cuenta || '', '']);
+      csv += csvLine([formatDate(i.fecha), 'Ingreso', `${i.category}${i.description ? ': '+i.description : ''}`, '', '', 0, i.monto, i.cuenta || '', '']);
     }
 
     const expenses = db.prepare(`
@@ -95,7 +101,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       ORDER BY i.transaction_date
     `).all(req.tenant.id, from, to) as any[];
     for (const e of expenses) {
-      csv += csvLine([e.fecha, 'Gasto', `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.monto, 0, e.cuenta || '', '']);
+      csv += csvLine([formatDate(e.fecha), 'Gasto', `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.monto, 0, e.cuenta || '', '']);
     }
 
     sendCsv(res, `libro-diario_${from}_${to}.csv`, csv);
