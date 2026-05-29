@@ -1,30 +1,60 @@
-// sentry — STUB en frontend
-//
-// Sentry React requiere que el bundler resuelva '@sentry/react' en build time.
-// Si el modulo no esta instalado, el build de Vite/Rollup falla.
-// Por eso este archivo es un STUB por defecto: no hace nada.
-//
-// PARA ACTIVAR SENTRY en frontend:
-//   1. npm install @sentry/react
-//   2. Reemplaza el contenido de este archivo con el snippet en SENTRY_SETUP.md
-//      seccion "Activacion del frontend"
-//   3. Configura VITE_SENTRY_DSN en Vercel env vars
-//   4. Re-deploy
-//
-// El backend SI esta activo siempre (require dinamico que no rompe el build de Node).
+// sentry — integracion ACTIVA con Sentry React
+// Para deshabilitar: borrar VITE_SENTRY_DSN de las env vars (no se inicializa).
+// Para volver a stub: revertir este archivo al commit a4c58fc.
+
+import * as Sentry from '@sentry/react'
+
+let initialized = false
 
 export async function initSentry(): Promise<boolean> {
-  return false;
+  const dsn = (import.meta as any).env?.VITE_SENTRY_DSN as string | undefined
+  if (!dsn) {
+    // Silencio en dev sin DSN
+    return false
+  }
+  try {
+    Sentry.init({
+      dsn,
+      environment: (import.meta as any).env?.MODE || 'development',
+      release: (import.meta as any).env?.VITE_GIT_COMMIT || undefined,
+      tracesSampleRate: 0.1,
+      sendDefaultPii: false,
+      ignoreErrors: [
+        'ResizeObserver loop limit exceeded',
+        'Non-Error promise rejection captured',
+        'Network Error',
+      ],
+    })
+    initialized = true
+    console.log('[sentry] inicializado')
+    return true
+  } catch (e: any) {
+    console.warn('[sentry] no se pudo inicializar:', e?.message || e)
+    return false
+  }
 }
 
-export function captureError(_err: any, _context?: { tenant_id?: string; user_id?: string; tag?: string }) {
-  // no-op
+export function captureError(err: any, context?: { tenant_id?: string; user_id?: string; tag?: string }) {
+  if (!initialized) return
+  try {
+    Sentry.withScope((scope) => {
+      if (context?.tenant_id) scope.setTag('tenant_id', context.tenant_id)
+      if (context?.user_id) scope.setUser({ id: context.user_id })
+      if (context?.tag) scope.setTag('source', context.tag)
+      Sentry.captureException(err)
+    })
+  } catch {}
 }
 
-export function setSentryUser(_user: { id: string; tenant_id?: string }) {
-  // no-op
+export function setSentryUser(user: { id: string; tenant_id?: string }) {
+  if (!initialized) return
+  try {
+    Sentry.setUser({ id: user.id })
+    if (user.tenant_id) Sentry.setTag('tenant_id', user.tenant_id)
+  } catch {}
 }
 
 export function clearSentryUser() {
-  // no-op
+  if (!initialized) return
+  try { Sentry.setUser(null) } catch {}
 }
