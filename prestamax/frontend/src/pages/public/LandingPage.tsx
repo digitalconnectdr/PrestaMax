@@ -24,7 +24,9 @@ import {
   Zap,
 } from 'lucide-react'
 
+import PlanInquiryModal from '@/components/public/PlanInquiryModal'
 interface Plan {
+  slug?: string
   name: string
   price: number
   description: string
@@ -39,6 +41,7 @@ interface Plan {
 const plans: Plan[] = [
   {
     name: 'Starter',
+    slug: 'starter',
     price: 29.99,
     description: 'Ideal para emprendedores que recién empiezan',
     collectors: '1 cobrador',
@@ -55,6 +58,7 @@ const plans: Plan[] = [
   },
   {
     name: 'Básico',
+    slug: 'basico',
     price: 59.99,
     description: 'Para negocios en crecimiento con varios cobradores',
     collectors: '3 cobradores',
@@ -74,6 +78,7 @@ const plans: Plan[] = [
   },
   {
     name: 'Profesional',
+    slug: 'profesional',
     price: 119.99,
     description: 'Para empresas con operación consolidada',
     collectors: '10 cobradores',
@@ -91,6 +96,7 @@ const plans: Plan[] = [
   },
   {
     name: 'Enterprise',
+    slug: 'enterprise',
     price: 249.99,
     description: 'Para grandes instituciones financieras',
     collectors: 'Cobradores ilimitados',
@@ -193,6 +199,13 @@ const faqs = [
 
 const LandingPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [inquiryOpen, setInquiryOpen]       = useState(false)
+  const [inquiryPlan, setInquiryPlan]       = useState<string>('')
+  const openInquiry = (planSlug: string = '') => {
+    setInquiryPlan(planSlug)
+    setInquiryOpen(true)
+    setMobileMenuOpen(false)
+  }
   const [openFaq, setOpenFaq] = useState<number | null>(0)
 
   return (
@@ -214,12 +227,13 @@ const LandingPage: React.FC = () => {
               <a href="#pricing" className="text-sm text-slate-600 hover:text-slate-900">Precios</a>
               <a href="#faq" className="text-sm text-slate-600 hover:text-slate-900">Preguntas</a>
               <Link to="/login" className="text-sm text-slate-600 hover:text-slate-900">Iniciar sesión</Link>
-              <Link
-                to="/register"
+              <button
+                type="button"
+                onClick={() => openInquiry('')}
                 className="px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#152a45] transition"
               >
-                Empezar gratis
-              </Link>
+                Solicitar plan
+              </button>
             </nav>
 
             {/* Mobile menu button */}
@@ -239,13 +253,13 @@ const LandingPage: React.FC = () => {
               <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">Precios</a>
               <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">Preguntas</a>
               <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">Iniciar sesión</Link>
-              <Link
-                to="/register"
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded text-center"
+              <button
+                type="button"
+                onClick={() => openInquiry('')}
+                className="block w-full px-3 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded text-center"
               >
-                Empezar gratis
-              </Link>
+                Solicitar plan
+              </button>
             </div>
           )}
         </div>
@@ -257,7 +271,7 @@ const LandingPage: React.FC = () => {
           <div className="text-center max-w-4xl mx-auto">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700 mb-6">
               <Zap className="w-3.5 h-3.5" />
-              10 días de prueba gratis · Sin tarjeta de crédito
+              Trial de 14 días · Sin tarjeta · Soporte por WhatsApp
             </div>
             <h1 className="text-4xl md:text-6xl font-bold text-slate-900 leading-tight">
               Gestiona tu negocio de préstamos
@@ -268,13 +282,14 @@ const LandingPage: React.FC = () => {
               Multi-país y multi-moneda: soporte para 12 monedas de Latinoamérica, USD y EUR.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-              <Link
-                to="/register"
+              <button
+                type="button"
+                onClick={() => openInquiry('')}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/30"
               >
-                Empezar gratis
+                Solicitar plan
                 <ArrowRight className="w-4 h-4" />
-              </Link>
+              </button>
               <a
                 href="#pricing"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-slate-700 font-medium rounded-lg border border-slate-300 hover:bg-slate-50 transition"
@@ -406,7 +421,7 @@ const LandingPage: React.FC = () => {
               Precios simples y transparentes
             </h2>
             <p className="mt-4 text-lg text-slate-600">
-              Sin sorpresas. Cancela cuando quieras. Todos los planes incluyen 10 días gratis.
+              Sin sorpresas. Cancela cuando quieras. Te contactamos para configurar tu cuenta sin fricción.
             </p>
           </div>
 
@@ -460,22 +475,23 @@ const LandingPage: React.FC = () => {
                   ))}
                 </ul>
 
-                <Link
-                  to="/register"
-                  className={`mt-6 block text-center px-4 py-2.5 rounded-lg font-medium transition ${
+                <button
+                  type="button"
+                  onClick={() => openInquiry(plan.slug || '')}
+                  className={`mt-6 block w-full text-center px-4 py-2.5 rounded-lg font-medium transition ${
                     plan.highlighted
                       ? 'bg-[#1e3a5f] text-white hover:bg-[#152a45]'
                       : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                   }`}
                 >
-                  Empezar gratis
-                </Link>
+                  Solicitar plan
+                </button>
               </div>
             ))}
           </div>
 
           <p className="mt-8 text-center text-sm text-slate-500">
-            Todos los precios en USD. Pago seguro procesado por Stripe.
+            Todos los precios en USD. Te contactamos para coordinar el pago (transferencia, depósito o tarjeta).
           </p>
         </div>
       </section>
@@ -487,15 +503,16 @@ const LandingPage: React.FC = () => {
             Empieza a profesionalizar tu negocio hoy
           </h2>
           <p className="mt-4 text-lg text-blue-100">
-            10 días de prueba gratis. Sin tarjeta de crédito. Configura tu cuenta en minutos.
+            Habla con nuestro equipo. Te ayudamos a elegir el plan correcto y configurar tu cuenta.
           </p>
-          <Link
-            to="/register"
+          <button
+            type="button"
+            onClick={() => openInquiry('')}
             className="mt-8 inline-flex items-center gap-2 px-8 py-3 bg-white text-[#1e3a5f] font-semibold rounded-lg hover:bg-slate-50 transition shadow-lg"
           >
-            Crear cuenta gratis
+            Solicitar mi plan
             <ArrowRight className="w-4 h-4" />
-          </Link>
+          </button>
         </div>
       </section>
 
@@ -584,6 +601,12 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      <PlanInquiryModal
+        open={inquiryOpen}
+        onClose={() => setInquiryOpen(false)}
+        initialPlan={inquiryPlan}
+      />
     </div>
   )
 }

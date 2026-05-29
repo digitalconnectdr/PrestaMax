@@ -175,6 +175,8 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   create_user: { label: 'Usuario creado', color: 'bg-purple-100 text-purple-700' },
   update_settings: { label: 'Configuración actualizada', color: 'bg-slate-100 text-slate-700' },
 }
+import InquiriesPanel from '@/components/admin/InquiriesPanel'
+import { MessageSquare } from 'lucide-react'
 
 const PlatformAdminPage: React.FC = () => {
   const { state } = useAuth()
@@ -679,6 +681,7 @@ const PlatformAdminPage: React.FC = () => {
     { id: 'users', label: 'Usuarios', icon: Users2 },
     { id: 'logs', label: 'Logs', icon: ClipboardList },
     { id: 'backup', label: 'Backups', icon: Database },
+    { id: 'inquiries', label: 'Solicitudes', icon: MessageSquare },
   ]
 
   // Show bootstrap UI if user is logged in but not yet platform admin
@@ -1997,6 +2000,11 @@ const PlatformAdminPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+            {/* ── INQUIRIES (Solicitudes de Plan desde landing) ── */}
+      {activeTab === 'inquiries' && (
+        <InquiriesPanel />
       )}
 
       {/* ── MODAL: Confirmar Purga de Datos de Empresa ── */}

@@ -835,6 +835,36 @@ export function initializeDatabase(): void {
     `);
   } catch(_) {}
 
+  // ── plan_inquiries: leads capturados desde el form publico de la landing ──
+  // Mientras no haya pasarela de pagos, los prospectos completan un form
+  // y el admin los contacta manualmente por WhatsApp. Tras conversion se
+  // marca status='converted' y se vincula al tenant creado.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS plan_inquiries (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      business_name TEXT,
+      whatsapp TEXT NOT NULL,
+      email TEXT NOT NULL,
+      country TEXT NOT NULL DEFAULT 'DO',
+      plan_interest TEXT,
+      portfolio_size TEXT,
+      source TEXT,
+      message TEXT,
+      status TEXT NOT NULL DEFAULT 'new',
+      ip_address TEXT,
+      user_agent TEXT,
+      contacted_at TEXT,
+      contacted_by TEXT,
+      converted_to_tenant_id TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_plan_inquiries_status  ON plan_inquiries(status);
+    CREATE INDEX IF NOT EXISTS idx_plan_inquiries_created ON plan_inquiries(created_at);
+  `);
+
   // ── Notarial / legal document fields for tenants ──────────────────────────
   try { db.exec(`ALTER TABLE tenants ADD COLUMN notary_name TEXT`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN notary_collegiate_number TEXT`); } catch(_) {}
@@ -1032,6 +1062,8 @@ export function initializeDatabase(): void {
   // Seed the Plan Trial (inserted only if not present — INSERT OR IGNORE)
   const insertTrialPlan = db.prepare(`INSERT OR IGNORE INTO plans (id, name, slug, price_monthly, max_collectors, max_clients, max_users, trial_days, features, description, is_trial_default) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
   insertTrialPlan.run('plan-trial', 'Plan Trial', 'trial', 0, 1, 50, 2, 14, '["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "requests.view", "requests.approve", "requests.reject", "requests.convert"]', 'Plan de prueba gratuito para nuevos prestamistas. Configurable desde Admin.', 1);
+  // Patch existing trial plan features in case this DB already had the row
+  db.prepare(`UPDATE plans SET features=? WHERE id='plan-trial' AND is_trial_default=1`).run('["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "requests.view", "requests.approve", "requests.reject", "requests.convert"]', 'Plan de prueba gratuito para nuevos prestamistas. Configurable desde Admin.', 1);
   // Patch existing trial plan features in case this DB already had the row
   db.prepare(`UPDATE plans SET features=? WHERE id='plan-trial' AND is_trial_default=1`).run('["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "requests.view", "requests.approve", "requests.reject", "requests.convert"]');
 
