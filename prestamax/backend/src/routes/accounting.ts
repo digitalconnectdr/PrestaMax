@@ -75,24 +75,24 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
     }
 
     const incomes = db.prepare(`
-      SELECT i.date as fecha, i.amount as monto, i.category, i.description, b.bank_name as cuenta
+      SELECT i.transaction_date as fecha, i.amount as monto, i.category, i.description, b.bank_name as cuenta
       FROM income_expenses i
       LEFT JOIN bank_accounts b ON b.id = i.bank_account_id
-      WHERE i.tenant_id=? AND i.is_voided=0 AND i.type='income'
-        AND i.date BETWEEN ? AND ?
-      ORDER BY i.date
+      WHERE i.tenant_id=? AND i.type='income'
+        AND i.transaction_date BETWEEN ? AND ?
+      ORDER BY i.transaction_date
     `).all(req.tenant.id, from, to) as any[];
     for (const i of incomes) {
       csv += csvLine([i.fecha, 'Ingreso', `${i.category}${i.description ? ': '+i.description : ''}`, '', '', 0, i.monto, i.cuenta || '', '']);
     }
 
     const expenses = db.prepare(`
-      SELECT i.date as fecha, i.amount as monto, i.category, i.description, b.bank_name as cuenta
+      SELECT i.transaction_date as fecha, i.amount as monto, i.category, i.description, b.bank_name as cuenta
       FROM income_expenses i
       LEFT JOIN bank_accounts b ON b.id = i.bank_account_id
-      WHERE i.tenant_id=? AND i.is_voided=0 AND i.type='expense'
-        AND i.date BETWEEN ? AND ?
-      ORDER BY i.date
+      WHERE i.tenant_id=? AND i.type='expense'
+        AND i.transaction_date BETWEEN ? AND ?
+      ORDER BY i.transaction_date
     `).all(req.tenant.id, from, to) as any[];
     for (const e of expenses) {
       csv += csvLine([e.fecha, 'Gasto', `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.monto, 0, e.cuenta || '', '']);
@@ -114,9 +114,9 @@ router.get('/by-account', authenticate, requireTenant, requirePermission('report
     const accounts = db.prepare(`SELECT id, bank_name, account_number, currency FROM bank_accounts WHERE tenant_id=?`).all(req.tenant.id) as any[];
     for (const acc of accounts) {
       const pagosIn = (db.prepare(`SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c FROM payments WHERE tenant_id=? AND bank_account_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
-      const incomesIn = (db.prepare(`SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND bank_account_id=? AND is_voided=0 AND type='income' AND date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
+      const incomesIn = (db.prepare(`SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND bank_account_id=? AND type='income' AND transaction_date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
       const desembolsos = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount),0) as t, COUNT(*) as c FROM loans WHERE tenant_id=? AND disbursement_bank_account_id=? AND is_voided=0 AND disbursement_date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
-      const gastos = (db.prepare(`SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND bank_account_id=? AND is_voided=0 AND type='expense' AND date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
+      const gastos = (db.prepare(`SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND bank_account_id=? AND type='expense' AND transaction_date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
       const entradas = (pagosIn.t || 0) + (incomesIn.t || 0);
       const salidas = (desembolsos.t || 0) + (gastos.t || 0);
       const movs = (pagosIn.c || 0) + (incomesIn.c || 0) + (desembolsos.c || 0) + (gastos.c || 0);
@@ -137,8 +137,8 @@ router.get('/summary', authenticate, requireTenant, requirePermission('reports.d
     const interestMora = (db.prepare(`SELECT COALESCE(SUM(applied_interest), 0) as interest, COALESCE(SUM(applied_mora), 0) as mora, COUNT(*) as cnt FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
     const capital = (db.prepare(`SELECT COALESCE(SUM(applied_principal), 0) as v FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
     const desembolsos = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount), 0) as v, COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND disbursement_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
-    const otherIncomes = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND is_voided=0 AND type='income' AND date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
-    const expenses = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c, category FROM income_expenses WHERE tenant_id=? AND is_voided=0 AND type='expense' AND date BETWEEN ? AND ? GROUP BY category`).all(req.tenant.id, from, to) as any[]);
+    const otherIncomes = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND type='income' AND transaction_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
+    const expenses = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c, category FROM income_expenses WHERE tenant_id=? AND type='expense' AND transaction_date BETWEEN ? AND ? GROUP BY category`).all(req.tenant.id, from, to) as any[]);
     const totalExpenses = expenses.reduce((s, e) => s + (e.v || 0), 0);
     const grossIncome = (interestMora.interest || 0) + (interestMora.mora || 0) + (otherIncomes.v || 0);
     const netIncome = grossIncome - totalExpenses;
