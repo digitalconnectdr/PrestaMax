@@ -882,4 +882,59 @@ router.post('/tenants/:id/seed-demo', authenticate, requirePlatformAdmin, async 
   }
 });
 
+
+// POST /api/admin/cleanup-duplicate-investors — borra duplicados generados por
+// la migracion de email-unique (sufijo +dupN) que NO tengan prestamos asignados
+// ni acceso al portal vinculado. Util para limpiar data demo despues de varias
+// ejecuciones del seed.
+router.post('/cleanup-duplicate-investors', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const tenantFilter = req.body?.tenant_id ? 'AND tenant_id=?' : '';
+    const params: any[] = tenantFilter ? [req.body.tenant_id] : [];
+
+    // Buscar investors con email que tenga sufijo +dup (generados por la migracion)
+    // O bien con email LIKE '%+dup%@%'
+    const sql = `
+      SELECT id, tenant_id, full_name, email
+      FROM investors
+      WHERE email LIKE '%+dup%@%'
+        AND user_id IS NULL
+        AND (SELECT COUNT(*) FROM loans WHERE investor_id = investors.id) = 0
+        ${tenantFilter}
+    `;
+    const candidates = db.prepare(sql).all(...params) as any[];
+
+    if (candidates.length === 0) {
+      return res.json({
+        success: true,
+        deleted: 0,
+        message: 'No hay duplicados seguros para borrar (sin prestamos y sin portal).',
+        candidates: [],
+      });
+    }
+
+    const ids = candidates.map(c => c.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const result = db.prepare(`DELETE FROM investors WHERE id IN (${placeholders})`).run(...ids);
+
+    // Agrupar por tenant para reporte
+    const byTenant: Record<string, number> = {};
+    for (const c of candidates) {
+      byTenant[c.tenant_id] = (byTenant[c.tenant_id] || 0) + 1;
+    }
+
+    res.json({
+      success: true,
+      deleted: result.changes,
+      message: `Borrados ${result.changes} investor(s) duplicados sin prestamos ni acceso al portal.`,
+      byTenant,
+      sample: candidates.slice(0, 10).map(c => ({ id: c.id, name: c.full_name, email: c.email })),
+    });
+  } catch(e:any) {
+    console.error('POST /admin/cleanup-duplicate-investors error:', e);
+    res.status(500).json({ error: e.message || 'Failed' });
+  }
+});
+
 export { router };

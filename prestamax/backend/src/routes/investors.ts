@@ -37,6 +37,20 @@ router.post('/', authenticate, requireTenant, requirePermission('investors.creat
     const db = getDb();
     const d = req.body || {};
     if (!d.fullName && !d.full_name) return res.status(400).json({ error: 'fullName es requerido' });
+
+    // Validar email unico (case-insensitive) dentro del tenant
+    const emailNorm = (d.email || '').toString().trim().toLowerCase();
+    if (emailNorm) {
+      const dup = db.prepare(`SELECT id, full_name FROM investors WHERE tenant_id=? AND lower(email)=? LIMIT 1`)
+        .get(req.tenant.id, emailNorm) as any;
+      if (dup) {
+        return res.status(409).json({
+          error: `Ya existe un inversionista con este email (${dup.full_name}). Usa otro email o edita el existente.`,
+          conflictInvestorId: dup.id,
+        });
+      }
+    }
+
     const id = uuid();
     db.prepare(`INSERT INTO investors (
       id, tenant_id, full_name, email, phone, id_number,
@@ -69,6 +83,22 @@ router.put('/:id', authenticate, requireTenant, requirePermission('investors.edi
     const inv = db.prepare('SELECT id FROM investors WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id);
     if (!inv) return res.status(404).json({ error: 'Inversionista no encontrado' });
     const d = req.body || {};
+
+    // Si viene un email nuevo, validar que no este en otro investor del tenant
+    if (d.email !== undefined && d.email !== null) {
+      const emailNorm = String(d.email).trim().toLowerCase();
+      if (emailNorm) {
+        const dup = db.prepare(`SELECT id, full_name FROM investors WHERE tenant_id=? AND lower(email)=? AND id != ? LIMIT 1`)
+          .get(req.tenant.id, emailNorm, req.params.id) as any;
+        if (dup) {
+          return res.status(409).json({
+            error: `Ya existe otro inversionista con este email (${dup.full_name}). Usa otro email.`,
+            conflictInvestorId: dup.id,
+          });
+        }
+      }
+    }
+
     const norm = (v: any) => v === undefined ? null : v;
     db.prepare(`UPDATE investors SET
       full_name = COALESCE(?, full_name),

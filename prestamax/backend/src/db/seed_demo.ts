@@ -70,6 +70,8 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
 
   // ── 10 inversionistas (5 fixed_rate, 5 equity) ─────────────────────────────
   const investorIds: string[] = [];
+  // Timestamp epoch para evitar colision de emails en ejecuciones repetidas
+  const seedRun = Date.now().toString(36).slice(-4);
   for (let i = 1; i <= 10; i++) {
     const isFixedRate = i <= 5;
     const fullName = `${rand(NOMBRES_DR_M)} ${rand(APELLIDOS_DR)}`;
@@ -81,7 +83,7 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
       capital_contributed, notes, is_active
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`).run(
       invId, opts.tenantId, fullName,
-      `inv${i}@demo.com`, `809-555-${String(2000 + i).padStart(4, '0')}`,
+      `inv${i}-${seedRun}@demo.com`, `809-555-${String(2000 + i).padStart(4, '0')}`,
       `${randInt(100, 999)}-${String(randInt(1000000, 9999999)).padStart(7, '0')}-${randInt(1, 9)}`,
       isFixedRate ? 'fixed_rate' : 'equity',
       isFixedRate ? randInt(2, 4) : 0,

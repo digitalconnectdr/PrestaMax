@@ -763,6 +763,62 @@ export function initializeDatabase(): void {
   // Fase 2: vinculo entre user y investor para el portal del inversionista
   try { db.exec(`ALTER TABLE investors ADD COLUMN user_id TEXT`); } catch(_) {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)`); } catch(_) {}
+
+  // ── Investors: dedupe + UNIQUE (tenant_id, lower(email)) ──────────────────
+  // Bug detectado May/2026: seed_demo + ausencia de UNIQUE permitia que un
+  // mismo email apareciera en varios investors del mismo tenant. Si despues
+  // alguien daba acceso al portal, ambos investors quedaban apuntando al
+  // MISMO user_id y solo uno era visible en el portal.
+  //
+  // Estrategia de migracion (idempotente):
+  //   1. Detectar duplicados por (tenant_id, lower(email)).
+  //   2. Mantener el "ganador": el que tenga user_id (acceso al portal) o el
+  //      mas antiguo. Renombrar el email de los perdedores agregando un
+  //      sufijo +dup{n} antes del @ para preservar historico SIN romper
+  //      preferencia. Asi no se borran datos pero queda libre la unicidad.
+  //   3. Crear el UNIQUE INDEX.
+  try {
+    const dupGroups = db.prepare(`
+      SELECT tenant_id, lower(email) as e, COUNT(*) as c
+      FROM investors
+      WHERE email IS NOT NULL AND email != ''
+      GROUP BY tenant_id, lower(email)
+      HAVING c > 1
+    `).all() as any[];
+
+    if (dupGroups.length > 0) {
+      console.log(`[migration] Detectados ${dupGroups.length} grupos de investors duplicados por email — renombrando perdedores con sufijo +dup`);
+      for (const g of dupGroups) {
+        const rows = db.prepare(`
+          SELECT id, full_name, email, user_id, created_at,
+            (SELECT COUNT(*) FROM loans WHERE investor_id = investors.id) as loan_count
+          FROM investors
+          WHERE tenant_id=? AND lower(email)=?
+          ORDER BY (user_id IS NOT NULL) DESC, loan_count DESC, datetime(created_at) ASC
+        `).all(g.tenant_id, g.e) as any[];
+        // El primero es el ganador (con portal user_id, o con mas loans, o mas antiguo)
+        const winner = rows[0];
+        const losers = rows.slice(1);
+        const [local, domain] = (winner.email || '').split('@');
+        for (let i = 0; i < losers.length; i++) {
+          const newEmail = `${local}+dup${i+1}@${domain || 'demo.com'}`;
+          db.prepare(`UPDATE investors SET email=?, updated_at=datetime('now') WHERE id=?`)
+            .run(newEmail, losers[i].id);
+        }
+      }
+    }
+  } catch (e: any) {
+    console.error('[migration] dedupe investors email fallo:', e?.message || e);
+  }
+
+  // Crear el UNIQUE INDEX (idempotente — IF NOT EXISTS)
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_investors_tenant_email
+             ON investors(tenant_id, lower(email))
+             WHERE email IS NOT NULL AND email != ''`);
+  } catch (e: any) {
+    console.error('[migration] UNIQUE investors email fallo (probable duplicado residual):', e?.message || e);
+  }
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_payments_payout ON payments(liquidated_in_payout_id)`); } catch(_) {}
 
 
