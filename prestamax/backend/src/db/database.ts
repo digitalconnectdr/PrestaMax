@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 
 // DB path: env variable > local prestamax.db next to backend folder > Linux sandbox path
-const DB_PATH = process.env.DATABASE_PATH ||
+export const DB_PATH = process.env.DATABASE_PATH ||
   path.join(__dirname, '..', '..', '..', 'prestamax.db');
 
 let _db: DatabaseSync | null = null;

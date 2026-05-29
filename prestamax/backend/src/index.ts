@@ -169,20 +169,33 @@ app.use(errorHandler);
 // Corre cada hora; internamente solo genera drafts cuando es 8am hora local
 // del servidor. Evita doble-corrida usando una bandera en memoria.
 import { runOverdueCron } from './services/whatsappService';
+import { createBackup, BACKUP_CONFIG } from './services/backupService';
 let lastCronDate = '';
+let lastBackupDate = '';
 setInterval(() => {
   try {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
-    // Correr una vez al dia a las 8am hora del servidor
-    if (now.getHours() === 8 && lastCronDate !== todayStr) {
+    const hour = now.getHours();
+
+    // 8am: WhatsApp mora cron
+    if (hour === 8 && lastCronDate !== todayStr) {
       lastCronDate = todayStr;
       const { getDb } = require('./db/database');
       runOverdueCron(getDb());
     }
-  } catch (e) { console.error('[whatsapp cron tick]', e); }
+
+    // 3am: Backup automatico SQLite
+    if (hour === 3 && lastBackupDate !== todayStr) {
+      lastBackupDate = todayStr;
+      createBackup()
+        .then(info => console.log(`[backup] cron OK: ${info.filename}`))
+        .catch(e => console.error('[backup] cron fallo:', e?.message || e));
+    }
+  } catch (e) { console.error('[cron tick]', e); }
 }, 60 * 60 * 1000); // cada hora
 console.log('[whatsapp] cron de mora programado (chequeo cada hora, dispara a las 8am)');
+console.log(`[backup] cron diario programado (dispara a las 3am) | dir=${BACKUP_CONFIG.dir} | keep=${BACKUP_CONFIG.keepLast} | s3=${BACKUP_CONFIG.s3Enabled}`);
 
 app.listen(PORT, () => {
   console.log(`PrestaMax API running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'development'}]`);

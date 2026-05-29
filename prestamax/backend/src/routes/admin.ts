@@ -453,76 +453,48 @@ router.get('/stats', authenticate, requirePlatformAdmin, (req: AuthRequest, res:
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
+// ── Backups: VACUUM INTO atomico + gzip + retencion automatica ───────────────
+// Implementacion en services/backupService.ts (compartido con el cron diario).
+import { createBackup as svcCreateBackup, listBackups as svcListBackups,
+         deleteBackup as svcDeleteBackup, getBackupPath as svcGetBackupPath,
+         BACKUP_CONFIG } from '../services/backupService';
+
 // POST create database backup (admin only)
-router.post('/backup', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+router.post('/backup', authenticate, requirePlatformAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const DB_PATH = process.env.DATABASE_PATH ||
-      path.join(__dirname, '..', '..', '..', 'prestamax.db');
-    if (!fs.existsSync(DB_PATH)) return res.status(404).json({ error: 'Base de datos no encontrada' });
-
-    const backupDir = path.join(path.dirname(DB_PATH), 'backups');
-    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const backupFilename = `prestamax-backup-${timestamp}.db`;
-    const backupPath = path.join(backupDir, backupFilename);
-
-    fs.copyFileSync(DB_PATH, backupPath);
-
-    // List all backups
-    const backups = fs.readdirSync(backupDir)
-      .filter(f => f.endsWith('.db'))
-      .map(f => ({
-        filename: f,
-        size: fs.statSync(path.join(backupDir, f)).size,
-        createdAt: fs.statSync(path.join(backupDir, f)).birthtime,
-      }))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    res.json({ success: true, filename: backupFilename, backups });
+    const info = await svcCreateBackup();
+    const backups = svcListBackups();
+    res.json({ success: true, filename: info.filename, info, backups, config: BACKUP_CONFIG });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
 // GET list backups
 router.get('/backups', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
-    const DB_PATH = process.env.DATABASE_PATH ||
-      path.join(__dirname, '..', '..', '..', 'prestamax.db');
-    const backupDir = path.join(path.dirname(DB_PATH), 'backups');
-    if (!fs.existsSync(backupDir)) return res.json([]);
-    const backups = fs.readdirSync(backupDir)
-      .filter(f => f.endsWith('.db'))
-      .map(f => ({
-        filename: f,
-        size: fs.statSync(path.join(backupDir, f)).size,
-        createdAt: fs.statSync(path.join(backupDir, f)).mtime,
-      }))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    res.json(backups);
+    res.json({ backups: svcListBackups(), config: BACKUP_CONFIG });
+  } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
+// GET download a specific backup file (stream)
+router.get('/backup/:filename/download', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const { filename } = req.params;
+    const full = svcGetBackupPath(filename);
+    if (!full || !fs.existsSync(full)) return res.status(404).json({ error: 'Backup no encontrado.' });
+    const stat = fs.statSync(full);
+    res.setHeader('Content-Type', filename.endsWith('.gz') ? 'application/gzip' : 'application/octet-stream');
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    fs.createReadStream(full).pipe(res);
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
 // DELETE a specific backup file (admin only)
 router.delete('/backup/:filename', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
-    const { filename } = req.params;
-    // Security: only allow .db files and reject any path traversal attempts
-    if (!filename.endsWith('.db') || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
-      return res.status(400).json({ error: 'Nombre de archivo no válido.' });
-    }
-    const DB_PATH = process.env.DATABASE_PATH ||
-      path.join(__dirname, '..', '..', '..', 'prestamax.db');
-    const backupDir = path.join(path.dirname(DB_PATH), 'backups');
-    const filePath = path.join(backupDir, filename);
-    // Extra safety: ensure resolved path stays inside backupDir
-    if (!filePath.startsWith(backupDir)) {
-      return res.status(400).json({ error: 'Ruta no permitida.' });
-    }
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Backup no encontrado.' });
-    }
-    fs.unlinkSync(filePath);
-    res.json({ success: true, message: `Backup "${filename}" eliminado.` });
+    const ok = svcDeleteBackup(req.params.filename);
+    if (!ok) return res.status(404).json({ error: 'Backup no encontrado o nombre no valido.' });
+    res.json({ success: true, message: `Backup "${req.params.filename}" eliminado.` });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 

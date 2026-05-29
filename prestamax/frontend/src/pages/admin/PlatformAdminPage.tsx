@@ -53,6 +53,12 @@ interface Backup {
   createdAt: string
 }
 
+interface BackupConfig {
+  dir: string
+  keepLast: number
+  s3Enabled: boolean
+}
+
 interface Plan {
   id: string
   name: string
@@ -178,6 +184,8 @@ const PlatformAdminPage: React.FC = () => {
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [backups, setBackups] = useState<Backup[]>([])
+  const [backupConfig, setBackupConfig] = useState<BackupConfig | null>(null)
+  const [downloadingBackup, setDownloadingBackup] = useState<string | null>(null)
   const [platformUsers, setPlatformUsers] = useState<PlatformUser[]>([])
   const [isBackingUp, setIsBackingUp] = useState(false)
   const [isDeletingBackup, setIsDeletingBackup] = useState<string | null>(null)
@@ -241,7 +249,15 @@ const PlatformAdminPage: React.FC = () => {
           api.get('/admin/tenants'),
           api.get('/admin/plans'),
         ])
-        setBackups(backupsRes.data || [])
+        // Formato nuevo: { backups, config } | Legacy: array directo
+        const body = backupsRes.data
+        if (Array.isArray(body)) {
+          setBackups(body)
+          setBackupConfig(null)
+        } else {
+          setBackups(body?.backups || [])
+          setBackupConfig(body?.config || null)
+        }
         setTenants(tenantsRes.data || [])
         setPlans(plansRes.data || [])
       } else if (tab === 'users') {
@@ -291,6 +307,7 @@ const PlatformAdminPage: React.FC = () => {
       const res = await api.post('/admin/backup', {})
       toast.success(`Backup creado: ${res.data.filename}`)
       setBackups(res.data.backups || [])
+      if (res.data.config) setBackupConfig(res.data.config)
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Error al crear backup')
     } finally {
@@ -309,6 +326,32 @@ const PlatformAdminPage: React.FC = () => {
       toast.error(err?.response?.data?.error || 'Error al eliminar backup')
     } finally {
       setIsDeletingBackup(null)
+    }
+  }
+
+  const handleDownloadBackup = async (filename: string) => {
+    try {
+      setDownloadingBackup(filename)
+      // Descarga como blob respetando el token de auth del interceptor de axios
+      const res = await api.get(`/admin/backup/${encodeURIComponent(filename)}/download`, {
+        responseType: 'blob',
+      })
+      const blob = new Blob([res.data], {
+        type: filename.endsWith('.gz') ? 'application/gzip' : 'application/octet-stream',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Descarga iniciada')
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Error al descargar backup')
+    } finally {
+      setDownloadingBackup(null)
     }
   }
 
@@ -1571,9 +1614,21 @@ const PlatformAdminPage: React.FC = () => {
               <Card className="bg-blue-50 border-blue-200">
                 <div className="flex gap-3">
                   <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"/>
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">Información del sistema de backup</p>
-                    <p>Los backups se guardan en el servidor en la carpeta <code>backups/</code>. Se recomienda realizar un backup antes de actualizaciones mayores y al menos una vez por semana.</p>
+                  <div className="text-sm text-blue-800 space-y-1">
+                    <p className="font-medium">Sistema de backup automático</p>
+                    <p>
+                      Cada noche a las <strong>3:00 AM</strong> el servidor genera un snapshot atómico
+                      de la base de datos (VACUUM INTO), lo comprime con gzip y lo guarda en el servidor.
+                      Se mantienen los <strong>últimos {backupConfig?.keepLast ?? 14}</strong> backups
+                      automáticamente; los más antiguos se borran solos.
+                    </p>
+                    <p>
+                      Puedes descargar cualquier backup a tu computadora para guardarlo fuera del servidor
+                      (recomendado: descarga al menos uno por semana).
+                      {backupConfig?.s3Enabled && (
+                        <> Adicionalmente, los backups se suben automáticamente a almacenamiento S3 externo.</>
+                      )}
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -1593,7 +1648,17 @@ const PlatformAdminPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           {i === 0 && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Más reciente</span>}
-                          <span className="text-xs text-slate-500">{formatBytes(b.size)}</span>
+                          <button
+                            onClick={() => handleDownloadBackup(b.filename)}
+                            disabled={downloadingBackup === b.filename}
+                            title="Descargar backup"
+                            className="p-1.5 rounded text-slate-500 hover:text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {downloadingBackup === b.filename
+                              ? <span className="text-xs">...</span>
+                              : <Download className="w-4 h-4"/>
+                            }
+                          </button>
                           <button
                             onClick={() => handleDeleteBackup(b.filename)}
                             disabled={isDeletingBackup === b.filename}
