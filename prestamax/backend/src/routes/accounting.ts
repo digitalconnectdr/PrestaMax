@@ -17,6 +17,15 @@ function formatDate(d: any): string {
   return String(d).slice(0, 10);
 }
 
+function formatTime(d: any): string {
+  if (!d) return '';
+  // Extrae HH:MM:SS de '2026-01-02T10:09:33.928Z' o '2026-01-02 10:09:33'
+  // Si la fecha no tiene hora (solo YYYY-MM-DD), devuelve cadena vacia
+  const s = String(d);
+  const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/);
+  return m ? m[1] : '';
+}
+
 function csvField(val: any): string {
   if (val === null || val === undefined) return '';
   const s = String(val);
@@ -49,7 +58,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
-    let csv = csvLine(['Fecha', 'Tipo', 'Concepto', 'Cliente', 'Prestamo', 'Debe (RD$)', 'Haber (RD$)', 'Cuenta Bancaria', 'Referencia']);
+    let csv = csvLine(['Fecha', 'Hora', 'Tipo', 'Concepto', 'Cliente', 'Prestamo', 'Debe (RD$)', 'Haber (RD$)', 'Cuenta Bancaria', 'Referencia']);
 
     const disbursements = db.prepare(`
       SELECT l.disbursement_date as fecha, l.loan_number, l.disbursed_amount as monto,
@@ -62,7 +71,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       ORDER BY l.disbursement_date
     `).all(req.tenant.id, from, to) as any[];
     for (const d of disbursements) {
-      csv += csvLine([formatDate(d.fecha), 'Desembolso', `Préstamo ${d.loan_number}`, d.cliente || '', d.loan_number, d.monto, 0, d.cuenta || '', d.loan_number]);
+      csv += csvLine([formatDate(d.fecha), formatTime(d.fecha), 'Desembolso', `Préstamo ${d.loan_number}`, d.cliente || '', d.loan_number, d.monto, 0, d.cuenta || '', d.loan_number]);
     }
 
     const payments = db.prepare(`
@@ -77,7 +86,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       ORDER BY p.payment_date
     `).all(req.tenant.id, from, to) as any[];
     for (const p of payments) {
-      csv += csvLine([formatDate(p.fecha), 'Pago Recibido', `Pago ${p.payment_number}`, p.cliente || '', p.loan_number || '', 0, p.monto, p.cuenta || '', p.payment_number]);
+      csv += csvLine([formatDate(p.fecha), formatTime(p.fecha), 'Pago Recibido', `Pago ${p.payment_number}`, p.cliente || '', p.loan_number || '', 0, p.monto, p.cuenta || '', p.payment_number]);
     }
 
     const incomes = db.prepare(`
@@ -89,7 +98,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       ORDER BY i.transaction_date
     `).all(req.tenant.id, from, to) as any[];
     for (const i of incomes) {
-      csv += csvLine([formatDate(i.fecha), 'Ingreso', `${i.category}${i.description ? ': '+i.description : ''}`, '', '', 0, i.monto, i.cuenta || '', '']);
+      csv += csvLine([formatDate(i.fecha), formatTime(i.fecha), 'Ingreso', `${i.category}${i.description ? ': '+i.description : ''}`, '', '', 0, i.monto, i.cuenta || '', '']);
     }
 
     const expenses = db.prepare(`
@@ -101,7 +110,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       ORDER BY i.transaction_date
     `).all(req.tenant.id, from, to) as any[];
     for (const e of expenses) {
-      csv += csvLine([formatDate(e.fecha), 'Gasto', `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.monto, 0, e.cuenta || '', '']);
+      csv += csvLine([formatDate(e.fecha), formatTime(e.fecha), 'Gasto', `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.monto, 0, e.cuenta || '', '']);
     }
 
     sendCsv(res, `libro-diario_${from}_${to}.csv`, csv);
