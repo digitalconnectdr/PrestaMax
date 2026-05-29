@@ -165,7 +165,7 @@ const features = [
 const faqs = [
   {
     q: '¿Hay prueba gratis?',
-    a: 'Sí. Todos los planes incluyen 10 días de prueba gratuita sin tarjeta de crédito. Puedes cancelar en cualquier momento.',
+    a: 'Sí. Ofrecemos hasta 14 días de prueba gratis para que evalúes la plataforma. Solicita tu plan desde el formulario y coordinamos contigo el inicio del trial. No requiere tarjeta de crédito.',
   },
   {
     q: '¿Puedo cambiar de plan después?',
@@ -193,7 +193,7 @@ const faqs = [
   },
   {
     q: '¿Qué método de pago aceptan?',
-    a: 'Aceptamos tarjetas de crédito y débito (Visa, Mastercard, American Express) a través de Stripe, un procesador de pagos certificado a nivel mundial.',
+    a: 'Por ahora coordinamos contigo el método que mejor te funcione: transferencia bancaria local, depósito o pago en efectivo (Rep. Dominicana). Pronto habilitaremos pago por tarjeta de crédito self-service. Escríbenos al solicitar tu plan y te enviamos los datos de pago.',
   },
 ]
 
