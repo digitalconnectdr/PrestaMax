@@ -1,14 +1,18 @@
-// HelpPage — guia interactiva paso a paso para usuarios nuevos
-// 13 guias agrupadas por seccion para no abrumar
+// HelpPage — guia interactiva paso a paso para usuarios nuevos.
+// Las guias se filtran segun los permisos del usuario en su plan actual:
+// si no tienes acceso al modulo, la guia no aparece.
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import Card from '@/components/ui/Card'
 import {
   HelpCircle, ChevronDown, ChevronUp, Users, Building2, FileText,
   DollarSign, UserPlus, MessageCircle, Settings, Lightbulb, ArrowRight,
-  Package, Truck, Inbox, FileCheck, TrendingUp, Calculator, BarChart3
+  Package, Truck, Inbox, FileCheck, TrendingUp, Calculator, BarChart3,
+  FileSpreadsheet, ClipboardList, Briefcase, Calendar
 } from 'lucide-react'
+import { usePermission } from '@/hooks/usePermission'
+import type { PermKey } from '@/lib/permissions'
 
 interface Step { title: string; description: string; tip?: string }
 interface Guide {
@@ -18,6 +22,10 @@ interface Guide {
   subtitle: string
   shortcutPath?: string
   shortcutLabel?: string
+  /** Si esta presente, la guia solo se muestra si el usuario tiene este permiso */
+  requiredPermission?: PermKey
+  /** Si esta presente, debe tener al menos uno de estos permisos */
+  requiredAnyPermission?: PermKey[]
   steps: Step[]
 }
 
@@ -33,6 +41,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'De dónde sale el dinero y a dónde entran los pagos',
         shortcutPath: '/settings/bank-accounts',
         shortcutLabel: 'Ir a Cuentas Bancarias',
+        requiredPermission: 'settings.bank_accounts',
         steps: [
           { title: 'Abre Configuración → Cuentas Bancarias', description: 'En el menú lateral: "Configuración" → "Cuentas Bancarias" → botón "+ Nueva Cuenta".' },
           { title: 'Selecciona el banco', description: 'Elige uno de la lista o escribe el nombre si no aparece. Funciona para BHD, Popular, Reservas, Cooperativas, etc.' },
@@ -48,6 +57,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Plantillas predefinidas con tasa, plazo y tipo (te ahorra tiempo al crear préstamos)',
         shortcutPath: '/settings/products',
         shortcutLabel: 'Ir a Productos',
+        requiredPermission: 'settings.products',
         steps: [
           { title: 'Abre Configuración → Productos', description: 'En el menú lateral: "Configuración" → "Productos" → botón "+ Nuevo Producto".' },
           { title: 'Pon un nombre y código identificable', description: 'Ej: "Personal 3 Meses" (código P3M), "Comercial 12 Meses" (código C12). El código aparece luego en el número de préstamo.' },
@@ -64,6 +74,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Registra una persona o empresa a quien podrás prestarle',
         shortcutPath: '/clients/new',
         shortcutLabel: 'Ir a Nuevo Cliente',
+        requiredPermission: 'clients.create',
         steps: [
           { title: 'Abre el módulo de Clientes', description: 'En el menú lateral, haz clic en "Clientes" → botón "+ Nuevo Cliente" arriba a la derecha.' },
           { title: 'Completa los datos personales', description: 'Nombre completo, cédula/RNC, fecha de nacimiento, género y estado civil. La cédula NO debe repetirse — el sistema te avisará si ya existe.' },
@@ -80,6 +91,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Aprueba y desembolsa dinero a un cliente con plan de pagos automático',
         shortcutPath: '/loans/new',
         shortcutLabel: 'Ir a Nuevo Préstamo',
+        requiredPermission: 'loans.create',
         steps: [
           { title: 'Selecciona el cliente', description: 'En "Préstamos" → botón "+ Nuevo Préstamo". Busca por nombre o cédula. Si no existe, crea el cliente primero.' },
           { title: 'Elige el producto', description: 'Selecciona uno de los productos que creaste antes. El sistema autocompleta tasa, plazo y tipo. Puedes ajustarlos si quieres.' },
@@ -95,6 +107,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Aplica el dinero que el cliente paga a su préstamo',
         shortcutPath: '/payments',
         shortcutLabel: 'Ir a Pagos',
+        requiredPermission: 'payments.create',
         steps: [
           { title: 'Abre el módulo de Pagos', description: 'En el menú lateral: "Pagos" → botón "+ Registrar Pago". También puedes registrar pagos desde el detalle de un préstamo específico.' },
           { title: 'Selecciona el préstamo', description: 'Busca por nombre del cliente o número de préstamo. El sistema muestra las cuotas pendientes y el balance.' },
@@ -105,23 +118,43 @@ const GUIDES: { section: string; items: Guide[] }[] = [
       },
     ],
   },
+
   // ═══════════════════════════════════════════════════════
   {
     section: 'COBRANZAS Y SEGUIMIENTO',
     items: [
       {
-        id: 'cobranzas',
+        id: 'cartera-cobranza',
         icon: <Truck className="w-5 h-5" />,
-        title: 'Mi Cartera y Promesas de Pago',
-        subtitle: 'Asigna cuotas vencidas a cobradores y gestiona compromisos de pago',
+        title: 'Cartera de Cobranza',
+        subtitle: 'Vista de cuotas vencidas y por vencer asignadas a cada cobrador',
         shortcutPath: '/collections',
         shortcutLabel: 'Ir a Mi Cartera',
+        requiredPermission: 'collections.view',
         steps: [
-          { title: 'Abre Cobranzas → Mi Cartera', description: 'Verás la lista de cuotas vencidas y por vencer. Si eres cobrador, solo ves las asignadas a ti. Si eres admin, ves toda la cartera.' },
+          { title: 'Abre Cobranzas → Mi Cartera', description: 'Verás la lista de cuotas vencidas y por vencer. Si eres cobrador, solo ves las asignadas a ti. Si tienes permiso "Ver toda la cartera", ves todo lo del tenant.' },
           { title: 'Filtra por días de mora o cliente', description: 'Usa los filtros arriba para enfocarte en mora alta primero, o buscar un cliente específico.' },
           { title: 'Marca una visita o llamada', description: 'Haz clic en una fila → botón "Registrar nota" para guardar la gestión (qué dijo el cliente, próxima acción, etc).' },
           { title: 'Crea una Promesa de Pago', description: 'Si el cliente promete pagar en una fecha, registra una promesa: monto y fecha prometida. Aparecerá en "Promesas de Pago" para hacer seguimiento.', tip: 'Cuando hay una promesa activa, el sistema NO genera mensajes automáticos de mora a ese cliente hasta que pase la fecha prometida + 1 día. Así no lo molestas mientras está al día con su compromiso.' },
-          { title: 'Marca la promesa como cumplida o incumplida', description: 'En "Cobranzas → Promesas de Pago" puedes marcar cada promesa según lo que pasó. Esto ajusta el score del cliente.' },
+          { title: 'Marca la promesa como cumplida o incumplida', description: 'En "Cobranzas → Promesas de Pago" puedes marcar cada promesa según lo que pasó. Esto ajusta el score del cliente automáticamente.' },
+          { title: 'Vista mobile-friendly', description: 'En el celular cada cuota se muestra como tarjeta con los datos clave: cliente, monto, días de mora, teléfono. Tap directo para llamar/abrir WhatsApp.' },
+        ],
+      },
+      {
+        id: 'agenda-cobranza',
+        icon: <Calendar className="w-5 h-5" />,
+        title: 'Agenda de Cobranza',
+        subtitle: 'Asigna tareas de cobranza (visitas, llamadas) a cobradores con fecha límite',
+        shortcutPath: '/collections',
+        shortcutLabel: 'Ir a Agenda',
+        requiredAnyPermission: ['collections.tasks', 'collections.tasks.manage'],
+        steps: [
+          { title: 'Abre Cobranzas → tab "Agenda"', description: 'Verás las tareas pendientes con su fecha objetivo. Si eres cobrador, solo ves las asignadas a ti.' },
+          { title: 'Crear una tarea nueva (solo admin/manager)', description: 'Botón "+ Nueva Tarea": elige cliente o préstamo, asigna a un cobrador, fecha límite, tipo (visita, llamada, recordatorio, otro), prioridad y descripción.', tip: 'Si tienes el permiso "Administrar agenda de cobros", puedes asignar a cualquier cobrador. Si no, solo creas tareas para ti mismo.' },
+          { title: 'Filtra por cobrador o estado', description: 'Filtros: "Mías", "Hoy", "Vencidas", "Esta semana". Útil para que cada cobrador planee su jornada por la mañana.' },
+          { title: 'Marca una tarea completada', description: 'Cuando termines la visita o llamada, clic "Completar" → opcionalmente agrega notas del resultado (ej. "Cliente promete pagar el viernes", "No respondió, dejé volante").' },
+          { title: 'Tareas vencidas', description: 'Una tarea no completada en su fecha límite queda marcada como "Vencida" en rojo. Útil para revisión de productividad.', tip: 'La diferencia con "Mi Cartera": la Cartera muestra CUOTAS vencidas de préstamos. La Agenda muestra TAREAS ASIGNADAS (que pueden o no estar vinculadas a un préstamo).' },
+          { title: 'Métricas por cobrador', description: 'En Reportes → "Productividad de cobradores" verás tareas completadas vs vencidas por cada uno. Útil para evaluar desempeño.' },
         ],
       },
       {
@@ -131,6 +164,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Genera un enlace para que clientes potenciales apliquen desde su teléfono',
         shortcutPath: '/requests',
         shortcutLabel: 'Ir a Solicitudes',
+        requiredPermission: 'requests.view',
         steps: [
           { title: 'Activa el módulo en Configuración General', description: 'Configuración → General → "Solicitudes Públicas" activa el switch. Esto genera un enlace único de tu empresa (ej. https://prestamax-umber.vercel.app/apply/abc123).' },
           { title: 'Comparte el enlace', description: 'Por WhatsApp, en tu Instagram bio, código QR en tu local, etc. Cualquier persona puede llenar la solicitud desde el celular sin estar registrada en tu sistema.' },
@@ -141,6 +175,46 @@ const GUIDES: { section: string; items: Guide[] }[] = [
       },
     ],
   },
+
+  // ═══════════════════════════════════════════════════════
+  {
+    section: 'GESTIÓN DE INVERSIONISTAS',
+    items: [
+      {
+        id: 'inversionistas-overview',
+        icon: <Briefcase className="w-5 h-5" />,
+        title: 'Qué son y cómo funcionan los Inversionistas',
+        subtitle: 'Modela el capital de terceros que te financia préstamos',
+        shortcutPath: '/investors',
+        shortcutLabel: 'Ir a Inversionistas',
+        requiredPermission: 'investors.view',
+        steps: [
+          { title: 'Concepto general', description: 'Un inversionista es una persona/empresa que APORTA dinero para que tú lo prestes. Tú gestionas los cobros y le pagas su parte. PrestaMax soporta 2 modelos de relación: tasa fija (le pagas % mensual del capital) y participación en interés (le pagas % del interés generado por sus préstamos asignados).' },
+          { title: 'Crear un inversionista', description: 'Click "+ Nuevo Inversionista". Datos: nombre completo, email (único por empresa), teléfono, cédula, modelo de relación, % o tasa, comisión que TÚ cobras (en el modelo de participación), capital aportado.', tip: 'El email debe ser único dentro de tu empresa. Si intentas crear otro con el mismo email, el sistema te avisa y te muestra cuál ya existe — útil para evitar duplicados.' },
+          { title: 'Asignar préstamos al inversionista', description: 'Desde el detalle del inversionista → "+ Asignar préstamo". Selecciona préstamos no asignados a otro inversionista. Su interés generado se irá contabilizando como deuda contigo hacia él.' },
+          { title: 'Ver capital activo y por liquidar', description: 'El detalle del inversionista muestra: capital aportado, capital activo (en préstamos no liquidados), interés ganado, comisión retenida por ti, y balance pendiente de pagar.' },
+          { title: 'Liquidar al inversionista', description: 'Cuando le vas a pagar lo acumulado, abre el "Reporte de Liquidación" en el detalle → confirma el monto y el método de pago. El sistema descuenta de tu banco, registra el payout en su historial, y marca los pagos involucrados como "ya liquidados" para no contarlos dos veces.', tip: 'El payout queda registrado como gasto en tu P&L (categoría "investor_payout") para que tu utilidad real refleje el costo del capital de terceros.' },
+        ],
+      },
+      {
+        id: 'inversionistas-portal',
+        icon: <Briefcase className="w-5 h-5" />,
+        title: 'Dar acceso al portal del Inversionista',
+        subtitle: 'El inversionista entra con su email y ve solo sus préstamos y pagos',
+        shortcutPath: '/investors',
+        shortcutLabel: 'Ir a Inversionistas',
+        requiredPermission: 'investors.portal',
+        steps: [
+          { title: 'Abre el detalle del inversionista', description: 'Click sobre cualquier inversionista en la lista. Verás un botón "Crear acceso al portal" si aún no tiene cuenta.' },
+          { title: 'Click "Crear acceso al portal"', description: 'El sistema crea un usuario en su email con rol "investor". Te muestra una contraseña temporal UNA SOLA VEZ — compártela con el inversionista (WhatsApp, llamada). No la guardamos visible después.' },
+          { title: 'El inversionista inicia sesión', description: 'Va a la URL pública del sistema → login → entra con su email y la temp password. La primera vez puede cambiarla.' },
+          { title: 'Qué ve el inversionista', description: 'Su propio dashboard mostrando: capital aportado, total de préstamos asignados, interés ganado, pagos recibidos, próximo payout estimado. Solo ve LOS DATOS DE ÉL — no ve clientes ni préstamos de otros inversionistas (muralla china).' },
+          { title: 'Resetear contraseña', description: 'Si pierde el acceso, vuelve al detalle del inversionista → "Resetear contraseña" → te muestra una nueva temp password para entregarle.' },
+        ],
+      },
+    ],
+  },
+
   // ═══════════════════════════════════════════════════════
   {
     section: 'HERRAMIENTAS COMPLEMENTARIAS',
@@ -152,6 +226,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Crea plantillas de contrato y genera documentos firmados',
         shortcutPath: '/contracts',
         shortcutLabel: 'Ir a Contratos',
+        requiredPermission: 'contracts.view',
         steps: [
           { title: 'Crea una plantilla en Plantillas → Contratos', description: 'En el menú: "Plantillas" → tab "Contratos" → "+ Nueva Plantilla". Pega el texto de tu contrato con variables como {{cliente.nombre}}, {{prestamo.monto}}, {{prestamo.cuotas}}.' },
           { title: 'Define qué variables vas a usar', description: 'Variables disponibles: {{cliente.nombre}}, {{cliente.cedula}}, {{cliente.direccion}}, {{prestamo.numero}}, {{prestamo.monto}}, {{prestamo.tasa}}, {{prestamo.cuotas}}, {{empresa.nombre}}, {{empresa.rnc}}, fecha actual, etc.' },
@@ -166,6 +241,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Captura los gastos del negocio (renta, salarios, etc) para una P&L real',
         shortcutPath: '/income',
         shortcutLabel: 'Ir a Ingresos y Gastos',
+        requiredPermission: 'income.view',
         steps: [
           { title: 'Abre Ingresos y Gastos', description: 'En el menú lateral: "Ingresos y Gastos". Verás dos tabs: Ingresos (entradas extra fuera de pagos de préstamos) y Gastos (salidas del negocio).' },
           { title: 'Registra un gasto', description: 'Botón "+ Nuevo Gasto" → categoría (alquiler, salario, papelería, transporte, marketing, etc), monto, fecha, cuenta bancaria de la que sale el dinero, y nota opcional.' },
@@ -181,6 +257,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Simula un préstamo sin crearlo en el sistema — ideal para mostrar al cliente',
         shortcutPath: '/calculator',
         shortcutLabel: 'Ir a Calculadora',
+        requiredPermission: 'calculator.use',
         steps: [
           { title: 'Abre la Calculadora', description: 'En el menú lateral: "Calculadora". Sirve para simular cualquier escenario sin afectar tus datos reales.' },
           { title: 'Elige Por Tasa o Por Ganancia', description: 'Por Tasa: conoces la tasa y quieres ver la cuota. Por Ganancia: conoces cuánto quieres ganar y el sistema calcula qué tasa cobrar.' },
@@ -196,6 +273,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Interpreta las métricas para tomar decisiones',
         shortcutPath: '/reports',
         shortcutLabel: 'Ir a Reportes',
+        requiredPermission: 'reports.dashboard',
         steps: [
           { title: 'Dashboard (página principal)', description: 'KPIs en tiempo real: Cartera Total (capital prestado), Cartera Activa (lo que aún te deben), Mora Pendiente (lo vencido), Cobros del Día, total de clientes y préstamos activos.' },
           { title: 'Reportes detallados', description: 'En "Reportes" verás: distribución por estado de préstamos, top clientes por monto, cartera vencida con días de mora, productividad de cobradores, etc.' },
@@ -204,8 +282,25 @@ const GUIDES: { section: string; items: Guide[] }[] = [
           { title: 'Exporta a Excel o PDF', description: 'Botón "Exportar" en cada reporte. Útil para presentaciones, auditorías o backup externo.' },
         ],
       },
+      {
+        id: 'exportar-contabilidad',
+        icon: <FileSpreadsheet className="w-5 h-5" />,
+        title: 'Exportar a Contabilidad (CSV)',
+        subtitle: 'Genera 3 reportes contables listos para Excel o tu contador',
+        shortcutPath: '/reports/accounting',
+        shortcutLabel: 'Ir a Exportar Contabilidad',
+        requiredPermission: 'reports.dashboard',
+        steps: [
+          { title: 'Abre Reportes → Exportar Contabilidad', description: 'En el menú lateral: "Análisis" → "Exportar Contabilidad". Elige el período: mes actual, mes anterior, año actual o rango custom.' },
+          { title: 'Libro Diario', description: 'CSV con TODOS los movimientos del período: desembolsos, pagos recibidos, ingresos extra y gastos. Cada línea con fecha, hora, tipo, concepto, cliente, préstamo, debe/haber y cuenta bancaria.', tip: 'Las columnas Fecha y Hora vienen separadas — útil para ordenar por hora del día y buscar transacciones específicas.' },
+          { title: 'Mayor por Cuenta Bancaria', description: 'CSV con resumen por cada cuenta bancaria: entradas totales (pagos recibidos + ingresos), salidas (desembolsos + gastos), neto del período y cantidad de movimientos.' },
+          { title: 'Resumen Financiero (P&L)', description: 'Estado de resultados del período: ingresos por interés y mora cobrados, gastos por categoría, utilidad neta y margen. Incluye también capital desembolsado y capital recuperado.' },
+          { title: 'Compatible con Excel y contadores', description: 'Los CSVs incluyen BOM UTF-8 para que Excel detecte los acentos correctamente. Si tu contador usa Quickbooks/Sage/Visma, los CSVs son drop-in.', tip: 'Recomendamos descargar los 3 al cierre de cada mes y enviárselos al contador junto con los recibos.' },
+        ],
+      },
     ],
   },
+
   // ═══════════════════════════════════════════════════════
   {
     section: 'CONFIGURACIÓN AVANZADA',
@@ -217,6 +312,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Agrega personas de tu equipo con permisos limitados',
         shortcutPath: '/settings/users',
         shortcutLabel: 'Ir a Usuarios',
+        requiredPermission: 'settings.users',
         steps: [
           { title: 'Abre Configuración → Usuarios', description: 'En el menú lateral: "Configuración" → "Usuarios" → botón "+ Nuevo Usuario".' },
           { title: 'Completa los datos', description: 'Nombre completo, correo electrónico (será su login) y contraseña inicial. El usuario podrá cambiarla después.' },
@@ -232,8 +328,9 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         subtitle: 'Configura para que el sistema te prepare drafts cuando ocurren eventos',
         shortcutPath: '/whatsapp',
         shortcutLabel: 'Ir a WhatsApp',
+        requiredPermission: 'whatsapp.view',
         steps: [
-          { title: 'Abre WhatsApp → tab "Configuración"', description: 'Verás 5 eventos: Préstamo creado, Pago recibido, Mora 1/7/15 días.' },
+          { title: 'Abre WhatsApp → tab "Configuración"', description: 'Verás 6 eventos: Préstamo creado, Pago recibido, Por vencer (3 días), Mora 1/7/15 días.' },
           { title: 'Activa los eventos que quieras', description: 'Cada switch activa la generación automática de drafts. Recomendamos empezar con "Préstamo creado" y "Pago recibido", agregar los de mora después.' },
           { title: '(Opcional) Personaliza la plantilla', description: 'En el tab "Plantillas" puedes crear tus propias con tu estilo. Variables: {{cliente.nombre}}, {{prestamo.monto}}, {{prestamo.proxima_cuota}}, etc.' },
           { title: 'Revisa la Bandeja periódicamente', description: 'Cuando ocurra un evento, aparece un draft en el tab "Bandeja". Lo revisas, opcionalmente lo editas, y clicas "Enviar por WhatsApp".', tip: 'Los mensajes se envían desde TU cuenta de WhatsApp (no es el sistema enviando). El cliente recibe el mensaje del número del cobrador que clica Enviar.' },
@@ -245,7 +342,30 @@ const GUIDES: { section: string; items: Guide[] }[] = [
 ]
 
 const HelpPage: React.FC = () => {
-  const [openId, setOpenId] = useState<string | null>('crear-cuenta-bancaria')
+  const { can } = usePermission()
+  const [openId, setOpenId] = useState<string | null>(null)
+
+  // Filtrar guias por permisos del usuario
+  const visibleGroups = useMemo(() => {
+    return GUIDES.map(group => ({
+      section: group.section,
+      items: group.items.filter(g => {
+        if (g.requiredPermission && !can(g.requiredPermission)) return false
+        if (g.requiredAnyPermission && !g.requiredAnyPermission.some(p => can(p))) return false
+        return true
+      }),
+    })).filter(group => group.items.length > 0)
+  }, [can])
+
+  // Abrir el primer item visible por defecto
+  React.useEffect(() => {
+    if (openId === null && visibleGroups.length > 0 && visibleGroups[0].items.length > 0) {
+      setOpenId(visibleGroups[0].items[0].id)
+    }
+  }, [visibleGroups, openId])
+
+  const totalVisible = visibleGroups.reduce((sum, g) => sum + g.items.length, 0)
+  const totalHidden = GUIDES.reduce((sum, g) => sum + g.items.length, 0) - totalVisible
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -276,7 +396,17 @@ const HelpPage: React.FC = () => {
         </div>
       </Card>
 
-      {GUIDES.map((group, gi) => (
+      {totalHidden > 0 && (
+        <Card className="bg-blue-50 border-blue-200 p-3">
+          <p className="text-xs text-blue-900">
+            <strong>{totalVisible}</strong> guías visibles según tu plan y permisos.{' '}
+            <strong>{totalHidden}</strong> guías ocultas (requieren funciones de planes superiores o permisos que no tienes).{' '}
+            <Link to="/billing" className="font-semibold hover:underline">Ver planes →</Link>
+          </p>
+        </Card>
+      )}
+
+      {visibleGroups.map((group, gi) => (
         <div key={gi} className="space-y-3">
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mt-6 mb-2">
             {group.section}
