@@ -518,8 +518,8 @@ const SettingsPage: React.FC = () => {
         { token: '{{company_email}}', desc: 'Email empresa' },
         { token: '{{rnc}}', desc: 'RNC de la empresa' },
         { token: '{{representative_name}}', desc: 'Nombre del representante' },
-        { token: '{{company_logo}}', desc: 'URL del logo de la empresa' },
-        { token: '{{company_signature}}', desc: 'URL de la firma' },
+        { token: '{{company_logo}}', desc: 'Logo de la empresa (imagen renderizada en contratos)' },
+        { token: '{{company_signature}}', desc: 'Firma del prestamista (imagen renderizada en contratos)' },
       ]
     },
     {
@@ -740,7 +740,7 @@ const SettingsPage: React.FC = () => {
                         />
                       </label>
                     )}
-                    <p className="text-xs text-slate-400 mt-1">Variable en contratos: <code className="bg-slate-100 px-1 rounded">{'{{company_logo}}'}</code></p>
+                    <p className="text-xs text-slate-400 mt-1">Variable en contratos: <code className="bg-slate-100 px-1 rounded">{'{{company_logo}}'}</code> — se renderiza como imagen.</p>
                   </div>
 
                   {/* Signature */}
@@ -782,7 +782,7 @@ const SettingsPage: React.FC = () => {
                         />
                       </label>
                     )}
-                    <p className="text-xs text-slate-400 mt-1">Variable en contratos: <code className="bg-slate-100 px-1 rounded">{'{{company_signature}}'}</code></p>
+                    <p className="text-xs text-slate-400 mt-1">Variable en contratos: <code className="bg-slate-100 px-1 rounded">{'{{company_signature}}'}</code> — se renderiza como imagen.</p>
                   </div>
                 </div>
               </Card>

@@ -74,11 +74,12 @@ const METHOD_LABELS: Record<string, string> = { cash: 'Efectivo', transfer: 'Tra
 // Acepta info del tenant (nombre, telefono, etc) — el negocio del prestamista
 // es quien aparece en el recibo, no PrestaMax. Tambien hace fetch al loan
 // para incluir proxima fecha de pago, balance pendiente y cuotas X de Y.
-const printPaymentReceipt = async (p: Payment, tenant: { name?: string; phone?: string; email?: string; address?: string } | string) => {
+const printPaymentReceipt = async (p: Payment, tenant: { name?: string; phone?: string; email?: string; address?: string; logoUrl?: string } | string) => {
   const t = typeof tenant === 'string' ? { name: tenant } : (tenant || {})
   const tenantName = t.name || 'Negocio'
   const tenantPhone = t.phone || ''
   const tenantAddress = t.address || ''
+  const tenantLogo = t.logoUrl || ''
 
   // Fetch loan detail para obtener balance, proxima cuota y conteo de cuotas
   let loan: any = null
@@ -129,6 +130,7 @@ const printPaymentReceipt = async (p: Payment, tenant: { name?: string; phone?: 
   .footer{font-size:9px;color:#888;text-align:center;margin-top:16px;border-top:1px solid #eee;padding-top:8px}
   @media print{@page{margin:10mm}}</style></head><body>
   <div style="text-align:center;margin-bottom:12px">
+    ${tenantLogo ? `<img src="${tenantLogo}" alt="Logo" style="max-height:70px;max-width:200px;object-fit:contain;margin-bottom:8px"/>` : ''}
     <h2>${tenantName}</h2>
     ${tenantPhone ? `<p style="margin:2px 0;font-size:12px;color:#555">Tel: ${tenantPhone}</p>` : ''}
     ${tenantAddress ? `<p style="margin:2px 0;font-size:10px;color:#888">${tenantAddress}</p>` : ''}

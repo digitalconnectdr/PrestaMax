@@ -114,8 +114,8 @@ function renderTemplate(body: string, loan: any, tenant: any, installments: any[
     .replace(/\{\{company_email\}\}/g, tenant?.email || '')
     .replace(/\{\{rnc\}\}/g, tenant?.rnc || '')
     .replace(/\{\{representative_name\}\}/g, tenant?.representative_name || '')
-    .replace(/\{\{company_logo\}\}/g, tenant?.logo_url || '')
-    .replace(/\{\{company_signature\}\}/g, tenant?.signature_url || '')
+    .replace(/\{\{company_logo\}\}/g, tenant?.logo_url ? `<img src="${tenant.logo_url}" alt="Logo" style="max-height:90px;max-width:240px;object-fit:contain"/>` : '')
+    .replace(/\{\{company_signature\}\}/g, tenant?.signature_url ? `<img src="${tenant.signature_url}" alt="Firma" style="max-height:60px;max-width:200px;object-fit:contain"/>` : '')
     // Loan data
     .replace(/\{\{loan_number\}\}/g, loan.loan_number || '')
     .replace(/\{\{amount\}\}/g, fmt(loan.disbursed_amount || loan.requested_amount))
