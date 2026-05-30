@@ -228,13 +228,35 @@ const LoanCreatePage: React.FC = () => {
     const n = parseInt(form.term)
     if (!amount || !rate || !n) return
 
-    const mRate = form.rateType === 'annual' ? rate / 100 / 12 : rate / 100
+    // Conversion correcta de tasa a tasa mensual segun el rateType
+    const mRate =
+      form.rateType === 'daily'    ? (rate / 100) * 30
+      : form.rateType === 'weekly' ? (rate / 100) * 4.33
+      : form.rateType === 'biweekly' ? (rate / 100) * 2
+      : form.rateType === 'annual' ? (rate / 100) / 12
+      : (rate / 100)  // monthly (default)
     const schedule = []
     let balance = amount
 
     const fixedPayment = mRate > 0
       ? amount * (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1)
       : amount / n
+
+    // Calcular fechas segun firstPaymentDate y frecuencia
+    const startDate = form.firstPaymentDate
+      ? new Date(form.firstPaymentDate + 'T00:00:00')
+      : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d })()
+    let currentDate = new Date(startDate)
+    const advanceDate = (d: Date, freq: string): Date => {
+      const nd = new Date(d)
+      if (freq === 'daily')         nd.setDate(nd.getDate() + 1)
+      else if (freq === 'weekly')   nd.setDate(nd.getDate() + 7)
+      else if (freq === 'biweekly') nd.setDate(nd.getDate() + 15)
+      else if (freq === 'quarterly')nd.setMonth(nd.getMonth() + 3)
+      else if (freq === 'annual' || freq === 'yearly') nd.setFullYear(nd.getFullYear() + 1)
+      else                          nd.setMonth(nd.getMonth() + 1)  // monthly
+      return nd
+    }
 
     for (let i = 1; i <= n; i++) {
       let principal = 0, interest = 0
@@ -253,7 +275,14 @@ const LoanCreatePage: React.FC = () => {
       }
       principal = Math.max(0, Math.min(principal, balance))
       balance = Math.round((balance - principal) * 100) / 100
-      schedule.push({ num: i, principal, interest, total: Math.round((principal + interest) * 100) / 100, balance })
+      schedule.push({
+        num: i,
+        dueDate: currentDate.toISOString().slice(0, 10),
+        principal, interest,
+        total: Math.round((principal + interest) * 100) / 100,
+        balance,
+      })
+      currentDate = advanceDate(currentDate, form.paymentFrequency)
       if (Math.abs(balance) < 0.01) break
     }
     setPreviewSchedule(schedule)
@@ -559,9 +588,15 @@ const LoanCreatePage: React.FC = () => {
                     value={form.termUnit}
                     onChange={(e) => {
                       const u = e.target.value
-                      // Mapear unidad de plazo a frecuencia de pago automaticamente
+                      // Mapear unidad de plazo a frecuencia de pago y tasa automaticamente
                       const freqMap: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
-                      setForm({ ...form, termUnit: u, paymentFrequency: freqMap[u] || form.paymentFrequency })
+                      const rateMap: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
+                      setForm({
+                        ...form,
+                        termUnit: u,
+                        paymentFrequency: freqMap[u] || form.paymentFrequency,
+                        rateType: rateMap[u] || form.rateType,
+                      })
                     }}
                     className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
@@ -834,6 +869,7 @@ const LoanCreatePage: React.FC = () => {
                   <thead>
                     <tr className="border-b border-slate-200">
                       <th className="text-center py-2 px-3 font-semibold text-slate-700">#</th>
+                      <th className="text-left py-2 px-3 font-semibold text-slate-700">Vence</th>
                       <th className="text-right py-2 px-3 font-semibold text-slate-700">Capital</th>
                       <th className="text-right py-2 px-3 font-semibold text-slate-700">Interés</th>
                       <th className="text-right py-2 px-3 font-semibold text-slate-700">Cuota</th>
@@ -844,6 +880,7 @@ const LoanCreatePage: React.FC = () => {
                     {previewSchedule.map((row) => (
                       <tr key={row.num} className="border-b border-slate-100">
                         <td className="py-2 px-3 text-center">{row.num}</td>
+                        <td className="py-2 px-3 text-left text-slate-600">{row.dueDate ? new Date(row.dueDate + 'T00:00:00').toLocaleDateString('es-DO') : '—'}</td>
                         <td className="py-2 px-3 text-right">{formatCurrency(row.principal)}</td>
                         <td className="py-2 px-3 text-right text-blue-600">{formatCurrency(row.interest)}</td>
                         <td className="py-2 px-3 text-right font-semibold">{formatCurrency(row.total)}</td>
@@ -851,7 +888,7 @@ const LoanCreatePage: React.FC = () => {
                       </tr>
                     ))}
                     <tr className="border-t-2 border-slate-300">
-                      <td colSpan={5} className="py-2 px-3 text-center text-xs text-slate-500 font-medium">
+                      <td colSpan={6} className="py-2 px-3 text-center text-xs text-slate-500 font-medium">
                         Total: {previewSchedule.length} cuotas · {formatCurrency(previewSchedule.reduce((s,r)=>s+r.total,0))} total
                       </td>
                     </tr>

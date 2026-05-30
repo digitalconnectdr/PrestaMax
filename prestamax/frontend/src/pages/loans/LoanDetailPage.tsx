@@ -19,6 +19,7 @@ import { AuthContext } from '@/contexts/AuthContext'
 import { TenantContext } from '@/contexts/TenantContext'
 import { usePermission } from '@/hooks/usePermission'
 import { AMORT_LABELS, getAmortLabel } from '@/lib/amortization'
+import { printPaymentReceipt, sendReceiptByWhatsApp } from '@/lib/printReceipt'
 
 interface Installment {
   id: string
@@ -148,6 +149,8 @@ const LoanDetailPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'installments' | 'info' | 'payments'>('installments')
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [lastPayment, setLastPayment] = useState<any>(null)
+  const [showPostPaymentModal, setShowPostPaymentModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showVoidLoanModal, setShowVoidLoanModal] = useState(false)
   const [voidLoanReason, setVoidLoanReason] = useState('')
@@ -301,12 +304,16 @@ const LoanDetailPage: React.FC = () => {
   }
 
   const openDisbursementModal = () => {
-    // Pre-fill with loan data
-    const nextMonth = new Date()
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    // Pre-fill con datos del prestamo si ya fueron capturados al crearlo.
+    // Si firstPaymentDate ya existe, usarlo; sino fallback a hoy+1mes.
+    const existingFirstPay = (loan as any)?.firstPaymentDate
+    const fallbackDate = (() => {
+      const d = new Date(); d.setMonth(d.getMonth() + 1)
+      return d.toISOString().split('T')[0]
+    })()
     setDisbursementData({
       bankAccountId: (loan as any)?.disbursementBankAccountId || bankAccounts[0]?.id || '',
-      firstPaymentDate: nextMonth.toISOString().split('T')[0],
+      firstPaymentDate: existingFirstPay ? String(existingFirstPay).slice(0, 10) : fallbackDate,
       disbursedAmount: String((loan as any)?.approvedAmount || (loan as any)?.requestedAmount || ''),
     })
     setShowDisbursementModal(true)
@@ -358,7 +365,7 @@ const LoanDetailPage: React.FC = () => {
     }
     try {
       setIsSubmitting(true)
-      await api.post('/payments', {
+      const payRes = await api.post('/payments', {
         loanId: loan.id,
         amount: parseFloat(paymentData.amount),
         paymentMethod: paymentData.paymentMethod,
@@ -374,6 +381,19 @@ const LoanDetailPage: React.FC = () => {
       setLoan(res.data)
       loadPayments()
       setShowPaymentModal(false)
+      // Modal post-pago con opciones de imprimir + WhatsApp
+      if (payRes?.data) {
+        const pd = payRes.data as any
+        // Enriquecer con datos del loan/cliente para el recibo
+        setLastPayment({
+          ...pd,
+          clientName: loan.clientName,
+          loanNumber: loan.loanNumber,
+          loanId: loan.id,
+          clientWhatsapp: (loan as any).clientWhatsapp || (loan as any).clientPhone || '',
+        })
+        setShowPostPaymentModal(true)
+      }
       setOverpaymentStep(false)
       setPreview(null)
       setPaymentData({
@@ -1864,6 +1884,63 @@ const LoanDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* ── Modal Post-Pago: opciones imprimir + WhatsApp ── */}
+      {showPostPaymentModal && lastPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowPostPaymentModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900">Pago registrado</h3>
+                  <p className="text-xs text-slate-500">Recibo {lastPayment.receiptNumber || lastPayment.paymentNumber} · {formatCurrency(lastPayment.amount, loan?.currency)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-slate-600">¿Qué quieres hacer con el recibo?</p>
+              <button
+                type="button"
+                onClick={async () => {
+                  const t = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }
+                  await printPaymentReceipt(lastPayment, t)
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition"
+              >
+                <Printer className="w-4 h-4" /> Imprimir recibo
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const t = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }
+                  const phone = lastPayment.clientWhatsapp || ''
+                  if (!phone) {
+                    toast('El cliente no tiene WhatsApp/teléfono registrado — abriendo WhatsApp sin destinatario', { icon: '⚠️' })
+                  }
+                  sendReceiptByWhatsApp(phone, lastPayment, t, {
+                    principalBalance: (loan as any)?.principalBalance,
+                    interestBalance: (loan as any)?.interestBalance,
+                    moraBalance: (loan as any)?.moraBalance,
+                  })
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition"
+              >
+                <MessageCircle className="w-4 h-4" /> Enviar por WhatsApp
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPostPaymentModal(false)}
+                className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-900"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
