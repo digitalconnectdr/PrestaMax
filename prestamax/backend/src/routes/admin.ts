@@ -1,6 +1,7 @@
 import { Router, Response, Request } from 'express';
 import bcrypt from 'bcryptjs';
 import { getDb, uuid, now } from '../db/database';
+import { logAudit } from '../lib/audit';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import path from 'path';
 import fs from 'fs';
@@ -464,6 +465,12 @@ router.post('/backup', authenticate, requirePlatformAdmin, async (req: AuthReque
   try {
     const info = await svcCreateBackup();
     const backups = svcListBackups();
+    logAudit(getDb(), {
+      user_id: req.user.id, user_name: req.user.full_name,
+      action: 'created', entity_type: 'backup', entity_id: info.filename,
+      description: `Creo backup manual de la DB: ${info.filename} (${(info.size/1024).toFixed(1)} KB)`,
+      new_values: { filename: info.filename, size: info.size },
+    });
     res.json({ success: true, filename: info.filename, info, backups, config: BACKUP_CONFIG });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
@@ -494,6 +501,11 @@ router.delete('/backup/:filename', authenticate, requirePlatformAdmin, (req: Aut
   try {
     const ok = svcDeleteBackup(req.params.filename);
     if (!ok) return res.status(404).json({ error: 'Backup no encontrado o nombre no valido.' });
+    logAudit(getDb(), {
+      user_id: req.user.id, user_name: req.user.full_name,
+      action: 'deleted', entity_type: 'backup', entity_id: req.params.filename,
+      description: `Borro backup ${req.params.filename}`,
+    });
     res.json({ success: true, message: `Backup "${req.params.filename}" eliminado.` });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
@@ -924,6 +936,14 @@ router.post('/cleanup-duplicate-investors', authenticate, requirePlatformAdmin, 
       byTenant[c.tenant_id] = (byTenant[c.tenant_id] || 0) + 1;
     }
 
+    logAudit(db, {
+      tenant_id: req.body?.tenant_id || null,
+      user_id: req.user.id, user_name: req.user.full_name,
+      action: 'cleanup_duplicates', entity_type: 'investor',
+      description: `Limpieza de duplicados de inversionistas: ${result.changes} borrados`,
+      new_values: { deleted: result.changes, byTenant },
+      metadata: { sample: candidates.slice(0, 10).map(c => ({ id: c.id, email: c.email })) },
+    });
     res.json({
       success: true,
       deleted: result.changes,

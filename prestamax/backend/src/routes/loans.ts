@@ -214,8 +214,8 @@ router.get('/:id', authenticate, requireTenant, requirePermission('loans.view'),
     loan.total_paid_interest = r2(payTotals.total_paid_interest);
     loan.total_paid_mora = r2(payTotals.total_paid_mora);
     // Sync computed totals back to DB so list views stay accurate
-    db.prepare(`UPDATE loans SET total_paid=?,total_paid_principal=?,total_paid_interest=?,total_paid_mora=? WHERE id=?`)
-      .run(loan.total_paid, loan.total_paid_principal, loan.total_paid_interest, loan.total_paid_mora, loan.id);
+    db.prepare(`UPDATE loans SET total_paid=?,total_paid_principal=?,total_paid_interest=?,total_paid_mora=? WHERE id=? AND tenant_id=?`)
+      .run(loan.total_paid, loan.total_paid_principal, loan.total_paid_interest, loan.total_paid_mora, loan.id, req.tenant.id);
     // Real-time mora calc — respects mora_base and mora_fixed_enabled for this loan.
     // If mora_fixed_enabled: each overdue installment gets a flat fixed charge (replaces %).
     // If not: percentage-based daily rate is applied.
@@ -266,8 +266,8 @@ router.get('/:id', authenticate, requireTenant, requirePermission('loans.view'),
     // reporte de cartera y otros queries que leen loans.mora_balance directo
     // tengan cifras actualizadas, no las del ultimo pago.
     try {
-      db.prepare("UPDATE loans SET mora_balance=?, updated_at=datetime('now') WHERE id=?")
-        .run(loan.computed_mora, loan.id);
+      db.prepare("UPDATE loans SET mora_balance=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?")
+        .run(loan.computed_mora, loan.id, req.tenant.id);
     } catch (_) { /* no-critical */ }
     res.json(loan);
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to get loan' }); }
@@ -286,8 +286,8 @@ router.post('/:id/approve', authenticate, requireTenant, requirePermission('loan
         return res.status(400).json({ error: 'Este producto requiere garantía. Registra un garante o bien como garantía antes de aprobar.' });
       }
     }
-    db.prepare('UPDATE loans SET status=?,approval_date=?,approved_amount=COALESCE(?,requested_amount),updated_at=? WHERE id=?')
-      .run('approved',now(),req.body.approved_amount||null,now(),req.params.id);
+    db.prepare('UPDATE loans SET status=?,approval_date=?,approved_amount=COALESCE(?,requested_amount),updated_at=? WHERE id=? AND tenant_id=?')
+      .run('approved',now(),req.body.approved_amount||null,now(),req.params.id,req.tenant.id);
     const approvedLoan = db.prepare('SELECT loan_number FROM loans WHERE id=?').get(req.params.id) as any;
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'approved','loan',req.params.id,`Aprobó el préstamo ${approvedLoan?.loan_number||req.params.id}`);
     res.json(db.prepare('SELECT * FROM loans WHERE id=?').get(req.params.id));
@@ -345,10 +345,10 @@ router.post('/:id/disburse', authenticate, requireTenant, requirePermission('loa
 
     db.prepare(`UPDATE loans SET status='active',disbursed_amount=?,disbursement_date=?,first_payment_date=?,maturity_date=?,
       principal_balance=?,interest_balance=?,total_balance=?,total_interest=?,approved_amount=?,
-      disbursement_bank_account_id=COALESCE(?,disbursement_bank_account_id),updated_at=? WHERE id=?`).run(
+      disbursement_bank_account_id=COALESCE(?,disbursement_bank_account_id),updated_at=? WHERE id=? AND tenant_id=?`).run(
       disbAmount, disbDate.toISOString(), firstPayDate.toISOString(), maturityDate,
       disbAmount, r2(totalInterest), r2(disbAmount+totalInterest), r2(totalInterest), disbAmount,
-      bankAccountId, now(), req.params.id
+      bankAccountId, now(), req.params.id, req.tenant.id
     );
 
     const insertInst = db.prepare('INSERT INTO installments (id,loan_id,installment_number,due_date,principal_amount,interest_amount,total_amount,status) VALUES (?,?,?,?,?,?,?,?)');
@@ -422,8 +422,8 @@ router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'),
     // Merge all updates
     const updates = { ...alwaysFields, ...termFields, updated_at: now() };
     const setClauses = Object.keys(updates).map(k => `${k}=?`).join(',');
-    const values = [...Object.values(updates), req.params.id];
-    db.prepare(`UPDATE loans SET ${setClauses} WHERE id=?`).run(...values);
+    const values = [...Object.values(updates), req.params.id, req.tenant.id];
+    db.prepare(`UPDATE loans SET ${setClauses} WHERE id=? AND tenant_id=?`).run(...values);
 
     // ── Regenerate installment schedule if pre-disbursement and term fields changed ──
     const scheduleChanged = !isDisbursed && Object.keys(termFields).length > 0;
@@ -445,7 +445,7 @@ router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'),
           }
           const totalInterest = schedule.reduce((s: number, i: any) => s + i.interest_amount, 0);
           const maturityDate = schedule[schedule.length - 1].due_date;
-          db.prepare('UPDATE loans SET total_interest=?,maturity_date=?,updated_at=? WHERE id=?').run(r2(totalInterest), maturityDate, now(), req.params.id);
+          db.prepare('UPDATE loans SET total_interest=?,maturity_date=?,updated_at=? WHERE id=? AND tenant_id=?').run(r2(totalInterest), maturityDate, now(), req.params.id, req.tenant.id);
         }
       }
     }

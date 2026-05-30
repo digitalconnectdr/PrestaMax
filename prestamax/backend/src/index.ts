@@ -117,6 +117,17 @@ const registerLimiter = rateLimit({
   message: { error: 'Limite de registros alcanzado. Intenta en 1 hora.' },
 });
 
+// publicFormsLimiter — para formularios publicos de la landing y portales.
+// Evita bots/spam masivo en /plan-inquiry, /apply/:token, etc.
+// 10 envios por hora por IP es generoso para usuarios reales y bloquea bots.
+const publicFormsLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message: { error: 'Limite de envios alcanzado. Intenta en 1 hora.' },
+});
+
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -138,6 +149,8 @@ app.use('/api/auth/register-tenant', registerLimiter);
 app.use('/api/auth/change-password', authLimiter);
 app.use('/api/admin',                adminLimiter);
 app.use('/api/loans/import',         bulkLimiter);
+app.use('/api/public/plan-inquiry',  publicFormsLimiter);
+app.use('/api/public/apply',         publicFormsLimiter);
 app.use('/api/',                     globalLimiter);
 
 // IMPORTANTE: webhook de Stripe ANTES de express.json para preservar raw body

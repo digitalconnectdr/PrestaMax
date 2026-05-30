@@ -72,3 +72,5 @@ coverage/
 # ─── TypeScript build info ────────────────────────────────────
 *.tsbuildinfo
 
+# Artefactos temporales de sesiones de Claude / scripts de limpieza
+*.clean

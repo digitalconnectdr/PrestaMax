@@ -407,6 +407,16 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     }
 
     const pDate = new Date(payment_date || new Date());
+
+    // Anti-error humano: no permitir fecha de pago muy futura (margen 3 dias por zonas horarias).
+    // Si necesitas registrar pagos futuros (ej. cheques posfechados) se contemplara en otro flujo.
+    const maxFutureDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    if (pDate.getTime() > maxFutureDate.getTime()) {
+      return res.status(400).json({
+        error: `La fecha del pago no puede ser mayor a 3 dias en el futuro. Recibido: ${pDate.toISOString().slice(0, 10)}`,
+      });
+    }
+
     const installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY due_date').all(loan_id) as any[];
     const mora = calcMora(loan, installments, pDate);
 
@@ -446,11 +456,11 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
 
       // -- Update loan mora_balance only (principal/interest unchanged)
       const newMoraBal = r2(Math.max(0, (loan.mora_balance || 0) - moraAmount));
-      db.prepare(`UPDATE loans SET mora_balance=?,total_paid=?,total_paid_mora=?,updated_at=? WHERE id=?`).run(
+      db.prepare(`UPDATE loans SET mora_balance=?,total_paid=?,total_paid_mora=?,updated_at=? WHERE id=? AND tenant_id=?`).run(
         newMoraBal,
         r2((loan.total_paid || 0) + totalCharge),
         r2((loan.total_paid_mora || 0) + moraAmount),
-        now(), loan_id
+        now(), loan_id, req.tenant.id
       );
 
       // -- Receipt ---------------------------------------------------
@@ -564,13 +574,13 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
 
     db.prepare(`UPDATE loans SET principal_balance=?,interest_balance=?,mora_balance=?,total_balance=?,
       total_paid=?,total_paid_principal=?,total_paid_interest=?,total_paid_mora=?,
-      days_overdue=?,status=?,actual_close_date=?,updated_at=? WHERE id=?`).run(
+      days_overdue=?,status=?,actual_close_date=?,updated_at=? WHERE id=? AND tenant_id=?`).run(
       newPrincipal, newInterest, newMoraBalance, totalBalance,
       r2((loan.total_paid || 0) + amount),
       r2((loan.total_paid_principal || 0) + totalPrincipal + excessToCapital),
       r2((loan.total_paid_interest || 0) + totalInterest),
       r2((loan.total_paid_mora || 0) + totalMora),
-      newDaysOverdue, newStatus, fullyPaid ? pDate.toISOString() : null, now(), loan_id
+      newDaysOverdue, newStatus, fullyPaid ? pDate.toISOString() : null, now(), loan_id, req.tenant.id
     );
 
     // ── Generate receipt ──────────────────────────────────────────────────────
@@ -723,10 +733,10 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
 
       db.prepare(`UPDATE loans SET principal_balance=?,interest_balance=?,mora_balance=?,total_balance=?,
         total_paid=?,total_paid_principal=?,total_paid_interest=?,total_paid_mora=?,
-        days_overdue=?,status=?,updated_at=? WHERE id=?`).run(
+        days_overdue=?,status=?,updated_at=? WHERE id=? AND tenant_id=?`).run(
         principalBalance, interestBalance, moraBalance, totalBalance,
         r2(payTotals.total_paid), r2(payTotals.total_capital), r2(payTotals.total_interest), r2(payTotals.total_mora),
-        voidDaysOverdue, newStatus, now(), loan.id
+        voidDaysOverdue, newStatus, now(), loan.id, req.tenant.id
       );
     }
 

@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now, r2 } from '../db/database';
+import { logAudit } from '../lib/audit';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -146,12 +147,25 @@ router.delete('/:id', authenticate, requireTenant, requirePermission('investors.
 
     if (loanCount === 0 && payoutCount === 0) {
       // Sin historial: borrado real
+      const invForLog2 = db.prepare('SELECT full_name FROM investors WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
       db.prepare('DELETE FROM investors WHERE id=? AND tenant_id=?').run(req.params.id, req.tenant.id);
+      logAudit(db, {
+        tenant_id: req.tenant.id, user_id: req.user.id, user_name: req.user.full_name,
+        action: 'deleted', entity_type: 'investor', entity_id: req.params.id,
+        description: `Borro inversionista ${invForLog2?.full_name||req.params.id} (sin prestamos ni payouts)`,
+      });
       return res.json({ success: true, hardDeleted: true });
     }
 
     // Con historial: soft delete (no se puede borrar para preservar auditoria)
-    db.prepare("UPDATE investors SET is_active=0, updated_at=datetime('now') WHERE id=?").run(req.params.id);
+    const invForLog = db.prepare('SELECT full_name, email FROM investors WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
+    db.prepare("UPDATE investors SET is_active=0, updated_at=datetime('now') WHERE id=? AND tenant_id=?").run(req.params.id, req.tenant.id);
+    logAudit(db, {
+      tenant_id: req.tenant.id, user_id: req.user.id, user_name: req.user.full_name,
+      action: 'deactivated', entity_type: 'investor', entity_id: req.params.id,
+      description: `Desactivo inversionista ${invForLog?.full_name||req.params.id} (tenia ${loanCount} prestamos y ${payoutCount} payouts)`,
+      old_values: { is_active: 1 }, new_values: { is_active: 0 },
+    });
     res.json({ success: true, hardDeleted: false, reason: 'tiene historial', loanCount, payoutCount });
   } catch (e: any) {
     console.error('DELETE /investors/:id error:', e);
