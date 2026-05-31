@@ -12,7 +12,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
-import { printPaymentReceipt } from '@/lib/printReceipt'
+import { printPaymentReceipt, sendReceiptByWhatsApp } from '@/lib/printReceipt'
 import { AuthContext } from '@/contexts/AuthContext'
 import { TenantContext } from '@/contexts/TenantContext'
 import { usePermission } from '@/hooks/usePermission'
@@ -117,6 +117,8 @@ const PaymentsPage: React.FC = () => {
   const { can } = usePermission()
 
   const [payments, setPayments] = useState<Payment[]>([])
+  const [lastPayment, setLastPayment] = useState<any>(null)
+  const [showPostPaymentModal, setShowPostPaymentModal] = useState(false)
   const [activeLoans, setActiveLoans] = useState<ActiveLoan[]>([])
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [loanDetail, setLoanDetail] = useState<any>(null)
@@ -263,7 +265,7 @@ const PaymentsPage: React.FC = () => {
     }
     try {
       setIsSubmitting(true)
-      await api.post('/payments', {
+      const payRes = await api.post('/payments', {
         loanId: payForm.loanId,
         amount: parseFloat(payForm.amount),
         paymentMethod: payForm.paymentMethod,
@@ -275,8 +277,25 @@ const PaymentsPage: React.FC = () => {
         overpaymentAction: confirmedOverpaymentAction || payForm.overpaymentAction,
       })
       toast.success('Pago registrado exitosamente')
+      const loanForReceipt = selectedLoan
       closeModal()
       fetchPayments()
+      if (payRes?.data?.payment && loanForReceipt) {
+        const pmt = payRes.data.payment as any
+        const rcp = payRes.data.receipt as any
+        setLastPayment({
+          ...pmt,
+          receiptNumber: rcp?.receiptNumber || pmt.receiptNumber,
+          clientName: (loanForReceipt as any).clientName,
+          loanNumber: (loanForReceipt as any).loanNumber,
+          loanId: payForm.loanId,
+          clientWhatsapp: (loanForReceipt as any).clientWhatsapp || (loanForReceipt as any).clientPhone || '',
+          principalBalance: (loanForReceipt as any).principalBalance,
+          interestBalance: (loanForReceipt as any).interestBalance,
+          moraBalance: (loanForReceipt as any).moraBalance,
+        })
+        setShowPostPaymentModal(true)
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Error al registrar pago')
     } finally {
@@ -1009,6 +1028,34 @@ const PaymentsPage: React.FC = () => {
         </div>
       )}
 
+      {/* Modal Post-Pago */}
+      {showPostPaymentModal && lastPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowPostPaymentModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <CreditCard className="w-6 h-6 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900">Pago registrado</h3>
+                  <p className="text-xs text-slate-500">Recibo {lastPayment.receiptNumber || lastPayment.paymentNumber} · {formatCurrency(lastPayment.amount || 0)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-slate-600">¿Qué quieres hacer con el recibo?</p>
+              <button type="button" onClick={async () => { const t = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; await printPaymentReceipt(lastPayment, t); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition">
+                <Printer className="w-4 h-4" /> Imprimir recibo
+              </button>
+              <button type="button" onClick={() => { const t = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; const phone = lastPayment.clientWhatsapp || ''; if (!phone) toast('El cliente no tiene WhatsApp/telefono', { icon: '⚠️' }); sendReceiptByWhatsApp(phone, lastPayment, t, { principalBalance: lastPayment.principalBalance, interestBalance: lastPayment.interestBalance, moraBalance: lastPayment.moraBalance }); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition">
+                <MessageCircle className="w-4 h-4" /> Enviar por WhatsApp
+              </button>
+              <button type="button" onClick={() => setShowPostPaymentModal(false)} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

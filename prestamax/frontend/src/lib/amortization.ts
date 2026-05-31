@@ -21,14 +21,14 @@ export interface AmortizationInfo {
 export const AMORTIZATION_TYPES: AmortizationInfo[] = [
   {
     value: 'flat_interest',
-    label: 'Interés',
+    label: 'Interés y Capital',
     shortDesc: 'Cuota fija sobre el monto inicial. La más común para préstamos personales pequeños.',
     longDesc: 'El interés se calcula UNA SOLA VEZ sobre el monto inicial del préstamo y se reparte por igual en todas las cuotas. La cuota es siempre la misma. Es el método más simple y popular en préstamos personales informales y comerciales pequeños.',
     example: 'Préstamo RD$ 10,000 al 5% mensual a 12 meses:\n• Interés total: 10,000 × 5% × 12 = RD$ 6,000\n• Total a pagar: 16,000\n• Cuota mensual: 16,000 / 12 = RD$ 1,333.33\n\nLa misma cuota durante los 12 meses.',
   },
   {
     value: 'fixed_installment',
-    label: 'Cuota Fija',
+    label: 'Amortizable',
     shortDesc: 'Método francés/bancario. Interés sobre saldo, cuota fija. Usado por bancos.',
     longDesc: 'Conocido como "amortización francesa" o "sistema bancario". La cuota es fija pero internamente cambia la proporción: al inicio se paga más interés y menos capital; al final se paga más capital y menos interés. Es lo que usan los bancos en préstamos hipotecarios y vehículos.',
     example: 'Préstamo RD$ 10,000 al 5% mensual a 12 meses:\n• Cuota mensual fija: ~RD$ 1,128.25\n• Cuota 1: interés RD$ 500.00 + capital RD$ 628.25\n• Cuota 6: interés RD$ 296.97 + capital RD$ 831.28\n• Cuota 12: interés RD$ 53.72 + capital RD$ 1,074.53\n\nTotal pagado: RD$ 13,539 (interés total RD$ 3,539).',

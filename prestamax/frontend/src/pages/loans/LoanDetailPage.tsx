@@ -381,12 +381,14 @@ const LoanDetailPage: React.FC = () => {
       setLoan(res.data)
       loadPayments()
       setShowPaymentModal(false)
-      // Modal post-pago con opciones de imprimir + WhatsApp
-      if (payRes?.data) {
-        const pd = payRes.data as any
-        // Enriquecer con datos del loan/cliente para el recibo
+      // Modal post-pago con opciones de imprimir + WhatsApp.
+      // Backend devuelve { payment, receipt, breakdown } — extraer correctamente.
+      if (payRes?.data?.payment) {
+        const pmt = payRes.data.payment as any
+        const rcp = payRes.data.receipt as any
         setLastPayment({
-          ...pd,
+          ...pmt,
+          receiptNumber: rcp?.receiptNumber || pmt.receiptNumber,
           clientName: loan.clientName,
           loanNumber: loan.loanNumber,
           loanId: loan.id,

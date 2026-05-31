@@ -168,12 +168,14 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
     }
     db.prepare(`INSERT INTO loans (id,tenant_id,branch_id,client_id,product_id,loan_number,status,requested_amount,
       rate,rate_type,term,term_unit,payment_frequency,amortization_type,purpose,notes,
-      mora_rate_daily,mora_grace_days,collector_id,currency,exchange_rate_to_dop,prorroga_fee) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      mora_rate_daily,mora_grace_days,collector_id,currency,exchange_rate_to_dop,prorroga_fee,
+      first_payment_date,disbursement_bank_account_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       id,req.tenant.id,d.branch_id||null,d.client_id,d.product_id,loan_number,status,d.requested_amount,
       d.rate||product?.rate,d.rate_type||product?.rate_type||'monthly',d.term,d.term_unit||'months',
       d.payment_frequency||product?.payment_frequency||'monthly',d.amortization_type||product?.amortization_type||'fixed_installment',
       d.purpose||null,d.notes||null,product?.mora_rate_daily||0.001,product?.mora_grace_days||3,d.collector_id||null,
-      currency,exchange_rate_to_dop,parseFloat(d.prorroga_fee)||0
+      currency,exchange_rate_to_dop,parseFloat(d.prorroga_fee)||0,
+      d.first_payment_date||null,d.disbursement_bank_account_id||null
     );
     const clientForLog = db.prepare('SELECT full_name FROM clients WHERE id=?').get(d.client_id) as any;
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'created','loan',id,`Creó el préstamo ${loan_number} para ${clientForLog?.full_name||'cliente'}`);
