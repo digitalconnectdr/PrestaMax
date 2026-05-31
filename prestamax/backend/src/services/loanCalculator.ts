@@ -12,7 +12,8 @@ export function generateInstallmentSchedule(params: {
   disbursementFee?: number;
 }) {
   const { disbursedAmount, rate, frequency, term, amortizationType, firstPaymentDate } = params;
-  const monthlyRate = getMonthlyRate(rate, params.rateType);
+  // Tasa correcta POR PERIODO de cuota (depende de rateType + frequency)
+  const ratePerInstallment = getRatePerInstallment(rate, params.rateType, frequency);
   const installments = [];
   let balance = disbursedAmount;
   let currentDate = new Date(firstPaymentDate);
@@ -23,19 +24,19 @@ export function generateInstallmentSchedule(params: {
     let interest = 0;
 
     if (amortizationType === 'fixed_installment') {
-      const payment = calculateFixedPayment(disbursedAmount, monthlyRate, numInstallments);
-      interest = balance * monthlyRate;
+      const payment = calculateFixedPayment(disbursedAmount, ratePerInstallment, numInstallments);
+      interest = balance * ratePerInstallment;
       principal = payment - interest;
       if (i === numInstallments) principal = balance;
     } else if (amortizationType === 'flat_interest') {
-      const totalInterest = disbursedAmount * monthlyRate * numInstallments;
+      const totalInterest = disbursedAmount * ratePerInstallment * numInstallments;
       principal = disbursedAmount / numInstallments;
       interest = totalInterest / numInstallments;
     } else if (amortizationType === 'interest_only') {
-      interest = balance * monthlyRate;
+      interest = balance * ratePerInstallment;
       principal = i === numInstallments ? balance : 0;
     } else {
-      interest = balance * monthlyRate;
+      interest = balance * ratePerInstallment;
       principal = disbursedAmount / numInstallments;
     }
 
@@ -63,6 +64,28 @@ function calculateFixedPayment(principal: number, rate: number, n: number): numb
   return principal * (rate * Math.pow(1 + rate, n)) / (Math.pow(1 + rate, n) - 1);
 }
 
+// Convierte tasa input a tasa POR PERIODO de cuota.
+// Esta es la unica forma matematicamente correcta cuando rateType y frequency difieren.
+function getRatePerInstallment(rate: number, rateType: string, frequency: string): number {
+  const yearly =
+    rateType === 'daily'    ? rate * 365
+    : rateType === 'weekly' ? rate * 52
+    : rateType === 'biweekly' ? rate * 26
+    : rateType === 'monthly' ? rate * 12
+    : rateType === 'annual' ? rate
+    : rate * 12;
+  const installmentsPerYear =
+    frequency === 'daily'     ? 365
+    : frequency === 'weekly'  ? 52
+    : frequency === 'biweekly' ? 26
+    : frequency === 'monthly' ? 12
+    : frequency === 'quarterly' ? 4
+    : frequency === 'annual' || frequency === 'yearly' ? 1
+    : 12;
+  return (yearly / 100) / installmentsPerYear;
+}
+
+// LEGACY: mantengo getMonthlyRate por si lo usa alguna otra parte (no en uso interno).
 function getMonthlyRate(rate: number, rateType: string): number {
   const r = rate / 100;
   switch (rateType) {

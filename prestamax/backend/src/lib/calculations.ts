@@ -73,15 +73,38 @@ export interface ScheduleRow {
   status: string;
 }
 
+// Convierte la tasa a "por periodo de cuota" — la unica forma matematicamente
+// correcta cuando rateType y freq pueden diferir.
+//
+// Paso 1: convertir la tasa input a una tasa anual equivalente (simple, no compound)
+// Paso 2: dividir entre cantidad de cuotas/año segun la frecuencia
+//
+// Asi: si tasa=1% Diario y freq=Diaria -> 1% × 365 / 365 = 1% por cuota ✓
+//      si tasa=2.5% Quincenal y freq=Quincenal -> 2.5%×26 / 26 = 2.5% por cuota ✓
+//      si tasa=60% Anual y freq=Mensual -> 60% / 12 = 5% por cuota ✓
+export function getRatePerInstallment(rate: number, rateType: string, freq: string): number {
+  const yearly =
+    rateType === 'daily'    ? rate * 365
+    : rateType === 'weekly' ? rate * 52
+    : rateType === 'biweekly' ? rate * 26
+    : rateType === 'monthly' ? rate * 12
+    : rateType === 'annual' ? rate
+    : rate * 12;
+  const installmentsPerYear =
+    freq === 'daily'     ? 365
+    : freq === 'weekly'  ? 52
+    : freq === 'biweekly' ? 26
+    : freq === 'monthly' ? 12
+    : freq === 'quarterly' ? 4
+    : freq === 'annual' || freq === 'yearly' ? 1
+    : 12;
+  return (yearly / 100) / installmentsPerYear;
+}
+
 export function generateSchedule(params: ScheduleParams): ScheduleRow[] {
   const { amount, rate, rateType, term, termUnit, freq, type, firstDate } = params;
-  // Convertir tasa a tasa por periodo del schedule
-  const mRate =
-    rateType === 'daily'    ? (rate / 100) * 30
-    : rateType === 'weekly' ? (rate / 100) * 4.33
-    : rateType === 'biweekly' ? (rate / 100) * 2
-    : rateType === 'annual' ? (rate / 100) / 12
-    : (rate / 100);
+  // Tasa correcta POR PERIODO de cuota (no "equivalente mensual")
+  const mRate = getRatePerInstallment(rate, rateType, freq);
 
   const n = getInstallmentCount(term, termUnit, freq);
   const schedule: ScheduleRow[] = [];

@@ -228,13 +228,24 @@ const LoanCreatePage: React.FC = () => {
     const n = parseInt(form.term)
     if (!amount || !rate || !n) return
 
-    // Conversion correcta de tasa a tasa mensual segun el rateType
-    const mRate =
-      form.rateType === 'daily'    ? (rate / 100) * 30
-      : form.rateType === 'weekly' ? (rate / 100) * 4.33
-      : form.rateType === 'biweekly' ? (rate / 100) * 2
-      : form.rateType === 'annual' ? (rate / 100) / 12
-      : (rate / 100)  // monthly (default)
+    // Tasa POR PERIODO de cuota: la unica forma matematicamente correcta
+    // cuando rateType y frequency difieren.
+    const yearlyRate =
+      form.rateType === 'daily'    ? rate * 365
+      : form.rateType === 'weekly' ? rate * 52
+      : form.rateType === 'biweekly' ? rate * 26
+      : form.rateType === 'monthly' ? rate * 12
+      : form.rateType === 'annual' ? rate
+      : rate * 12
+    const installmentsPerYear =
+      form.paymentFrequency === 'daily'     ? 365
+      : form.paymentFrequency === 'weekly'  ? 52
+      : form.paymentFrequency === 'biweekly' ? 26
+      : form.paymentFrequency === 'monthly' ? 12
+      : form.paymentFrequency === 'quarterly' ? 4
+      : form.paymentFrequency === 'annual' || form.paymentFrequency === 'yearly' ? 1
+      : 12
+    const mRate = (yearlyRate / 100) / installmentsPerYear
     const schedule = []
     let balance = amount
 

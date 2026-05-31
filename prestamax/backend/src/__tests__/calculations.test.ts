@@ -6,6 +6,7 @@ import {
   generateSchedule,
   calcMora,
   calcInvestorLiquidation,
+  getRatePerInstallment,
 } from '../lib/calculations';
 
 // ─── r2 (round to 2 decimals) ────────────────────────────────────────────────
@@ -268,3 +269,86 @@ describe('calcInvestorLiquidation — fixed_rate model', () => {
     expect(r.netToInvestor).toBe(0);
   });
 });
+
+
+// ─── getRatePerInstallment (NUEVO HELPER) ────────────────────────────────────
+describe('getRatePerInstallment', () => {
+  it('mensual + mensual: tasa directa', () => {
+    expect(getRatePerInstallment(5, 'monthly', 'monthly')).toBeCloseTo(0.05, 5);
+  });
+  it('annual + mensual: divide entre 12', () => {
+    expect(getRatePerInstallment(60, 'annual', 'monthly')).toBeCloseTo(0.05, 5);
+  });
+  it('daily + daily: tasa directa', () => {
+    expect(getRatePerInstallment(1, 'daily', 'daily')).toBeCloseTo(0.01, 5);
+  });
+  it('weekly + weekly: tasa directa', () => {
+    expect(getRatePerInstallment(2, 'weekly', 'weekly')).toBeCloseTo(0.02, 5);
+  });
+  it('mensual + diario: convierte', () => {
+    // 5% mensual -> 60% anual -> /365 = 0.164% por dia
+    expect(getRatePerInstallment(5, 'monthly', 'daily')).toBeCloseTo(0.001644, 4);
+  });
+});
+
+// ─── generateSchedule con frecuencia NO mensual ──────────────────────────────
+describe('generateSchedule — frecuencia DIARIA', () => {
+  it('1% diario, 30 cuotas diarias, flat_interest: 130 pesos interes por dia (en 10k)', () => {
+    const s = generateSchedule({
+      amount: 10000, rate: 1, rateType: 'daily', term: 30, termUnit: 'days',
+      freq: 'daily', type: 'flat_interest', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(30);
+    // Cada cuota: capital 333.33 + interes 100 = 433.33
+    expect(s[0].interest_amount).toBeCloseTo(100, 1);
+    expect(s[0].principal_amount).toBeCloseTo(333.33, 1);
+  });
+
+  it('1% diario, 30 dias, fixed_installment (amortizable): ~387/cuota', () => {
+    const s = generateSchedule({
+      amount: 10000, rate: 1, rateType: 'daily', term: 30, termUnit: 'days',
+      freq: 'daily', type: 'fixed_installment', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(30);
+    // PMT(10000, 0.01, 30) ≈ 387.48
+    expect(s[0].total_amount).toBeCloseTo(387.48, 0);
+  });
+});
+
+describe('generateSchedule — frecuencia QUINCENAL', () => {
+  it('2.5% quincenal, 24 quincenas, flat_interest: 250 interes por cuota (en 10k)', () => {
+    const s = generateSchedule({
+      amount: 10000, rate: 2.5, rateType: 'biweekly', term: 24, termUnit: 'biweekly',
+      freq: 'biweekly', type: 'flat_interest', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(24);
+    // Cada cuota: 416.67 capital + 250 interes
+    expect(s[0].interest_amount).toBeCloseTo(250, 1);
+    expect(s[0].principal_amount).toBeCloseTo(416.67, 1);
+  });
+});
+
+describe('generateSchedule — frecuencia SEMANAL', () => {
+  it('1% semanal, 12 semanas, flat_interest', () => {
+    const s = generateSchedule({
+      amount: 10000, rate: 1, rateType: 'weekly', term: 12, termUnit: 'weeks',
+      freq: 'weekly', type: 'flat_interest', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(12);
+    expect(s[0].interest_amount).toBeCloseTo(100, 1);
+  });
+});
+
+describe('generateSchedule — frecuencia ANUAL', () => {
+  it('20% anual, 1 ano, 1 cuota: pago total = principal + interest', () => {
+    const s = generateSchedule({
+      amount: 10000, rate: 20, rateType: 'annual', term: 1, termUnit: 'years',
+      freq: 'annual', type: 'flat_interest', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(1);
+    // 20% anual sobre 10k = 2000 interes total
+    expect(s[0].interest_amount).toBeCloseTo(2000, 1);
+    expect(s[0].principal_amount).toBeCloseTo(10000, 1);
+  });
+});
+
