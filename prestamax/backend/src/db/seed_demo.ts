@@ -1,5 +1,5 @@
 // ─── PrestaMax — seed extendido con datos demo realistas ─────────────────────
-// Genera ~50 clientes, ~100 prestamos en distintos estados, 10 inversionistas
+// Genera 200 clientes, ~400 prestamos en distintos estados, 15 inversionistas
 // (5 fixed_rate + 5 equity), pagos historicos de 6 meses, y 3-4 payouts hechos.
 //
 // Uso:  npx ts-node src/db/seed_demo.ts
@@ -33,7 +33,7 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
 
   // ── 50 clientes ─────────────────────────────────────────────────────────────
   const clientIds: string[] = [];
-  for (let i = 1; i <= 50; i++) {
+  for (let i = 1; i <= 200; i++) {
     const isMale = Math.random() < 0.6;
     const firstName = isMale ? rand(NOMBRES_DR_M) : rand(NOMBRES_DR_F);
     const lastName  = `${rand(APELLIDOS_DR)} ${rand(APELLIDOS_DR)}`;
@@ -66,14 +66,14 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
     );
     clientIds.push(clientId);
   }
-  console.log(`✅ 50 clientes creados`);
+  console.log(`✅ 200 clientes creados`);
 
-  // ── 10 inversionistas (5 fixed_rate, 5 equity) ─────────────────────────────
+  // ── 15 inversionistas (7 fixed_rate, 8 equity) ─────────────────────────────
   const investorIds: string[] = [];
   // Timestamp epoch para evitar colision de emails en ejecuciones repetidas
   const seedRun = Date.now().toString(36).slice(-4);
-  for (let i = 1; i <= 10; i++) {
-    const isFixedRate = i <= 5;
+  for (let i = 1; i <= 15; i++) {
+    const isFixedRate = i <= 7;
     const fullName = `${rand(NOMBRES_DR_M)} ${rand(APELLIDOS_DR)}`;
     const invId = uuid();
     const capital = isFixedRate ? randInt(50000, 500000) : 0;
@@ -94,21 +94,23 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
     );
     investorIds.push(invId);
   }
-  console.log(`✅ 10 inversionistas creados (5 fixed_rate + 5 equity)`);
+  console.log(`✅ 15 inversionistas creados (7 fixed_rate + 8 equity)`);
 
-  // ── 100 prestamos en distintos estados ─────────────────────────────────────
-  const STATUSES = ['active', 'active', 'active', 'in_mora', 'in_mora', 'liquidated', 'liquidated', 'voided', 'rejected', 'under_review'];
-  const TYPES    = ['fixed_installment', 'flat_interest', 'fixed_installment', 'fixed_installment'];
+  // ── 400 prestamos en distintos estados ─────────────────────────────────────
+  const STATUSES = ['active', 'active', 'active', 'active', 'in_mora', 'in_mora', 'liquidated', 'liquidated', 'voided', 'rejected', 'under_review'];
+  const TYPES    = ['fixed_installment', 'flat_interest', 'fixed_installment', 'fixed_installment', 'interest_only'];
+  const FREQS    = ['monthly', 'monthly', 'monthly', 'biweekly', 'biweekly', 'weekly', 'daily'];
+  const CURRENCIES = ['DOP', 'DOP', 'DOP', 'DOP', 'DOP', 'DOP', 'USD']; // ~14% USD
   let createdLoans = 0;
 
-  for (let i = 1; i <= 100; i++) {
+  for (let i = 1; i <= 400; i++) {
     const clientId = rand(clientIds);
     const status   = rand(STATUSES);
     const amount   = randInt(5000, 100000);
     const rate     = randInt(2, 5);
     const term     = randInt(6, 24);
     const type     = rand(TYPES);
-    const investorId = i <= 30 ? rand(investorIds) : null; // 30% asignados a inversionista
+    const investorId = i <= 140 ? rand(investorIds) : null; // 35% asignados a inversionista
 
     // Fecha de desembolso: para in_mora forzar 180-365 dias atras (cuotas vencidas reales).
     // Para active mas reciente. Para under_review/rejected NO hay disbursement_date.
@@ -141,10 +143,11 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
       principal_balance, interest_balance, mora_balance, total_balance,
       total_paid, days_overdue, collector_id, currency, investor_id,
       mora_rate_daily, mora_grace_days
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'monthly', ?, 'months', 'monthly', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, 'DOP', ?, 0.001, 3)`).run(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'monthly', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, 0.001, 3)`).run(
       loanId, opts.tenantId, opts.branchId, clientId, opts.productId, loanNumber, status,
       amount, amount, status === 'rejected' || status === 'under_review' ? null : amount,
-      rate, term, type,
+      rate, term, (() => { const f = rand(FREQS); return f === 'monthly' ? 'months' : (f === 'biweekly' ? 'biweekly' : (f === 'weekly' ? 'weeks' : 'days')); })(),
+      rand(FREQS), type,
       randDate(540),
       ['under_review', 'rejected'].includes(status) ? null : randDate(180),
       disbDate, disbDate,
@@ -153,14 +156,19 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
       0, // mora_balance se calcula al final
       status === 'liquidated' ? 0 : amount,
       opts.collectorId,
+      rand(CURRENCIES),
       investorId,
     );
 
     // Generar installments solo si está desembolsado
     if (disbDate && !['voided', 'rejected', 'under_review'].includes(status)) {
+      // Leer freq real del prestamo recien insertado para consistencia
+      const loanRow = db.prepare('SELECT payment_frequency, term_unit FROM loans WHERE id=?').get(loanId) as any;
+      const realFreq = loanRow?.payment_frequency || 'monthly';
+      const realTermUnit = loanRow?.term_unit || 'months';
       const schedule = generateSchedule({
         amount, rate, rateType: 'monthly',
-        term, termUnit: 'months', freq: 'monthly',
+        term, termUnit: realTermUnit as any, freq: realFreq,
         type: type as any,
         firstDate: disbDate,
       });
@@ -210,7 +218,7 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
   const activeLoans = db.prepare(`
     SELECT id, principal_balance, currency, investor_id FROM loans
     WHERE tenant_id = ? AND status IN ('active','in_mora') AND disbursed_amount > 0
-    LIMIT 60
+    LIMIT 200
   `).all(opts.tenantId) as any[];
 
   let paymentCount = 0;
@@ -312,9 +320,101 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
   }
   console.log(`✅ ${payoutCount} payouts demo creados`);
 
+  // ── EDGE CASES adicionales para auditoria del sistema ────────────────────────
+
+  // (A) Marcar 10 prestamos in_mora como "migrados al dia" con mora_start_date
+  // para probar la nueva feature de mora retroactiva
+  const inMoraLoans = db.prepare(`SELECT id FROM loans WHERE tenant_id=? AND status='in_mora' LIMIT 10`).all(opts.tenantId) as any[];
+  let migratedAtDayCount = 0;
+  for (const l of inMoraLoans) {
+    const today = new Date().toISOString().slice(0, 10);
+    db.prepare("UPDATE loans SET mora_start_date=?, mora_balance=0 WHERE id=?").run(today, l.id);
+    migratedAtDayCount++;
+  }
+  console.log(`✅ ${migratedAtDayCount} prestamos marcados con mora_start_date=hoy (migrados al dia)`);
+
+  // (B) Agregar promesas de pago para 15 prestamos in_mora
+  const moraForPromises = db.prepare(`SELECT id FROM loans WHERE tenant_id=? AND status='in_mora' LIMIT 15`).all(opts.tenantId) as any[];
+  let promiseCount = 0;
+  try {
+    for (const l of moraForPromises) {
+      const futureDate = new Date(Date.now() + randInt(1, 10) * 86400000).toISOString().slice(0, 10);
+      db.prepare(`INSERT INTO payment_promises (id, tenant_id, loan_id, promised_date, promised_amount, status, notes, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, datetime('now'))`).run(
+        uuid(), opts.tenantId, l.id, futureDate, randInt(2000, 8000),
+        rand(['Cliente confirmo por whatsapp', 'Va a pagar el viernes', 'Espera deposito', 'Pasa por la oficina', 'Le voy a pasar a buscar']),
+        opts.officerId,
+      );
+      promiseCount++;
+    }
+  } catch (_) {}
+  console.log(`✅ ${promiseCount} promesas de pago creadas`);
+
+  // (C) Notas de cobranza para 20 prestamos in_mora
+  const moraForNotes = db.prepare(`SELECT id FROM loans WHERE tenant_id=? AND status='in_mora' LIMIT 20`).all(opts.tenantId) as any[];
+  let noteCount = 0;
+  try {
+    for (const l of moraForNotes) {
+      db.prepare(`INSERT INTO collection_notes (id, tenant_id, loan_id, note, contact_method, outcome, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' days'))`).run(
+        uuid(), opts.tenantId, l.id,
+        rand(['Llame y no contesto', 'Hable con esposa, dice que va a pagar manana', 'Visite la casa, no estaba', 'Mensaje de whatsapp visto pero no respondio', 'Cliente prometio pasar manana']),
+        rand(['phone', 'whatsapp', 'visit', 'sms']),
+        rand(['promise_to_pay', 'no_answer', 'reached_voicemail', 'partial_commitment']),
+        opts.collectorId, randInt(1, 30),
+      );
+      noteCount++;
+    }
+  } catch (_) {}
+  console.log(`✅ ${noteCount} notas de cobranza creadas`);
+
+  // (D) Garantes para 30 prestamos activos
+  const loansForGuarantors = db.prepare(`SELECT id FROM loans WHERE tenant_id=? AND status IN ('active','in_mora','liquidated') LIMIT 30`).all(opts.tenantId) as any[];
+  let guarantorCount = 0;
+  try {
+    for (const l of loansForGuarantors) {
+      db.prepare(`INSERT INTO loan_guarantors (id, loan_id, full_name, id_number, phone, relationship, address, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`).run(
+        uuid(), l.id,
+        `${rand(NOMBRES_DR_M)} ${rand(APELLIDOS_DR)} ${rand(APELLIDOS_DR)}`,
+        `${randInt(100, 999)}-${String(randInt(1000000, 9999999)).padStart(7, '0')}-${randInt(1, 9)}`,
+        `809-${randInt(200, 999)}-${String(randInt(0, 9999)).padStart(4, '0')}`,
+        rand(['Conyuge', 'Padre', 'Madre', 'Hermano', 'Hijo', 'Tio', 'Amigo', 'Companero de trabajo']),
+        `Calle ${rand(['Duarte', 'Mella', 'Independencia'])} #${randInt(1, 999)}`,
+      );
+      guarantorCount++;
+    }
+  } catch (_) {}
+  console.log(`✅ ${guarantorCount} garantes registrados`);
+
+  // (E) Algunos ingresos extra y gastos (no solo payouts) para tener movimientos en libro diario
+  let extraIeCount = 0;
+  try {
+    const categories = [
+      { type: 'income',  cat: 'commission',    desc: 'Comision por referido' },
+      { type: 'income',  cat: 'fee',           desc: 'Cargo administrativo' },
+      { type: 'expense', cat: 'office',        desc: 'Renta oficina' },
+      { type: 'expense', cat: 'utilities',     desc: 'Electricidad/Internet' },
+      { type: 'expense', cat: 'salary',        desc: 'Pago empleado' },
+      { type: 'expense', cat: 'transport',     desc: 'Gasolina cobranza' },
+      { type: 'expense', cat: 'marketing',     desc: 'Publicidad redes sociales' },
+    ];
+    for (let i = 0; i < 30; i++) {
+      const item = rand(categories);
+      const daysAgo = randInt(1, 180);
+      db.prepare(`INSERT INTO income_expenses (id, tenant_id, registered_by, type, category, description, amount, transaction_date, payment_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '-' || ? || ' days'), ?)`).run(
+        uuid(), opts.tenantId, opts.officerId, item.type, item.cat, item.desc,
+        randInt(500, 15000), daysAgo, rand(['cash', 'transfer']),
+      );
+      extraIeCount++;
+    }
+  } catch (_) {}
+  console.log(`✅ ${extraIeCount} movimientos extra de ingresos/gastos`);
+
   console.log('');
   console.log('🎉 Seed demo extendido completo');
-  console.log(`   50 clientes, 100 prestamos, 10 inversionistas, ${paymentCount} pagos, ${payoutCount} payouts`);
+  console.log(`   200 clientes, 400 prestamos, 15 inversionistas, ${paymentCount} pagos, ${payoutCount} payouts`);
 }
 
 // ─── CLI entry ──────────────────────────────────────────────────────────────

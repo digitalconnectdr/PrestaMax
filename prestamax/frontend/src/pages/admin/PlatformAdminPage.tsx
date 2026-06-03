@@ -215,6 +215,7 @@ const PlatformAdminPage: React.FC = () => {
   // Purge tenant data
   const [purgeModal, setPurgeModal] = useState<{ tenantId: string; tenantName: string } | null>(null)
   const [seedingTenantId, setSeedingTenantId] = useState<string | null>(null)
+  const [isCleaningAll, setIsCleaningAll] = useState(false)
   const { confirm: confirmDialog, ConfirmHost: ConfirmHostAdmin } = useConfirm()
   const [purgeConfirmName, setPurgeConfirmName] = useState('')
   const [isPurging, setIsPurging] = useState(false)
@@ -385,7 +386,7 @@ const PlatformAdminPage: React.FC = () => {
   const handleSeedDemo = async (tenantId: string, tenantName: string) => {
     const ok = await confirmDialog({
       title: `¿Poblar "${tenantName}" con datos demo?`,
-      message: 'Se agregaran al tenant: 50 clientes, 100 prestamos, 10 inversionistas (5 fixed_rate + 5 equity), ~200 pagos historicos y 3 payouts ya hechos.\n\nLos datos se SUMAN encima de lo que ya existe (no reemplaza ni borra).',
+      message: 'Se agregaran al tenant: 200 clientes, ~400 prestamos (varios estados, monedas DOP/USD, frecuencias diario/semanal/quincenal/mensual, tipos amortizable/flat/bullet), 15 inversionistas, pagos historicos, promesas de pago, notas de cobranza, garantes, ingresos/gastos extra y payouts.\n\nLos datos se SUMAN encima de lo que ya existe (no reemplaza ni borra).',
       confirmText: 'Poblar demo',
       variant: 'warning',
     })
@@ -401,6 +402,42 @@ const PlatformAdminPage: React.FC = () => {
       toast.error(err?.response?.data?.error || 'Error al poblar datos demo')
     } finally {
       setSeedingTenantId(null)
+    }
+  }
+
+  // ── Limpiar TODA la data transaccional de TODOS los tenants ─────────────────
+  // Mantiene users, productos, cuentas bancarias, settings. Util antes de
+  // poblar con datos demo limpios.
+  const handleCleanAllData = async () => {
+    const ok1 = await confirmDialog({
+      title: '¿BORRAR TODA la data de TODOS los tenants?',
+      message: 'Esto borra clientes, prestamos, cuotas, pagos, contratos, ingresos/gastos, inversionistas, payouts, promesas, notas, garantes y leads de TODOS los tenants.\n\nMANTIENE: usuarios, accesos, productos de prestamo, cuentas bancarias y configuracion.\n\nLas cuentas bancarias se resetean a su saldo inicial.\n\nESTA ACCION ES IRREVERSIBLE.',
+      confirmText: 'Borrar todo',
+      variant: 'danger',
+    })
+    if (!ok1) return
+    const ok2 = await confirmDialog({
+      title: 'Ultima confirmacion',
+      message: 'Estas 100% seguro? No hay forma de recuperar los datos despues. Recomendado: crear un backup antes.',
+      confirmText: 'Si, BORRAR',
+      variant: 'danger',
+    })
+    if (!ok2) return
+    try {
+      setIsCleaningAll(true)
+      const res = await api.post('/admin/clean-all-tenants-data', { confirm: 'BORRAR TODO' })
+      const counts = res.data?.deleted || {}
+      const summary = Object.entries(counts)
+        .filter(([_, v]: any) => v > 0)
+        .map(([k, v]: any) => `${k}: ${v}`)
+        .join(', ')
+      toast.success(`Data limpiada: ${summary || 'no habia data'}`)
+      const tenantsRes = await api.get('/admin/tenants')
+      setTenants(tenantsRes.data || [])
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Error al limpiar data')
+    } finally {
+      setIsCleaningAll(false)
     }
   }
 
@@ -1637,6 +1674,29 @@ const PlatformAdminPage: React.FC = () => {
                       )}
                     </p>
                   </div>
+                </div>
+              </Card>
+
+              {/* ── ZONA PELIGROSA: Limpiar TODA la data ─────────────────── */}
+              <Card>
+                <div className="border-l-4 border-red-500 pl-4">
+                  <h4 className="font-semibold text-red-700 mb-2">⚠️ Zona Peligrosa — Limpiar Data</h4>
+                  <p className="text-sm text-slate-600 mb-3">
+                    Borra <strong>toda la data transaccional</strong> de <strong>todos los tenants</strong>: clientes, prestamos, cuotas, pagos, contratos, ingresos/gastos, inversionistas, payouts, promesas, notas, garantes y leads.
+                  </p>
+                  <p className="text-sm text-slate-600 mb-3">
+                    <strong>Mantiene:</strong> usuarios y accesos, productos, cuentas bancarias (resetea saldos a inicial), configuracion, plantillas de contrato.
+                  </p>
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+                    <strong>Recomendado:</strong> crea un backup ANTES de limpiar. Despues podras correr "Poblar demo" desde la pestana Tenants para generar 200 clientes de prueba.
+                  </p>
+                  <button
+                    onClick={handleCleanAllData}
+                    disabled={isCleaningAll}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isCleaningAll ? 'Limpiando…' : '🗑️ Limpiar data de todos los tenants'}
+                  </button>
                 </div>
               </Card>
 

@@ -216,8 +216,8 @@ const BillingPage: React.FC = () => {
           <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium">Pagos no configurados</p>
-              <p className="text-sm mt-1">El administrador no ha configurado los planes de Stripe todavia. Contacta a soporte.</p>
+              <p className="font-medium">Planes no disponibles aun</p>
+              <p className="text-sm mt-1">Los planes de suscripcion aun no estan publicados. Contacta a soporte para conocer las opciones disponibles.</p>
             </div>
           </div>
         ) : (
@@ -275,8 +275,8 @@ const BillingPage: React.FC = () => {
       </div>
 
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
-        <p>Pagos procesados de forma segura por <strong>Stripe</strong>. PrestaMax no almacena datos de tarjeta.</p>
-        <p className="mt-1">Puedes cancelar tu suscripcion en cualquier momento desde el portal de gestion.</p>
+        <p>El pago de la suscripcion se gestiona de forma manual con nuestro equipo. Contacta a soporte para activar, cambiar o cancelar tu plan.</p>
+        <p className="mt-1">Pronto habilitaremos pago automatico con tarjeta.</p>
       </div>
     </div>
   );

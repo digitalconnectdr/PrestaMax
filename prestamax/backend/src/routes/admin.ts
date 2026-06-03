@@ -957,4 +957,69 @@ router.post('/cleanup-duplicate-investors', authenticate, requirePlatformAdmin, 
   }
 });
 
+// ─── POST /admin/clean-all-tenants-data ─────────────────────────────────────
+// Borra TODA la data transaccional de TODOS los tenants. MANTIENE users,
+// tenant_memberships, tenants, tenant_settings, loan_products, bank_accounts,
+// contract_templates, receipt_series, whatsapp_event_settings.
+// Solo platform_owner. Confirmation: { confirm: 'BORRAR TODO' }.
+router.post('/clean-all-tenants-data', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    if (req.body?.confirm !== 'BORRAR TODO') {
+      return res.status(400).json({ error: 'Falta confirmacion. Envia { confirm: "BORRAR TODO" } en el body.' });
+    }
+    const db = getDb();
+    const counts: Record<string, number> = {};
+    const wipe = (table: string) => {
+      try {
+        const before = (db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get() as any)?.c || 0;
+        db.prepare(`DELETE FROM ${table}`).run();
+        counts[table] = before;
+      } catch (_) { counts[table] = -1; }
+    };
+    db.exec('BEGIN');
+    try {
+      wipe('payment_items');
+      wipe('receipts');
+      wipe('payments');
+      wipe('installments');
+      wipe('payment_promises');
+      wipe('collection_notes');
+      wipe('collection_tasks');
+      wipe('loan_guarantors');
+      wipe('loan_guarantees');
+      wipe('contracts');
+      wipe('loan_requests');
+      wipe('investor_payouts');
+      wipe('investors');
+      wipe('loans');
+      wipe('clients');
+      wipe('income_expenses');
+      wipe('whatsapp_drafts');
+      wipe('leads');
+      try { db.prepare('UPDATE bank_accounts SET current_balance=initial_balance, loaned_balance=0').run(); } catch (_) {}
+      wipe('audit_logs');
+      db.exec('COMMIT');
+    } catch (txErr) {
+      db.exec('ROLLBACK');
+      throw txErr;
+    }
+    try {
+      db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)').run(
+        uuid(), req.tenant?.id || 'platform', req.user.id, req.user.full_name,
+        'clean_all_tenants_data', 'system', 'all',
+        `Limpio toda la data transaccional de todos los tenants`,
+        JSON.stringify(counts)
+      );
+    } catch (_) {}
+    res.json({
+      success: true,
+      message: 'Data transaccional borrada de todos los tenants. Usuarios, productos, cuentas bancarias y settings preservados.',
+      deleted: counts,
+    });
+  } catch (e: any) {
+    console.error('POST /admin/clean-all-tenants-data error:', e);
+    res.status(500).json({ error: e.message || 'Failed' });
+  }
+});
+
 export { router };
