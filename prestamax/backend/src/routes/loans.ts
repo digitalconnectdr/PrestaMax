@@ -515,11 +515,14 @@ router.post('/:id/migrate-history', authenticate, requireTenant, requirePermissi
     if (principalApplied > 0) insertItem.run(uuid(), payId, 'capital',  principalApplied);
 
     // ── Marcar las cuotas como pagadas ────────────────────────────────────────
+    // paid_at = due_date para que se vea "A tiempo" en verde (en migracion
+    // asumimos que el cliente pagaba puntualmente — si no, se debe usar el
+    // flujo manual de pagos para registrar atrasos historicos reales).
+    // mora_days=0 para que no penalice el score por atrasos retroactivos.
     for (const inst of toPay) {
       db.prepare(`UPDATE installments SET paid_principal=principal_amount, paid_interest=interest_amount,
-        paid_total=principal_amount+interest_amount, status='paid', paid_at=? WHERE id=?`).run(
-        pDate.toISOString(), inst.id
-      );
+        paid_total=principal_amount+interest_amount, status='paid', paid_at=due_date,
+        mora_days=0, paid_mora=0 WHERE id=?`).run(inst.id);
     }
 
     // ── Recalcular balances del prestamo ──────────────────────────────────────
@@ -569,6 +572,69 @@ router.post('/:id/migrate-history', authenticate, requireTenant, requirePermissi
     res.status(500).json({ error: 'Failed: ' + e.message });
   }
 });
+
+// ─── POST /loans/:id/fix-migrated-paid-at ────────────────────────────────────
+// Repara cuotas marcadas como pagadas por una migracion anterior donde paid_at
+// quedo con la fecha de migracion (hoy) en vez de la fecha de vencimiento real.
+// Esto hace que la columna "Atraso" muestre dias enormes en rojo aunque el
+// cliente haya estado al dia. Solo admin/owner.
+router.post('/:id/fix-migrated-paid-at', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const isPlatform = ['platform_owner','platform_admin'].includes(req.user?.platform_role || '');
+    const memberRoles: string[] = (() => { try { return JSON.parse(req.membership?.roles || '[]'); } catch(_) { return []; } })();
+    const isTenantOwner = memberRoles.includes('tenant_owner');
+    if (!isPlatform && !isTenantOwner) {
+      return res.status(403).json({ error: 'Solo el dueno o admin del tenant puede ejecutar esta correccion.' });
+    }
+
+    const loan = db.prepare('SELECT id, client_id FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
+    if (!loan) return res.status(404).json({ error: 'Prestamo no encontrado' });
+
+    const migPay = db.prepare(`SELECT id FROM payments
+      WHERE loan_id=? AND tenant_id=? AND type='migration' AND is_voided=0
+      ORDER BY created_at DESC LIMIT 1`).get(req.params.id, req.tenant.id) as any;
+    if (!migPay) return res.status(400).json({ error: 'Este prestamo no tiene un registro de migracion para corregir.' });
+
+    const result = db.prepare(`UPDATE installments
+      SET paid_at=due_date, mora_days=0, paid_mora=0
+      WHERE loan_id=? AND status='paid' AND paid_at IS NOT NULL`).run(req.params.id);
+
+    if (loan.client_id) recalcClientScoreLoans(db, loan.client_id);
+
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
+      uuid(), req.tenant.id, req.user.id, req.user.full_name, 'fix_migrated_paid_at', 'loan', req.params.id,
+      `Corrigio paid_at de cuotas migradas (${result.changes} cuotas afectadas)`
+    );
+
+    res.json({ fixed: result.changes, message: 'Cuotas migradas corregidas: ahora aparecen como pagadas a tiempo.' });
+  } catch (e: any) {
+    console.error('fix-migrated-paid-at error:', e);
+    res.status(500).json({ error: 'Failed: ' + e.message });
+  }
+});
+
+// Helper para recalcular score del cliente (similar al de payments.ts)
+function recalcClientScoreLoans(db: any, clientId: string): void {
+  try {
+    const client = db.prepare('SELECT * FROM clients WHERE id=?').get(clientId) as any;
+    if (!client) return;
+    const loans = db.prepare('SELECT * FROM loans WHERE client_id=?').all(clientId) as any[];
+    const loanIds = loans.map((l: any) => l.id);
+    const installments: any[] = loanIds.length
+      ? db.prepare(`SELECT * FROM installments WHERE loan_id IN (${loanIds.map(() => '?').join(',')})`).all(...loanIds) as any[]
+      : [];
+    const paidLoans   = loans.filter((l: any) => l.status === 'liquidated').length;
+    const lateInst    = installments.filter((i: any) => (i.mora_days || 0) > 0 || i.status === 'overdue').length;
+    const total       = installments.length || 1;
+    const punctuality = 1 - (lateInst / total);
+    const paidRatio   = loans.length > 0 ? paidLoans / loans.length : 0;
+    const ageMonths   = Math.min((Date.now() - new Date(client.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30), 60) / 60;
+    const raw         = punctuality * 0.5 + paidRatio * 0.3 + ageMonths * 0.2;
+    const score       = Math.max(0, Math.min(100, Math.round(raw * 100)));
+    db.prepare("UPDATE clients SET score=?, score_updated_at=datetime('now') WHERE id=?").run(score, clientId);
+  } catch (_) { /* non-critical */ }
+}
 
 router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
   try {

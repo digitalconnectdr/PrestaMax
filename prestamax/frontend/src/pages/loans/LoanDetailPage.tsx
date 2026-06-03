@@ -1034,6 +1034,29 @@ const LoanDetailPage: React.FC = () => {
                   Migrar Historial (Cartera Existente)
                 </Button>
               )}
+              {/* Reparar paid_at de cuotas migradas: visible si hay un pago tipo 'migration' */}
+              {can('loans.edit') && loanPayments.some((p: any) => p.type === 'migration') && (
+                <Button
+                  size="md"
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                  onClick={async () => {
+                    try {
+                      const res = await api.post(`/loans/${id}/fix-migrated-paid-at`)
+                      toast.success(res.data?.message || `Corregidas ${res.data?.fixed || 0} cuotas`)
+                      const r = await api.get(`/loans/${id}`)
+                      setLoan(r.data)
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.error || 'Error al corregir')
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  title="Marca las cuotas migradas como pagadas a tiempo (paid_at = due_date)"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Reparar Atraso de Cuotas Migradas
+                </Button>
+              )}
               {can('contracts.create') && (
                 <Button
                   size="md"
