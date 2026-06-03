@@ -115,10 +115,27 @@ function applyProrrogaShift(
  *  mora is calculated from that date instead of the original due_date.
  */
 function calcMora(loan: any, installments: any[], asOf: Date): number {
-  const base       = loan.mora_base || 'cuota_vencida';
-  const useFixed   = !!loan.mora_fixed_enabled;
-  const fixedAmt   = loan.mora_fixed_amount || 0;
+  // Reutiliza calcMoraPerInstallment para garantizar consistencia:
+  // SUM(calcMoraPerInstallment) === calcMora siempre.
+  const perInst = calcMoraPerInstallment(loan, installments, asOf);
   let total = 0;
+  for (const k in perInst) total += perInst[k];
+  return r2(total);
+}
+
+/** Calculate mora INDIVIDUAL per installment as of a given date.
+ *  Returns Record<installment_id, moraAmount>.
+ *
+ *  Misma logica que calcMora() pero retornando por cuota. Es la base para
+ *  la nueva asignacion "waterfall por cuota" de allocatePayment:
+ *  cada pago liquida la mora de SU cuota antes de pasar a la siguiente,
+ *  en vez de cobrar la mora global consolidada antes de tocar cuotas.
+ */
+function calcMoraPerInstallment(loan: any, installments: any[], asOf: Date): Record<string, number> {
+  const base     = loan.mora_base || 'cuota_vencida';
+  const useFixed = !!loan.mora_fixed_enabled;
+  const fixedAmt = loan.mora_fixed_amount || 0;
+  const out: Record<string, number> = {};
   for (const inst of installments) {
     if (inst.status === 'paid' || inst.status === 'waived') continue;
     const effectiveDue = inst.deferred_due_date
@@ -126,124 +143,127 @@ function calcMora(loan: any, installments: any[], asOf: Date): number {
       : new Date(inst.due_date);
     const days     = Math.max(0, Math.floor((asOf.getTime() - effectiveDue.getTime()) / 86400000));
     const moraDays = Math.max(0, days - (loan.mora_grace_days || 0));
-    if (moraDays > 0) {
-      if (useFixed) {
-        // Fixed charge per overdue installment — replaces percentage calculation entirely
-        total += fixedAmt;
+    if (moraDays <= 0) { out[inst.id] = 0; continue; }
+    if (useFixed) {
+      out[inst.id] = r2(fixedAmt);
+    } else {
+      let baseAmount = 0;
+      if (base === 'cuota_vencida') {
+        baseAmount = r2((inst.principal_amount + inst.interest_amount) - (inst.paid_total || 0));
       } else {
-        let baseAmount = 0;
-        if (base === 'cuota_vencida') {
-          baseAmount = r2((inst.principal_amount + inst.interest_amount) - (inst.paid_total || 0));
-        } else {
-          baseAmount = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
-        }
-        total += Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays;
+        baseAmount = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
       }
+      out[inst.id] = r2(Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays);
     }
   }
-  return r2(total);
+  return out;
 }
 
-/** Apply amount to pending installments (interest first), returns allocation detail */
+/** Apply amount to pending installments with WATERFALL-PER-INSTALLMENT logic.
+ *
+ *  NUEVA LOGICA (May 2026): a diferencia del modelo anterior que cobraba
+ *  TODA la mora vigente global ANTES de tocar cualquier cuota, ahora por
+ *  cada cuota en orden cronologico se aplica: mora-de-esa-cuota -> interes
+ *  -> capital. El sobrante pasa a la siguiente cuota.
+ *
+ *  Motivacion:
+ *    - Mas intuitivo para el cliente ("paso de cuota a cuota").
+ *    - Cuotas viejas se liquidan ordenadamente en vez de quedar parciales
+ *      por absorcion global de mora.
+ *    - Coincide con el sistema frances/bancario que ya usamos en el plan.
+ *
+ *  paymentType:
+ *    'regular' | 'full_payoff' — mora -> interes -> capital, por cuota
+ *    'interest_only'           — NO cobra mora, NO cobra capital, solo interes
+ *    'capital_only'            — NO cobra mora, cobra interes pendiente y luego capital
+ *
+ *  moraPerInst: mapa { installment_id -> mora_de_esa_cuota } generado por
+ *  calcMoraPerInstallment(). Garantiza SUM(moraPerInst) === calcMora().
+ */
 function allocatePayment(
   installments: any[],
   amount: number,
-  paymentType: string,       // 'regular' | 'interest_only' | 'capital_only' | 'full_payoff'
-  overpaymentAction: string, // 'apply_to_capital' | 'apply_to_next_installment'
-  mora: number
+  paymentType: string,
+  overpaymentAction: string,
+  moraPerInst: Record<string, number>
 ) {
-  let remaining = amount;
+  let remaining = r2(amount);
   const updates: Array<{ id: string; addPrincipal: number; addInterest: number; addMora: number }> = [];
   let totalInterest = 0, totalPrincipal = 0, totalMora = 0, excessToCapital = 0;
 
-  // Pending installments in due-date order (include interest_paid — still owes principal)
+  // Reglas por tipo de pago:
+  //   regular / full_payoff -> cobra MORA + INTERES + CAPITAL (en ese orden, por cuota)
+  //   interest_only         -> NO mora, NO capital, solo INTERES
+  //   capital_only          -> NO mora, cobra INTERES pendiente PRIMERO, luego CAPITAL
+  //                             (estandar bancario: no se toca capital con interes vencido)
+  const chargesMora    = paymentType !== 'interest_only' && paymentType !== 'capital_only';
+  const chargesCapital = paymentType !== 'interest_only';
+
+  // Cuotas pendientes en orden cronologico efectivo (deferred_due_date tiene precedencia)
   const pending = installments
     .filter(i => !['paid', 'waived'].includes(i.status))
     .sort((a, b) => {
-      // Sort by effective due date: deferred_due_date takes precedence for interest_paid installments
       const dateA = a.deferred_due_date || a.due_date;
       const dateB = b.deferred_due_date || b.due_date;
       return new Date(dateA).getTime() - new Date(dateB).getTime();
     });
 
-  // --- Pay mora first (if any and not interest_only / capital_only type) ---
-  if (mora > 0 && paymentType !== 'interest_only' && paymentType !== 'capital_only') {
-    const moraPay = r2(Math.min(remaining, mora));
-    totalMora += moraPay;
-    remaining = r2(remaining - moraPay);
-  }
+  for (const inst of pending) {
+    if (remaining <= 0.001) break;
+    let addM = 0, addI = 0, addP = 0;
 
-  // --- Allocate by payment type ---
-  if (paymentType === 'interest_only') {
-    // Only pay interest across all pending installments
-    for (const inst of pending) {
-      if (remaining <= 0) break;
-      const interestOwed = r2((inst.interest_amount || 0) - (inst.paid_interest || 0));
-      if (interestOwed <= 0) continue;
-      const pay = r2(Math.min(remaining, interestOwed));
-      totalInterest += pay;
-      remaining = r2(remaining - pay);
-      updates.push({ id: inst.id, addPrincipal: 0, addInterest: pay, addMora: 0 });
-    }
-
-  } else if (paymentType === 'capital_only') {
-    // Pay outstanding interest first (forced), then all remaining to principal
-    for (const inst of pending) {
-      if (remaining <= 0) break;
-      const interestOwed = r2((inst.interest_amount || 0) - (inst.paid_interest || 0));
-      if (interestOwed > 0) {
-        const iPay = r2(Math.min(remaining, interestOwed));
-        totalInterest += iPay;
-        remaining = r2(remaining - iPay);
-        updates.push({ id: inst.id, addPrincipal: 0, addInterest: iPay, addMora: 0 });
+    // 1) MORA de esta cuota
+    if (chargesMora) {
+      const moraOfInst   = r2(moraPerInst[inst.id] || 0);
+      const moraPendInst = Math.max(0, r2(moraOfInst - (inst.paid_mora || 0)));
+      if (moraPendInst > 0 && remaining > 0) {
+        addM = r2(Math.min(remaining, moraPendInst));
+        totalMora += addM;
+        remaining = r2(remaining - addM);
       }
     }
-    // Remaining → principal on first pending installments
-    for (const inst of pending) {
-      if (remaining <= 0) break;
-      const principalOwed = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
-      if (principalOwed <= 0) continue;
-      const pay = r2(Math.min(remaining, principalOwed));
-      totalPrincipal += pay;
-      remaining = r2(remaining - pay);
-      const existing = updates.find(u => u.id === inst.id);
-      if (existing) existing.addPrincipal += pay;
-      else updates.push({ id: inst.id, addPrincipal: pay, addInterest: 0, addMora: 0 });
+
+    // 2) INTERES de esta cuota (todos los tipos cobran interes pendiente)
+    const interestOwed = Math.max(0, r2((inst.interest_amount || 0) - (inst.paid_interest || 0)));
+    if (interestOwed > 0 && remaining > 0) {
+      addI = r2(Math.min(remaining, interestOwed));
+      totalInterest += addI;
+      remaining = r2(remaining - addI);
     }
 
-  } else {
-    // 'regular' or 'full_payoff': interest first, then principal, per installment in order
-    for (const inst of pending) {
-      if (remaining <= 0) break;
-      const interestOwed = r2((inst.interest_amount || 0) - (inst.paid_interest || 0));
-      const principalOwed = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
-      let addI = 0, addP = 0;
-
-      if (interestOwed > 0) {
-        addI = r2(Math.min(remaining, interestOwed));
-        totalInterest += addI;
-        remaining = r2(remaining - addI);
-      }
-      if (remaining > 0 && principalOwed > 0) {
+    // 3) CAPITAL de esta cuota (todos excepto interest_only)
+    if (chargesCapital) {
+      const principalOwed = Math.max(0, r2((inst.principal_amount || 0) - (inst.paid_principal || 0)));
+      if (principalOwed > 0 && remaining > 0) {
         addP = r2(Math.min(remaining, principalOwed));
         totalPrincipal += addP;
         remaining = r2(remaining - addP);
       }
-      if (addI > 0 || addP > 0) updates.push({ id: inst.id, addPrincipal: addP, addInterest: addI, addMora: 0 });
     }
 
-    // Handle overpayment
-    if (remaining > 0.01) {
-      if (overpaymentAction === 'apply_to_capital') {
-        excessToCapital = remaining;
-        totalPrincipal += remaining;
-        remaining = 0;
-      }
-      // If 'apply_to_next_installment', remaining stays (caller handles display, no extra to balances)
+    if (addM > 0 || addI > 0 || addP > 0) {
+      updates.push({ id: inst.id, addPrincipal: addP, addInterest: addI, addMora: addM });
     }
   }
 
-  return { updates, totalInterest: r2(totalInterest), totalPrincipal: r2(totalPrincipal), totalMora: r2(totalMora), excessToCapital: r2(excessToCapital), remaining: r2(remaining) };
+  // OVERPAYMENT: sobrante despues de cubrir todas las cuotas
+  if (remaining > 0.01) {
+    if (overpaymentAction === 'apply_to_capital' && paymentType !== 'interest_only') {
+      excessToCapital = remaining;
+      totalPrincipal += remaining;
+      remaining = 0;
+    }
+    // 'apply_to_next_installment': remaining queda > 0 (caller decide)
+  }
+
+  return {
+    updates,
+    totalInterest: r2(totalInterest),
+    totalPrincipal: r2(totalPrincipal),
+    totalMora: r2(totalMora),
+    excessToCapital: r2(excessToCapital),
+    remaining: r2(remaining),
+  };
 }
 
 // ─── GET preview (calculate allocation without saving) ────────────────────────
@@ -258,7 +278,8 @@ router.post('/preview', authenticate, requireTenant, requirePermission('payments
 
     const installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY due_date').all(loan_id) as any[];
     const pDate = new Date();
-    const mora = calcMora(loan, installments, pDate);
+    const moraPerInst = calcMoraPerInstallment(loan, installments, pDate);
+    const mora = r2(Object.values(moraPerInst).reduce((s, v) => s + v, 0));
 
     // -- Prorroga preview: fixed fee + current mora, no installment allocation ----
     if (payment_type === 'prorroga') {
@@ -284,7 +305,7 @@ router.post('/preview', authenticate, requireTenant, requirePermission('payments
     }
 
     const { totalInterest, totalPrincipal, totalMora, excessToCapital, remaining } =
-      allocatePayment(installments, parseFloat(amount), payment_type, overpayment_action, mora);
+      allocatePayment(installments, parseFloat(amount), payment_type, overpayment_action, moraPerInst);
 
     const nextPending = installments.filter(i => i.status !== 'paid').sort(
       (a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
@@ -418,7 +439,8 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     }
 
     const installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY due_date').all(loan_id) as any[];
-    const mora = calcMora(loan, installments, pDate);
+    const moraPerInst = calcMoraPerInstallment(loan, installments, pDate);
+    const mora = r2(Object.values(moraPerInst).reduce((s, v) => s + v, 0));
 
     // ----------------------------------------------------------------
     // PRORROGA BRANCH: charge extension fee + mora, freeze installment
@@ -498,8 +520,11 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       );
       recalcClientScore(db, loan.client_id);
 
+      // Devolver el payment con registered_by_name resuelto (LEFT JOIN users)
+      // para que el recibo en el frontend muestre "Registrado por: <Nombre>".
       return res.status(201).json({
-        payment: db.prepare('SELECT * FROM payments WHERE id=?').get(payId2),
+        payment: db.prepare(`SELECT p.*, u.full_name as registered_by_name
+          FROM payments p LEFT JOIN users u ON u.id=p.registered_by WHERE p.id=?`).get(payId2),
         receipt: db.prepare('SELECT * FROM receipts WHERE id=?').get(receiptId2),
         breakdown: { prorroga_fee: prorrogaFee, mora: moraAmount, interest: 0, capital: 0, excessToCapital: 0, remaining: 0 },
       });
@@ -507,7 +532,7 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     // ----------------------------------------------------------------
 
     const { updates, totalInterest, totalPrincipal, totalMora, excessToCapital, remaining } =
-      allocatePayment(installments, amount, payment_type, overpayment_action, mora);
+      allocatePayment(installments, amount, payment_type, overpayment_action, moraPerInst);
 
     // ── Save payment record ───────────────────────────────────────────────────
     const count = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE tenant_id=?').get(req.tenant.id) as any).c;
@@ -631,8 +656,11 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     // ── Generar draft de WhatsApp transaccional (payment_received). Best-effort.
     generateDraft(db, req.tenant.id, 'payment_received', { payment_id: payId, loan_id: loan.id, user_id: req.user.id });
 
+    // Devolver el payment con registered_by_name resuelto (LEFT JOIN users) para
+    // que el recibo en el frontend muestre "Registrado por: <Nombre>" en vez de "—".
     res.status(201).json({
-      payment: db.prepare('SELECT * FROM payments WHERE id=?').get(payId),
+      payment: db.prepare(`SELECT p.*, u.full_name as registered_by_name
+        FROM payments p LEFT JOIN users u ON u.id=p.registered_by WHERE p.id=?`).get(payId),
       receipt: db.prepare('SELECT * FROM receipts WHERE id=?').get(receiptId),
       breakdown: { interest: r2(totalInterest), capital: r2(totalPrincipal), mora: r2(totalMora), excessToCapital: r2(excessToCapital), remaining: r2(remaining) },
     });
@@ -677,13 +705,13 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
       for (const pay of remainingPayments) {
         const freshInst = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY due_date').all(payment.loan_id) as any[];
         const pDate = new Date(pay.payment_date);
-        const mora = calcMora(loan, freshInst, pDate);
+        const moraPerInstReapply = calcMoraPerInstallment(loan, freshInst, pDate);
         // Prorroga payments only shift dates -- no installment allocation needed
         if ((pay.type || 'regular') === 'prorroga') {
           applyProrrogaShift(db, payment.loan_id, loan.payment_frequency, freshInst);
           continue;
         }
-        const { updates } = allocatePayment(freshInst, pay.amount, pay.type || 'regular', 'apply_to_next_installment', mora);
+        const { updates } = allocatePayment(freshInst, pay.amount, pay.type || 'regular', 'apply_to_next_installment', moraPerInstReapply);
         for (const upd of updates) {
           const inst = freshInst.find((i: any) => i.id === upd.id);
           if (!inst) continue;

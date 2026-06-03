@@ -66,8 +66,15 @@ export async function printPaymentReceipt(
   let balancePendiente = ''
   if (loan?.installments && Array.isArray(loan.installments)) {
     const total = loan.installments.length
+    // Cuotas totalmente liquidadas
     const paidCount = loan.installments.filter((i: any) => i.status === 'paid').length
-    cuotasInfo = `${paidCount} de ${total}`
+    // Cuotas con abono parcial (recibieron pago pero no liquidaron)
+    const partialCount = loan.installments.filter((i: any) =>
+      i.status === 'partial' || (i.status !== 'paid' && i.status !== 'waived' && (i.paidTotal || i.paid_total || 0) > 0)
+    ).length
+    cuotasInfo = partialCount > 0
+      ? `${paidCount} de ${total} + ${partialCount} en progreso`
+      : `${paidCount} de ${total}`
     const pending = loan.installments
       .filter((i: any) => i.status !== 'paid' && i.status !== 'waived')
       .sort((a: any, b: any) =>

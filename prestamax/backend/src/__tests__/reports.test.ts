@@ -38,10 +38,11 @@ describe('allocatePayment — flujo regular', () => {
     const inst = [
       baseInst('a', '2026-05-01', 500, 100),
     ];
-    // Pago 1000: cubre 600 + sobran 400 al capital
+    // Pago 1000: cubre 600 + sobran 400 al capital.
+    // totalPrincipal incluye el excess (alineado con produccion).
     const r = allocatePayment(inst, 1000, 'regular', 'apply_to_capital', 0);
     expect(r.totalInterest).toBe(100);
-    expect(r.totalPrincipal).toBe(500);
+    expect(r.totalPrincipal).toBe(900);    // 500 cap + 400 excess
     expect(r.excessToCapital).toBe(400);
   });
 
@@ -82,12 +83,14 @@ describe('allocatePayment — mora', () => {
     expect(r.remaining).toBe(0);
   });
 
-  it('capital_only ignora la mora cobrada', () => {
+  it('capital_only ignora la mora cobrada y salda interes pendiente primero', () => {
+    // Actualizado May 2026: capital_only ahora cobra interes pendiente PRIMERO
+    // (alineado con produccion). NO cobra mora.
     const inst = [baseInst('a', '2026-05-01', 500, 100)];
     const r = allocatePayment(inst, 500, 'capital_only', 'apply_to_next_installment', 200);
-    expect(r.totalMora).toBe(0); // capital_only no cobra mora
-    expect(r.totalInterest).toBe(0);
-    expect(r.totalPrincipal).toBe(500);
+    expect(r.totalMora).toBe(0);       // capital_only NO cobra mora
+    expect(r.totalInterest).toBe(100); // saldó el interés primero
+    expect(r.totalPrincipal).toBe(400);// resto al capital
   });
 });
 

@@ -193,7 +193,16 @@ const LoanDetailPage: React.FC = () => {
     bankAccountId: '',
     firstPaymentDate: '',
     disbursedAmount: '',
+    disbursementDate: '',
   })
+  const [showMigrateModal, setShowMigrateModal] = useState(false)
+  const [migrateData, setMigrateData] = useState({
+    totalPaid: '',
+    installmentsPaid: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    notes: '',
+  })
+  const [isMigrating, setIsMigrating] = useState(false)
 
   useEffect(() => {
     const fetchLoan = async () => {
@@ -315,6 +324,7 @@ const LoanDetailPage: React.FC = () => {
       bankAccountId: (loan as any)?.disbursementBankAccountId || bankAccounts[0]?.id || '',
       firstPaymentDate: existingFirstPay ? String(existingFirstPay).slice(0, 10) : fallbackDate,
       disbursedAmount: String((loan as any)?.approvedAmount || (loan as any)?.requestedAmount || ''),
+      disbursementDate: new Date().toISOString().split('T')[0],
     })
     setShowDisbursementModal(true)
   }
@@ -341,6 +351,7 @@ const LoanDetailPage: React.FC = () => {
         disbursedAmount: amount,
         bankAccountId: disbursementData.bankAccountId,
         firstPaymentDate: disbursementData.firstPaymentDate || undefined,
+        disbursementDate: disbursementData.disbursementDate || undefined,
       })
       toast.success('Préstamo desembolsado exitosamente')
       setShowDisbursementModal(false)
@@ -350,6 +361,33 @@ const LoanDetailPage: React.FC = () => {
       toast.error(err?.response?.data?.error || 'Error al desembolsar')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  // ── Migracion de cartera: marca N cuotas como pagadas con un solo registro ──
+  const handleMigrateHistory = async () => {
+    const totalPaid = parseFloat(migrateData.totalPaid)
+    const installmentsPaid = parseInt(migrateData.installmentsPaid)
+    if (!totalPaid || totalPaid <= 0) { toast.error('Ingresa el total ya pagado'); return }
+    if (!installmentsPaid || installmentsPaid <= 0) { toast.error('Ingresa cuantas cuotas marcar como pagadas'); return }
+    try {
+      setIsMigrating(true)
+      const res = await api.post(`/loans/${id}/migrate-history`, {
+        totalPaid,
+        installmentsPaid,
+        paymentDate: migrateData.paymentDate,
+        notes: migrateData.notes,
+      })
+      toast.success(`Migracion exitosa: ${res.data.installmentsPaid || installmentsPaid} cuotas marcadas como pagadas`)
+      setShowMigrateModal(false)
+      setMigrateData({ totalPaid: '', installmentsPaid: '', paymentDate: new Date().toISOString().split('T')[0], notes: '' })
+      const r = await api.get(`/loans/${id}`)
+      setLoan(r.data)
+      loadPayments()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Error al migrar historial')
+    } finally {
+      setIsMigrating(false)
     }
   }
 
@@ -983,6 +1021,19 @@ const LoanDetailPage: React.FC = () => {
                   Desembolsar
                 </Button>
               )}
+              {/* Migracion de cartera: solo si activo/in_mora/disbursed Y sin pagos previos */}
+              {can('loans.edit') && ['active','in_mora','disbursed'].includes(loan.status) && loanPayments.length === 0 && (
+                <Button
+                  size="md"
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                  onClick={() => setShowMigrateModal(true)}
+                  disabled={isSubmitting}
+                >
+                  <CreditCard className="w-4 h-4" />
+                  Migrar Historial (Cartera Existente)
+                </Button>
+              )}
               {can('contracts.create') && (
                 <Button
                   size="md"
@@ -1189,6 +1240,23 @@ const LoanDetailPage: React.FC = () => {
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* Disbursement Date (NUEVO — para migracion de cartera) */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Fecha de Desembolso
+                  <span className="text-xs text-slate-400 font-normal ml-1">— puede ser pasada si migras un préstamo existente</span>
+                </label>
+                <input
+                  type="date"
+                  value={disbursementData.disbursementDate}
+                  onChange={e => setDisbursementData(d => ({ ...d, disbursementDate: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Solo admin/owner puede usar fechas pasadas. Si la fecha es vieja y ya hay cuotas vencidas, el préstamo se marcará automáticamente en mora.
+                </p>
               </div>
 
               {/* First Payment Date */}
@@ -1937,6 +2005,100 @@ const LoanDetailPage: React.FC = () => {
                 className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-900"
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Migrar Historial: wizard para cartera existente ── */}
+      {showMigrateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => !isMigrating && setShowMigrateModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200 flex items-start justify-between">
+              <div>
+                <h3 className="font-bold text-slate-900 text-lg">Migrar Historial de Pagos</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Para préstamos que ya tienen cuotas pagadas antes de entrar al sistema.
+                </p>
+              </div>
+              <button onClick={() => !isMigrating && setShowMigrateModal(false)} className="text-slate-400 hover:text-slate-600">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+                <p className="font-semibold mb-1">¿Cómo funciona?</p>
+                <p>Marca las primeras N cuotas como pagadas con un solo registro tipo "MIGRACIÓN". Útil cuando no quieres registrar cada pago histórico uno por uno.</p>
+                <p className="mt-2"><strong>Solo admin/owner.</strong> Solo si el préstamo NO tiene pagos previos en el sistema.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Total ya pagado por el cliente <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number" step="0.01" min="0.01"
+                  value={migrateData.totalPaid}
+                  onChange={e => setMigrateData(d => ({ ...d, totalPaid: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej. 50000.00"
+                />
+                <p className="text-xs text-slate-500 mt-1">Capital + interés + mora que el cliente ya pagó antes de entrar al sistema.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Cuotas a marcar como pagadas <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number" step="1" min="1"
+                  value={migrateData.installmentsPaid}
+                  onChange={e => setMigrateData(d => ({ ...d, installmentsPaid: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej. 3"
+                />
+                <p className="text-xs text-slate-500 mt-1">Cuántas cuotas (desde la más vieja) marcar como pagadas.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Fecha del registro</label>
+                <input
+                  type="date"
+                  value={migrateData.paymentDate}
+                  onChange={e => setMigrateData(d => ({ ...d, paymentDate: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nota (opcional)</label>
+                <textarea
+                  value={migrateData.notes}
+                  onChange={e => setMigrateData(d => ({ ...d, notes: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej. Migrado del sistema viejo el 1/jun/2026"
+                />
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-200 flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowMigrateModal(false)}
+                disabled={isMigrating}
+              >
+                Cancelar
+              </Button>
+              <button
+                onClick={handleMigrateHistory}
+                disabled={isMigrating || !migrateData.totalPaid || !migrateData.installmentsPaid}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isMigrating ? 'Migrando...' : 'Confirmar Migración'}
               </button>
             </div>
           </div>

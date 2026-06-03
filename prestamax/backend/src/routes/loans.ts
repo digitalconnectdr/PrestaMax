@@ -314,12 +314,35 @@ router.post('/:id/disburse', authenticate, requireTenant, requirePermission('loa
     if (loan.status!=='approved') return res.status(400).json({ error: 'El préstamo debe estar aprobado' });
 
     const disbAmount = parseFloat(req.body.disbursed_amount) || loan.approved_amount || loan.requested_amount;
-    const disbDate = new Date();
-    const firstPayDate = req.body.first_payment_date ? new Date(req.body.first_payment_date) : new Date(new Date().setMonth(new Date().getMonth()+1));
 
-    // Validate first_payment_date must be after disbursement date
+    // ── Fecha de desembolso: acepta fecha pasada (migracion de cartera) ─────────
+    // Si viene del body, validar:
+    //   - No mas de 3 dias en el futuro (margen por zonas horarias)
+    //   - Si es pasada (< hoy), solo admin/owner puede registrarla (anti back-dating)
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const maxFuture = new Date(Date.now() + 3 * 86400000);
+    const disbDate = req.body.disbursement_date ? new Date(req.body.disbursement_date) : new Date();
+    if (disbDate.getTime() > maxFuture.getTime()) {
+      return res.status(400).json({ error: 'La fecha de desembolso no puede ser mayor a 3 dias en el futuro.' });
+    }
+    const disbIsPast = disbDate.getTime() < today.getTime();
+    if (disbIsPast) {
+      const isPlatform = ['platform_owner','platform_admin'].includes(req.user?.platform_role || '');
+      const memberRoles: string[] = (() => { try { return JSON.parse(req.membership?.roles || '[]'); } catch(_) { return []; } })();
+      const isTenantOwner = memberRoles.includes('tenant_owner');
+      if (!isPlatform && !isTenantOwner) {
+        return res.status(403).json({ error: 'Solo el dueno o admin del tenant puede registrar desembolsos con fecha pasada (migracion de cartera).' });
+      }
+    }
+
+    // Si no se especifico firstPayDate, default es 1 mes despues del DESEMBOLSO (no de hoy)
+    const firstPayDate = req.body.first_payment_date
+      ? new Date(req.body.first_payment_date)
+      : new Date(new Date(disbDate).setMonth(disbDate.getMonth() + 1));
+
+    // first_payment_date debe ser >= disbursement_date (puede ser pasada tambien)
     if (firstPayDate < disbDate) {
-      return res.status(400).json({ error: 'La fecha del primer pago debe ser posterior a la fecha de desembolso.' });
+      return res.status(400).json({ error: 'La fecha del primer pago debe ser igual o posterior a la fecha de desembolso.' });
     }
 
     const bankAccountId = req.body.bank_account_id || loan.disbursement_bank_account_id || null;
@@ -360,17 +383,186 @@ router.post('/:id/disburse', authenticate, requireTenant, requirePermission('loa
       insertInst.run(uuid(), req.params.id, s.installment_number, s.due_date, s.principal_amount, s.interest_amount, s.total_amount, s.status);
     }
 
+    // ── Si es desembolso historico, marcar in_mora si hay cuotas ya vencidas ────
+    // Esto es importante para migracion de cartera: el prestamo debe reflejar
+    // su estado real (no quedar como 'active' verde si ya esta atrasado).
+    if (disbIsPast) {
+      const overdueRow = db.prepare(`
+        SELECT MIN(CAST(julianday('now') - julianday(due_date) AS INTEGER)) as oldest_overdue
+        FROM installments
+        WHERE loan_id=? AND status='pending' AND date(due_date) < date('now')
+      `).get(req.params.id) as any;
+      const daysOverdue = Math.max(0, overdueRow?.oldest_overdue ?? 0);
+      if (daysOverdue > (loan.mora_grace_days || 0)) {
+        db.prepare(`UPDATE loans SET status='in_mora', days_overdue=? WHERE id=? AND tenant_id=?`).run(
+          daysOverdue, req.params.id, req.tenant.id
+        );
+      }
+    }
+
     // Deduct from bank account balance
     if (bankAccount) {
       db.prepare('UPDATE bank_accounts SET current_balance=current_balance-?, loaned_balance=loaned_balance+? WHERE id=?').run(disbAmount, disbAmount, bankAccountId);
     }
 
     const disbLoan = db.prepare('SELECT loan_number FROM loans WHERE id=?').get(req.params.id) as any;
-    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'disbursed','loan',req.params.id,`Desembolsó el préstamo ${disbLoan?.loan_number||req.params.id} por RD$${disbAmount.toLocaleString()}`,JSON.stringify({disbursed_amount:disbAmount,bank_account_id:bankAccountId}));
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'disbursed','loan',req.params.id,`Desembolsó el préstamo ${disbLoan?.loan_number||req.params.id} por RD$${disbAmount.toLocaleString()}${disbIsPast?' [HISTORICO]':''}`,JSON.stringify({disbursed_amount:disbAmount,bank_account_id:bankAccountId,disbursement_date:disbDate.toISOString(),is_historical:disbIsPast}));
     // Generar draft de WhatsApp transaccional (loan_created). Best-effort.
-    generateDraft(db, req.tenant.id, 'loan_created', { loan_id: req.params.id, user_id: req.user.id });
+    // Skip si es historico (no spamear al cliente con "tu prestamo fue creado" si fue hace meses).
+    if (!disbIsPast) {
+      generateDraft(db, req.tenant.id, 'loan_created', { loan_id: req.params.id, user_id: req.user.id });
+    }
     res.json({ loan: db.prepare('SELECT * FROM loans WHERE id=?').get(req.params.id), installments: schedule });
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to disburse loan' }); }
+});
+
+// ─── POST /loans/:id/migrate-history ─────────────────────────────────────────
+// Wizard de migracion: marca las primeras N cuotas como pagadas con un solo
+// registro de pago tipo 'migration'. Para clientes que migran su cartera
+// existente y no quieren registrar cada pago historico uno por uno.
+//
+// Body:
+//   total_paid          : monto total que el cliente ya ha pagado
+//   installments_paid   : numero de cuotas a marcar como pagadas (las mas viejas)
+//   payment_date?       : fecha del registro de migracion (default: hoy)
+//   notes?              : nota opcional
+//
+// Solo admin/owner del tenant. Solo si el prestamo no tiene pagos previos.
+router.post('/:id/migrate-history', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+
+    // Permission: solo admin/owner
+    const isPlatform = ['platform_owner','platform_admin'].includes(req.user?.platform_role || '');
+    const memberRoles: string[] = (() => { try { return JSON.parse(req.membership?.roles || '[]'); } catch(_) { return []; } })();
+    const isTenantOwner = memberRoles.includes('tenant_owner');
+    if (!isPlatform && !isTenantOwner) {
+      return res.status(403).json({ error: 'Solo el dueno o admin del tenant puede migrar historial de prestamos.' });
+    }
+
+    const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
+    if (!loan) return res.status(404).json({ error: 'Prestamo no encontrado' });
+    if (!['active','in_mora','disbursed'].includes(loan.status)) {
+      return res.status(400).json({ error: `El prestamo esta en estado '${loan.status}' y no puede migrarse.` });
+    }
+
+    const existingPayments = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE loan_id=? AND is_voided=0').get(req.params.id) as any).c;
+    if (existingPayments > 0) {
+      return res.status(400).json({ error: 'Este prestamo ya tiene pagos registrados. Usa el flujo normal de pagos.' });
+    }
+
+    const totalPaid = parseFloat(req.body.total_paid);
+    const installmentsPaid = parseInt(req.body.installments_paid);
+    if (!totalPaid || totalPaid <= 0) return res.status(400).json({ error: 'total_paid debe ser mayor a cero' });
+    if (!installmentsPaid || installmentsPaid <= 0) return res.status(400).json({ error: 'installments_paid debe ser mayor a cero' });
+
+    const allInst = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY due_date').all(req.params.id) as any[];
+    if (installmentsPaid > allInst.length) {
+      return res.status(400).json({ error: `Solo hay ${allInst.length} cuotas en el plan. No se pueden marcar ${installmentsPaid} como pagadas.` });
+    }
+
+    // Calcular distribucion segun cuotas marcadas: capital + interes de cada una
+    const toPay = allInst.slice(0, installmentsPaid);
+    const sumPrincipal = toPay.reduce((s, i) => s + (i.principal_amount || 0), 0);
+    const sumInterest  = toPay.reduce((s, i) => s + (i.interest_amount  || 0), 0);
+    const sumExpected  = r2(sumPrincipal + sumInterest);
+
+    // Cualquier diferencia entre totalPaid y sumExpected se trata como mora cobrada
+    // (cliente pagaba mora durante el periodo).
+    const moraAmount = r2(Math.max(0, totalPaid - sumExpected));
+    const principalApplied = r2(sumPrincipal);
+    const interestApplied  = r2(sumInterest);
+
+    // Si totalPaid < sumExpected, no permitir (datos inconsistentes)
+    if (totalPaid + 0.01 < sumExpected) {
+      return res.status(400).json({
+        error: `El total pagado (${totalPaid}) es menor al total de las ${installmentsPaid} cuotas que quieres marcar como pagadas (${sumExpected}). Verifica los datos.`,
+      });
+    }
+
+    const pDate = new Date(req.body.payment_date || new Date());
+    const maxFuture = new Date(Date.now() + 3 * 86400000);
+    if (pDate.getTime() > maxFuture.getTime()) {
+      return res.status(400).json({ error: 'La fecha de migracion no puede ser mayor a 3 dias en el futuro.' });
+    }
+
+    const loanCurrency = (loan.currency || 'DOP').toUpperCase();
+
+    // ── Crear el registro de payment "migration" ──────────────────────────────
+    const count = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE tenant_id=?').get(req.tenant.id) as any).c;
+    const paymentNumber = `PAG-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`;
+    const payId = uuid();
+    const migrationNotes = `MIGRACION DE CARTERA: ${installmentsPaid} cuotas previas. ${req.body.notes || ''}`.trim();
+
+    db.prepare(`INSERT INTO payments (id,tenant_id,loan_id,registered_by,payment_number,payment_date,amount,
+      applied_mora,applied_charges,applied_interest,applied_capital,payment_method,type,notes,currency) VALUES
+      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      payId, req.tenant.id, req.params.id, req.user.id,
+      paymentNumber, pDate.toISOString(), r2(totalPaid),
+      moraAmount, 0, interestApplied, principalApplied,
+      'migration', 'migration', migrationNotes, loanCurrency
+    );
+
+    // payment_items para desglose
+    const insertItem = db.prepare('INSERT INTO payment_items (id,payment_id,concept,amount) VALUES (?,?,?,?)');
+    if (moraAmount > 0)      insertItem.run(uuid(), payId, 'mora',     moraAmount);
+    if (interestApplied > 0) insertItem.run(uuid(), payId, 'interest', interestApplied);
+    if (principalApplied > 0) insertItem.run(uuid(), payId, 'capital',  principalApplied);
+
+    // ── Marcar las cuotas como pagadas ────────────────────────────────────────
+    for (const inst of toPay) {
+      db.prepare(`UPDATE installments SET paid_principal=principal_amount, paid_interest=interest_amount,
+        paid_total=principal_amount+interest_amount, status='paid', paid_at=? WHERE id=?`).run(
+        pDate.toISOString(), inst.id
+      );
+    }
+
+    // ── Recalcular balances del prestamo ──────────────────────────────────────
+    const remaining = db.prepare(`SELECT
+        COALESCE(SUM(principal_amount - paid_principal), 0) as principal_bal,
+        COALESCE(SUM(interest_amount  - paid_interest),  0) as interest_bal
+      FROM installments WHERE loan_id=? AND status NOT IN ('paid','waived')`).get(req.params.id) as any;
+
+    const newPrincipal = r2(remaining?.principal_bal || 0);
+    const newInterest  = r2(remaining?.interest_bal  || 0);
+    const totalBalance = r2(newPrincipal + newInterest);
+
+    // Recalcular dias overdue de cuotas restantes
+    const overdueRow = db.prepare(`
+      SELECT MIN(CAST(julianday('now') - julianday(due_date) AS INTEGER)) as oldest_overdue
+      FROM installments
+      WHERE loan_id=? AND status IN ('pending','partial') AND date(due_date) < date('now')
+    `).get(req.params.id) as any;
+    const daysOverdue = Math.max(0, overdueRow?.oldest_overdue ?? 0);
+    const newStatus = totalBalance <= 0.01 ? 'liquidated'
+                    : (daysOverdue > (loan.mora_grace_days || 0)) ? 'in_mora'
+                    : 'active';
+
+    db.prepare(`UPDATE loans SET principal_balance=?, interest_balance=?, total_balance=?,
+      total_paid=?, total_paid_principal=?, total_paid_interest=?, total_paid_mora=?,
+      days_overdue=?, status=?, updated_at=? WHERE id=? AND tenant_id=?`).run(
+      newPrincipal, newInterest, totalBalance,
+      r2(totalPaid), principalApplied, interestApplied, moraAmount,
+      daysOverdue, newStatus, now(), req.params.id, req.tenant.id
+    );
+
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)').run(
+      uuid(), req.tenant.id, req.user.id, req.user.full_name, 'loan_history_migrated', 'loan', req.params.id,
+      `Migro historial: ${installmentsPaid} cuotas marcadas como pagadas (RD$${totalPaid.toLocaleString()}) — Prestamo ${loan.loan_number}`,
+      JSON.stringify({ totalPaid, installmentsPaid, capital: principalApplied, interest: interestApplied, mora: moraAmount, payment_id: payId })
+    );
+
+    res.status(201).json({
+      payment: db.prepare('SELECT * FROM payments WHERE id=?').get(payId),
+      breakdown: { capital: principalApplied, interest: interestApplied, mora: moraAmount },
+      installments_paid: installmentsPaid,
+      new_balance: totalBalance,
+      new_status: newStatus,
+    });
+  } catch (e: any) {
+    console.error('migrate-history error:', e);
+    res.status(500).json({ error: 'Failed: ' + e.message });
+  }
 });
 
 router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {

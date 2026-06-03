@@ -239,9 +239,20 @@ export function calcInvestorLiquidation(params: InvestorLiquidationParams): Inve
 }
 
 
-// ─── allocatePayment — distribuye un pago entre cuotas pendientes ────────────
-// Orden de prioridad: mora total -> interés cuota -> capital cuota.
-// El overpayment (sobrante) va a la siguiente cuota o al capital, según opción.
+// ─── allocatePayment — WATERFALL POR CUOTA (May 2026) ────────────────────────
+// Cambio de logica importante: antes se cobraba TODA la mora vigente del prestamo
+// antes de tocar cuotas. Ahora se itera cuota por cuota: mora-de-esa-cuota ->
+// interes -> capital. El sobrante pasa a la siguiente cuota.
+//
+// Motivacion: que cuotas se liquiden ordenadamente en vez de quedar todas en
+// "parcial" porque la mora global absorbio el pago.
+//
+// Acepta el parametro `mora` como:
+//   - number  : monto total (se reparte proporcionalmente a la mora de cada cuota)
+//   - Record  : mapa { installment_id -> mora_de_esa_cuota } (preferido)
+//
+// La forma Record es la usada por producción (calcMoraPerInstallment); la forma
+// number es para compatibilidad con tests viejos — internamente se reparte.
 export interface AllocInstallment {
   id: string;
   status: string;
@@ -276,9 +287,9 @@ export function allocatePayment(
   amount: number,
   paymentType: string,        // 'regular' | 'interest_only' | 'capital_only' | 'full_payoff'
   overpaymentAction: string,  // 'apply_to_capital' | 'apply_to_next_installment'
-  mora: number,
+  mora: number | Record<string, number>,
 ): AllocResult {
-  let remaining = amount;
+  let remaining = r2(amount);
   const updates: AllocUpdate[] = [];
   let totalInterest = 0, totalPrincipal = 0, totalMora = 0, excessToCapital = 0;
 
@@ -291,45 +302,67 @@ export function allocatePayment(
       return new Date(dA).getTime() - new Date(dB).getTime();
     });
 
-  // 1. Aplicar mora primero (cargo total acumulado)
-  if (mora > 0 && remaining > 0 && paymentType !== 'capital_only') {
-    const moraApply = Math.min(remaining, mora);
-    totalMora += moraApply;
-    remaining = r2(remaining - moraApply);
-    // Distribuir mora proporcionalmente — para simplicidad la agregamos a la primera pendiente
-    if (pending.length > 0) {
-      updates.push({ id: pending[0].id, addPrincipal: 0, addInterest: 0, addMora: moraApply });
-    }
+  // Normalizar mora a un mapa por cuota. Si vino como numero, asignar todo a la
+  // primera cuota pendiente (comportamiento equivalente al anterior).
+  const moraMap: Record<string, number> = {};
+  if (typeof mora === 'number') {
+    if (mora > 0 && pending.length > 0) moraMap[pending[0].id] = r2(mora);
+  } else if (mora && typeof mora === 'object') {
+    for (const k in mora) moraMap[k] = r2(mora[k] || 0);
   }
 
-  // 2. Aplicar interés y capital cuota por cuota
+  // Reglas por tipo de pago (alineadas con routes/payments.ts):
+  //   regular / full_payoff -> mora + interes + capital, en ese orden, por cuota
+  //   interest_only         -> NO mora, NO capital, solo interes
+  //   capital_only          -> NO mora, INTERES pendiente PRIMERO, luego CAPITAL
+  const chargesMora    = paymentType !== 'interest_only' && paymentType !== 'capital_only';
+  const chargesCapital = paymentType !== 'interest_only';
+
   for (const inst of pending) {
-    if (remaining <= 0) break;
+    if (remaining <= 0.001) break;
+    let addM = 0, addI = 0, addP = 0;
+
+    // 1) MORA de esta cuota
+    if (chargesMora) {
+      const moraOfInst = r2(moraMap[inst.id] || 0);
+      const moraPend = Math.max(0, r2(moraOfInst - (inst.paid_mora || 0)));
+      if (moraPend > 0 && remaining > 0) {
+        addM = r2(Math.min(remaining, moraPend));
+        totalMora += addM;
+        remaining = r2(remaining - addM);
+      }
+    }
+
+    // 2) INTERES de esta cuota (todos los tipos cobran interes pendiente)
     const pendInterest = Math.max(0, r2(inst.interest_amount - (inst.paid_interest || 0)));
-    const pendPrincipal = Math.max(0, r2(inst.principal_amount - (inst.paid_principal || 0)));
-
-    let addInt = 0, addPrin = 0;
-
-    if (paymentType !== 'capital_only' && pendInterest > 0 && remaining > 0) {
-      addInt = Math.min(remaining, pendInterest);
-      remaining = r2(remaining - addInt);
-      totalInterest += addInt;
+    if (pendInterest > 0 && remaining > 0) {
+      addI = r2(Math.min(remaining, pendInterest));
+      totalInterest += addI;
+      remaining = r2(remaining - addI);
     }
 
-    if (paymentType !== 'interest_only' && pendPrincipal > 0 && remaining > 0) {
-      addPrin = Math.min(remaining, pendPrincipal);
-      remaining = r2(remaining - addPrin);
-      totalPrincipal += addPrin;
+    // 3) CAPITAL de esta cuota (todos excepto interest_only)
+    if (chargesCapital) {
+      const pendPrincipal = Math.max(0, r2(inst.principal_amount - (inst.paid_principal || 0)));
+      if (pendPrincipal > 0 && remaining > 0) {
+        addP = r2(Math.min(remaining, pendPrincipal));
+        totalPrincipal += addP;
+        remaining = r2(remaining - addP);
+      }
     }
 
-    if (addInt > 0 || addPrin > 0) {
-      updates.push({ id: inst.id, addPrincipal: addPrin, addInterest: addInt, addMora: 0 });
+    if (addM > 0 || addI > 0 || addP > 0) {
+      updates.push({ id: inst.id, addPrincipal: addP, addInterest: addI, addMora: addM });
     }
   }
 
-  // 3. Si sobra dinero (overpayment)
+  // 4. Overpayment despues de cubrir todas las cuotas pendientes
+  // NOTA: igual que routes/payments.ts — totalPrincipal incluye el excess.
+  // El caller (POST /payments) usa excessToCapital para tracking separado y
+  // para creditar el banco, pero applied_capital persiste = totalPrincipal.
   if (remaining > 0.01 && overpaymentAction === 'apply_to_capital' && paymentType !== 'interest_only') {
     excessToCapital = r2(remaining);
+    totalPrincipal += remaining;
     remaining = 0;
   }
 
