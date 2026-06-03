@@ -572,6 +572,10 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE loans ADD COLUMN mora_base TEXT NOT NULL DEFAULT 'cuota_vencida'`); } catch(_) {}
   try { db.exec(`ALTER TABLE loans ADD COLUMN mora_fixed_enabled INTEGER NOT NULL DEFAULT 0`); } catch(_) {}
   try { db.exec(`ALTER TABLE loans ADD COLUMN mora_fixed_amount REAL NOT NULL DEFAULT 0`); } catch(_) {}
+  // mora_start_date: si esta seteada, la mora solo se cobra a partir de esta fecha.
+  // Util para prestamos migrados de carteras existentes que estaban al dia —
+  // permite ignorar la mora retroactiva de cuotas con due_date anterior a esta fecha.
+  try { db.exec(`ALTER TABLE loans ADD COLUMN mora_start_date TEXT`); } catch(_) {}
   // Data fix: correct any rows stored with the old incorrect 'cuota' default
   try { db.exec(`UPDATE tenant_settings SET mora_base='cuota_vencida' WHERE mora_base='cuota'`); } catch(_) {}
   try { db.exec(`UPDATE loans SET mora_base='cuota_vencida' WHERE mora_base='cuota'`); } catch(_) {}

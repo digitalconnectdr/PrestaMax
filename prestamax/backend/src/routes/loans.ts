@@ -321,7 +321,10 @@ router.post('/:id/disburse', authenticate, requireTenant, requirePermission('loa
     //   - Si es pasada (< hoy), solo admin/owner puede registrarla (anti back-dating)
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const maxFuture = new Date(Date.now() + 3 * 86400000);
-    const disbDate = req.body.disbursement_date ? new Date(req.body.disbursement_date) : new Date();
+    // Prioridad: 1) body, 2) fecha guardada del prestamo (si editada antes), 3) hoy
+    const disbDate = req.body.disbursement_date
+      ? new Date(req.body.disbursement_date)
+      : (loan.disbursement_date ? new Date(loan.disbursement_date) : new Date());
     if (disbDate.getTime() > maxFuture.getTime()) {
       return res.status(400).json({ error: 'La fecha de desembolso no puede ser mayor a 3 dias en el futuro.' });
     }
@@ -335,10 +338,12 @@ router.post('/:id/disburse', authenticate, requireTenant, requirePermission('loa
       }
     }
 
-    // Si no se especifico firstPayDate, default es 1 mes despues del DESEMBOLSO (no de hoy)
+    // Si no se especifico firstPayDate, default es: 1) body, 2) guardado en prestamo, 3) 1 mes despues del desembolso
     const firstPayDate = req.body.first_payment_date
       ? new Date(req.body.first_payment_date)
-      : new Date(new Date(disbDate).setMonth(disbDate.getMonth() + 1));
+      : (loan.first_payment_date
+          ? new Date(loan.first_payment_date)
+          : new Date(new Date(disbDate).setMonth(disbDate.getMonth() + 1)));
 
     // first_payment_date debe ser >= disbursement_date (puede ser pasada tambien)
     if (firstPayDate < disbDate) {
@@ -594,6 +599,8 @@ router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'),
     if (d.mora_base          !== undefined) alwaysFields.mora_base          = d.mora_base;
     if (d.mora_fixed_enabled !== undefined) alwaysFields.mora_fixed_enabled = d.mora_fixed_enabled ? 1 : 0;
     if (d.mora_fixed_amount  !== undefined) alwaysFields.mora_fixed_amount  = parseFloat(d.mora_fixed_amount) || 0;
+    // mora_start_date: fecha desde la cual cobrar mora (NULL = sin restriccion, como siempre)
+    if (d.mora_start_date    !== undefined) alwaysFields.mora_start_date    = d.mora_start_date || null;
     if (d.prorroga_fee       !== undefined) alwaysFields.prorroga_fee       = parseFloat(d.prorroga_fee) || 0;
     // Date corrections (always allowed for record fixing)
     if (d.application_date  !== undefined) alwaysFields.application_date  = d.application_date;
@@ -1008,9 +1015,7 @@ router.delete('/:id', authenticate, requireTenant, requirePermission('loans.void
 
       db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
         uuid(), req.tenant!.id, (req as any).user.id, (req as any).user.full_name,
-        'deleted', 'loan', req.params.id,
-        `Elimino el prestamo ${loan.loan_number||req.params.id}` + (bankReversed ? ` (reverso bancario: ${disbAmount.toFixed(2)})` : '')
-      )
+        `Elimino el prestamo ${loan.loan_number||req.params.id}` + (bankReversed ? ` (devuelto RD$${disbAmount.toLocaleString()} a la cuenta)` : ''))
       db.exec('COMMIT')
     } catch (txErr) {
       db.exec('ROLLBACK')
@@ -1025,4 +1030,3 @@ router.delete('/:id', authenticate, requireTenant, requirePermission('loans.void
 })
 
 export default router;
- 

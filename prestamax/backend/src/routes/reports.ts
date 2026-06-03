@@ -478,12 +478,16 @@ router.get('/projection', authenticate, requireTenant, requirePermission('report
       const useFixed = !!loan.mora_fixed_enabled;
       const fixedAmt = loan.mora_fixed_amount || 0;
       const base     = loan.mora_base || 'cuota_vencida';
+      const moraStart = loan.mora_start_date ? new Date(loan.mora_start_date + 'T00:00:00') : null;
       let total = 0;
       for (const inst of pendingInsts) {
         const effectiveDue = inst.deferred_due_date
           ? new Date(inst.deferred_due_date + 'T00:00:00')
           : new Date(inst.due_date + 'T00:00:00');
-        const days     = Math.max(0, Math.floor((asOf.getTime() - effectiveDue.getTime()) / 86400000));
+        const startFrom = moraStart && moraStart.getTime() > effectiveDue.getTime()
+          ? moraStart
+          : effectiveDue;
+        const days     = Math.max(0, Math.floor((asOf.getTime() - startFrom.getTime()) / 86400000));
         const moraDays = Math.max(0, days - (loan.mora_grace_days || 0));
         if (moraDays > 0) {
           if (useFixed) {

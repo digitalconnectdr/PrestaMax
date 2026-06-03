@@ -152,6 +152,7 @@ export interface MoraLoanConfig {
   mora_fixed_amount?: number;
   mora_rate_daily?: number;       // default 0.001 (0.1%)
   mora_grace_days?: number;
+  mora_start_date?: string | null; // si seteada, mora solo cuenta desde esa fecha
 }
 
 export interface MoraInstallment {
@@ -168,13 +169,18 @@ export function calcMora(loan: MoraLoanConfig, installments: MoraInstallment[], 
   const base     = loan.mora_base || 'cuota_vencida';
   const useFixed = !!loan.mora_fixed_enabled;
   const fixedAmt = loan.mora_fixed_amount || 0;
+  // mora_start_date: si seteada, dias en mora se cuentan desde max(due_date, mora_start_date)
+  const moraStart = loan.mora_start_date ? new Date(loan.mora_start_date) : null;
   let total = 0;
   for (const inst of installments) {
     if (inst.status === 'paid' || inst.status === 'waived') continue;
     const effectiveDue = inst.deferred_due_date
       ? new Date(inst.deferred_due_date)
       : new Date(inst.due_date);
-    const days     = Math.max(0, Math.floor((asOf.getTime() - effectiveDue.getTime()) / 86400000));
+    const startFrom = moraStart && moraStart.getTime() > effectiveDue.getTime()
+      ? moraStart
+      : effectiveDue;
+    const days     = Math.max(0, Math.floor((asOf.getTime() - startFrom.getTime()) / 86400000));
     const moraDays = Math.max(0, days - (loan.mora_grace_days || 0));
     if (moraDays > 0) {
       if (useFixed) {
@@ -408,7 +414,7 @@ export function agingBuckets(loans: AgingLoan[]): AgingResult {
   return aging;
 }
 
-// ─── moraRate — calcula la tasa de mora sobre cartera activa ─────────────────
+// moraRate — calcula la tasa de mora sobre cartera activa
 export function moraRate(activeBalance: number, moraBalance: number): number {
   if (activeBalance <= 0) return 0;
   return (moraBalance / activeBalance) * 100;

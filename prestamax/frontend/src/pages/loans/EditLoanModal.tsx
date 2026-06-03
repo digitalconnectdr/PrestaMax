@@ -58,6 +58,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
     moraBase:          loan.moraBase ?? loan.mora_base ?? 'cuota_vencida',
     moraFixedEnabled:  String((loan.moraFixedEnabled ?? loan.mora_fixed_enabled ?? 0) ? 1 : 0),
     moraFixedAmount:   String(loan.moraFixedAmount ?? loan.mora_fixed_amount ?? 0),
+    moraStartDate:     (loan.moraStartDate ?? loan.mora_start_date ?? '').toString().split('T')[0],
     // Otros
     collectorId:       loan.collectorId ?? loan.collector_id ?? '',
     purpose:           loan.purpose ?? '',
@@ -99,6 +100,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
         moraBase:            form.moraBase,
         moraFixedEnabled:    parseInt(form.moraFixedEnabled),
         moraFixedAmount:     parseFloat(form.moraFixedAmount) || 0,
+        moraStartDate:       form.moraStartDate || null,
         // Otros
         collectorId:      form.collectorId || null,
         purpose:          form.purpose,
@@ -357,6 +359,48 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                 </p>
               </div>
             )}
+
+            {/* mora_start_date: control para prestamos migrados que estaban al dia */}
+            <div className="border-t border-slate-200 pt-4 mt-2">
+              <label className={labelCls}>
+                Cobrar mora desde
+                <span className="text-xs text-slate-400 font-normal ml-1">— opcional, para migración de cartera</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={form.moraStartDate}
+                  onChange={e => set('moraStartDate', e.target.value)}
+                  className={inputCls + ' flex-1'}
+                />
+                {form.moraStartDate ? (
+                  <button
+                    type="button"
+                    onClick={() => set('moraStartDate', '')}
+                    className="px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg whitespace-nowrap"
+                  >
+                    Limpiar
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => set('moraStartDate', new Date().toISOString().split('T')[0])}
+                    className="px-3 py-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg whitespace-nowrap"
+                  >
+                    Al día hoy
+                  </button>
+                )}
+              </div>
+              <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-1">
+                <p><strong>¿Cuándo usar?</strong> Si migraste un préstamo de un cliente que ha estado pagando al día.</p>
+                <p>
+                  <strong>Vacío:</strong> mora se calcula desde la fecha de cada cuota (comportamiento normal).<br/>
+                  <strong>Con fecha:</strong> ignora cualquier atraso anterior a esa fecha. Solo se cobra mora si una cuota se atrasa <em>después</em> de ese punto.
+                </p>
+                <p className="italic">Tip: clic "Al día hoy" para marcar que el cliente está al día desde este momento.</p>
+              </div>
+            </div>
+
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1.5">
               <p className="font-semibold">Ejemplo con los valores actuales:</p>
               <p>Si una cuota vence y el cliente paga {parseInt(form.moraGraceDays) + 10} días después ({parseInt(form.moraGraceDays)} gracia + 10 días de mora):</p>
