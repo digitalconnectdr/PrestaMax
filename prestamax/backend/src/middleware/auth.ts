@@ -40,10 +40,24 @@ export const requireTenant = async (req: AuthRequest, res: Response, next: NextF
       const subEnd    = tenant.subscription_end ? new Date(tenant.subscription_end) : null;
       const isExpired = subStatus === 'expired' || (subEnd && subEnd < new Date());
       if (isExpired) {
-        return res.status(402).json({
-          error: 'Tu suscripción ha expirado. Contacta al administrador para renovarla.',
-          code: 'SUBSCRIPTION_EXPIRED'
-        });
+        // Whitelist: endpoints de billing y notificaciones SIEMPRE accesibles
+        // aunque la suscripcion este expirada, sino es imposible renovar.
+        // Tambien /auth/* para que el user pueda revisar su estado y cerrar sesion.
+        const url = req.originalUrl || req.url || '';
+        const allowedWhenExpired = [
+          '/api/billing/',
+          '/api/auth/',
+          '/api/notifications/',
+        ];
+        const isAllowed = allowedWhenExpired.some(p => url.startsWith(p));
+        if (!isAllowed) {
+          return res.status(402).json({
+            error: 'Tu suscripción ha expirado. Contacta al administrador para renovarla.',
+            code: 'SUBSCRIPTION_EXPIRED'
+          });
+        }
+        // Marca para que el endpoint sepa que esta operando con suscripcion expirada
+        (req as any).subscriptionExpired = true;
       }
     }
     req.tenant = tenant;
