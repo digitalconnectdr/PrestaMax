@@ -397,14 +397,23 @@ router.post('/request-plan-change', authenticate, requireTenant, (req: AuthReque
       `).all(ownerEmail) as any[];
       const notifTitle = `Cambio de plan solicitado: ${business || fullName}`;
       const notifMsg = `${fullName} (${email}) quiere cambiar al plan ${plan.name}. Plan actual: ${currentPlan}.`;
+      // Columnas reales de notifications: id, tenant_id, user_id, type, title,
+      // message, entity_type, entity_id, is_read, created_at (NO existe 'link').
+      const insertNotif = db.prepare(`
+        INSERT INTO notifications (id, tenant_id, user_id, type, title, message, entity_type, entity_id, is_read, created_at)
+        VALUES (?,?,?,?,?,?,?,?,0,datetime('now'))
+      `);
       for (const a of platformAdmins) {
         try {
-          db.prepare(`INSERT INTO notifications (id, user_id, tenant_id, title, message, link, type, is_read, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`).run(
-            require('../db/database').uuid(), a.user_id, a.tenant_id,
-            notifTitle, notifMsg, '/admin?tab=inquiries', 'plan_inquiry'
+          insertNotif.run(
+            require('../db/database').uuid(),
+            a.tenant_id, a.user_id,
+            'plan_inquiry', notifTitle, notifMsg,
+            'plan_inquiry', inqId
           );
-        } catch(_) {}
+        } catch (notifErr: any) {
+          console.error('[billing] notif insert fallo:', notifErr?.message || notifErr);
+        }
       }
     } catch(_) {}
 
