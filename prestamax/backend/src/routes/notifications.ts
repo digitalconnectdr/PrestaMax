@@ -4,10 +4,27 @@ import { authenticate, requireTenant, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+// Helper: limpia notifs cuyo entity_id ya no existe en su tabla origen.
+// Se ejecuta lazy en cada GET para mantener la lista sin huérfanas.
+function cleanOrphanNotifications(db: any) {
+  try {
+    // plan_inquiry → plan_inquiries.id
+    db.prepare(`DELETE FROM notifications WHERE type='plan_inquiry'
+      AND entity_id NOT IN (SELECT id FROM plan_inquiries)`).run();
+    // loan-related → loans.id
+    db.prepare(`DELETE FROM notifications WHERE entity_type='loan'
+      AND entity_id NOT IN (SELECT id FROM loans)`).run();
+    // payment-related → payments.id
+    db.prepare(`DELETE FROM notifications WHERE entity_type='payment'
+      AND entity_id NOT IN (SELECT id FROM payments)`).run();
+  } catch (_) { /* no critical */ }
+}
+
 // GET /notifications — get paginated notifications for current user
 router.get('/', authenticate, requireTenant, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
+    cleanOrphanNotifications(db);
     const { limit: lim = '30', offset: off = '0' } = req.query as any;
     const notifications = db.prepare(`
       SELECT * FROM notifications
@@ -24,6 +41,7 @@ router.get('/', authenticate, requireTenant, (req: AuthRequest, res: Response) =
 router.get('/unread-count', authenticate, requireTenant, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
+    cleanOrphanNotifications(db);
     const row = db.prepare('SELECT COUNT(*) as c FROM notifications WHERE tenant_id=? AND user_id=? AND is_read=0').get(req.tenant.id, req.user.id) as any;
     res.json({ count: row.c });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }

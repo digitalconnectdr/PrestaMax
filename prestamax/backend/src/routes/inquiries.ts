@@ -119,10 +119,16 @@ router.patch('/:id', authenticate, requirePlatformAdmin, (req: AuthRequest, res:
 });
 
 // DELETE /api/admin/inquiries/:id — para limpiar spam evidente
+// También elimina las notificaciones asociadas (campanita) para que no queden
+// "huérfanas" apuntando a una solicitud que ya no existe.
 router.delete('/:id', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     db.prepare('DELETE FROM plan_inquiries WHERE id = ?').run(req.params.id);
+    // Limpiar notificaciones de la campanita relacionadas a esta solicitud
+    try {
+      db.prepare("DELETE FROM notifications WHERE type='plan_inquiry' AND entity_id=?").run(req.params.id);
+    } catch (_) { /* no critical */ }
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message || 'Failed' });
