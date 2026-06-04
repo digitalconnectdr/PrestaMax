@@ -62,11 +62,13 @@ router.get('/plans', (req: Request, res: Response) => {
       SELECT id, name, slug, price_monthly, max_collectors, max_clients, max_users, trial_days, features, description
       FROM plans WHERE is_active=1 AND is_trial_default=0 ORDER BY price_monthly ASC
     `).all() as any[];
+    // Devolver TODOS los planes activos. Si no hay Stripe configurado, el
+    // frontend usa el flujo manual de solicitud (POST /billing/request-plan-change).
     const enriched = plans.map(p => ({
       ...p,
       stripe_price_id: getPriceIdForPlanSlug(p.slug),
       features: p.features ? JSON.parse(p.features) : [],
-    })).filter(p => p.stripe_price_id); // solo los que tienen precio Stripe
+    }));
     res.json(enriched);
   } catch (e) {
     console.error('billing/plans error:', e);
@@ -340,6 +342,111 @@ const webhookHandler = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Error interno' });
   }
 };
+
+// ─── POST /billing/request-plan-change ──────────────────────────────────────
+// Tenant logueado solicita cambio/renovacion de plan. Crea un plan_inquiry
+// con source='internal_renewal' para que aparezca en Admin Panel > Solicitudes.
+// El owner de la app es notificado por la campanita (mismo flujo que landing).
+router.post('/request-plan-change', authenticate, requireTenant, (req: AuthRequest, res: Response) => {
+  try {
+    const { plan_slug, message } = req.body || {};
+    if (!plan_slug || typeof plan_slug !== 'string') {
+      return res.status(400).json({ error: 'Selecciona el plan que quieres solicitar.' });
+    }
+    const db = getDb();
+
+    // Validar plan existe
+    const plan = db.prepare('SELECT id, name, slug FROM plans WHERE slug=? AND is_active=1').get(plan_slug) as any;
+    if (!plan) return res.status(400).json({ error: 'El plan seleccionado no existe o no esta disponible.' });
+
+    // Datos del tenant y user para llenar el inquiry
+    const tenant = db.prepare('SELECT id, name, phone, email, plan_id FROM tenants WHERE id=?').get(req.tenant!.id) as any;
+    const user   = db.prepare('SELECT email, full_name, phone FROM users WHERE id=?').get((req as any).user.id) as any;
+    const currentPlan = tenant?.plan_id
+      ? (db.prepare('SELECT name FROM plans WHERE id=?').get(tenant.plan_id) as any)?.name || '-'
+      : 'sin plan';
+
+    const inqId = require('../db/database').uuid();
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || '';
+    const fullName = user?.full_name || user?.email || 'Usuario logueado';
+    const whatsapp = user?.phone || tenant?.phone || '';
+    const email    = user?.email || tenant?.email || '';
+    const business = tenant?.name || '';
+    const msg = `[SOLICITUD INTERNA] Plan actual: ${currentPlan}. Quiere cambiar a: ${plan.name}.${message ? '\nNota del cliente: ' + message : ''}`;
+
+    db.prepare(`
+      INSERT INTO plan_inquiries
+        (id, full_name, business_name, whatsapp, email, country, plan_interest,
+         portfolio_size, source, message, status, ip_address, user_agent,
+         created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,'new',?,?,datetime('now'),datetime('now'))
+    `).run(
+      inqId, fullName, business, whatsapp, email, 'DO', plan.slug,
+      null, 'internal_renewal', msg, ip,
+      (req.headers['user-agent'] as string || '').slice(0, 500),
+    );
+
+    // Notificacion campanita al owner (mismo patron que /public/plan-inquiry)
+    try {
+      const ownerEmail = (process.env.OWNER_USER_EMAIL || 'jcpenalo@gmail.com').toLowerCase();
+      const platformAdmins = db.prepare(`
+        SELECT u.id as user_id, tm.tenant_id
+        FROM users u
+        JOIN tenant_memberships tm ON tm.user_id = u.id AND tm.is_active = 1
+        WHERE lower(u.email) = ? AND u.is_active = 1
+      `).all(ownerEmail) as any[];
+      const notifTitle = `Cambio de plan solicitado: ${business || fullName}`;
+      const notifMsg = `${fullName} (${email}) quiere cambiar al plan ${plan.name}. Plan actual: ${currentPlan}.`;
+      for (const a of platformAdmins) {
+        try {
+          db.prepare(`INSERT INTO notifications (id, user_id, tenant_id, title, message, link, type, is_read, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`).run(
+            require('../db/database').uuid(), a.user_id, a.tenant_id,
+            notifTitle, notifMsg, '/admin?tab=inquiries', 'plan_inquiry'
+          );
+        } catch(_) {}
+      }
+    } catch(_) {}
+
+    try {
+      db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
+        require('../db/database').uuid(), req.tenant!.id, (req as any).user.id,
+        (req as any).user.full_name || (req as any).user.email,
+        'plan_change_requested', 'plan_inquiry', inqId,
+        `Solicito cambio al plan ${plan.name}`
+      );
+    } catch(_) {}
+
+    res.status(201).json({
+      success: true,
+      message: 'Solicitud enviada. Te contactaremos pronto para procesarla.',
+      inquiry_id: inqId,
+    });
+  } catch (e: any) {
+    console.error('POST /billing/request-plan-change error:', e);
+    res.status(500).json({ error: e.message || 'Failed' });
+  }
+});
+
+// ─── GET /billing/my-pending-request ─────────────────────────────────────────
+// Indica si el tenant tiene una solicitud de cambio de plan pendiente
+// (status='new' o 'contacted'). Para que el frontend muestre estado.
+router.get('/my-pending-request', authenticate, requireTenant, (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const tenant = db.prepare('SELECT name FROM tenants WHERE id=?').get(req.tenant!.id) as any;
+    if (!tenant) return res.json({ pending: null });
+    const pending = db.prepare(`
+      SELECT id, plan_interest, status, created_at, message
+      FROM plan_inquiries
+      WHERE source='internal_renewal' AND business_name=? AND status IN ('new','contacted')
+      ORDER BY created_at DESC LIMIT 1
+    `).get(tenant.name) as any;
+    res.json({ pending: pending || null });
+  } catch (e: any) {
+    res.json({ pending: null });
+  }
+});
 
 // Exportamos el handler por separado para montarlo con raw body en index.ts
 export { webhookHandler };

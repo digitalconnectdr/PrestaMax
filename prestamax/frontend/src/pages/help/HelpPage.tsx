@@ -337,6 +337,22 @@ const GUIDES: { section: string; items: Guide[] }[] = [
           { title: 'Silenciar un cliente específico', description: 'Si un cliente pide no recibir mensajes (o hizo una promesa de pago y no quieres molestarlo), ve a su ficha y activa "Silenciar mensajes automáticos".' },
         ],
       },
+      {
+        id: 'cambiar-renovar-plan',
+        icon: <Package className="w-5 h-5" />,
+        title: 'Cambiar o renovar tu plan de suscripción',
+        subtitle: 'Cómo solicitar un upgrade, downgrade o renovación del plan actual',
+        shortcutPath: '/settings/subscription',
+        shortcutLabel: 'Ir a Mi Suscripción',
+        steps: [
+          { title: 'Abre Configuración → Mi Suscripción', description: 'Verás el estado de tu plan actual (Activa, Periodo de prueba, Expirada) y la lista de todos los planes disponibles con sus características y precio.' },
+          { title: 'Elige el plan que quieres', description: 'Compara las características de cada plan: cantidad de cobradores, clientes, usuarios y funciones incluidas. Tu plan actual aparece marcado en verde con "PLAN ACTUAL".' },
+          { title: 'Click en "Solicitar este plan"', description: 'Se abrirá un cuadro para confirmar. Puedes agregar una nota opcional con detalles (ej: "Quiero activarlo el 15 de este mes", "prefiero pago trimestral", etc).', tip: 'No te cobramos automáticamente — la solicitud va al equipo de soporte de PrestaMax para procesarla manualmente.' },
+          { title: 'Espera el contacto de soporte', description: 'Tu solicitud queda visible en la página con un banner azul "Solicitud en proceso". El equipo de PrestaMax te contactará por WhatsApp o email para coordinar el pago y activación.' },
+          { title: 'Pago y activación', description: 'Una vez procesado el pago manualmente con nuestro equipo, soporte activa tu plan en el sistema y verás el nuevo límite de usuarios/clientes/cobradores disponible inmediatamente.', tip: 'Si ya tienes una solicitud pendiente, el sistema no te dejará enviar otra hasta que la primera se resuelva. Esto evita duplicados. Si necesitas cancelarla, contacta a soporte por WhatsApp.' },
+          { title: 'Renovar antes de que expire', description: 'El sistema te avisa con 3, 7 y 14 días de antelación cuando tu plan está por vencer. Aprovecha para solicitar la renovación con tiempo y evitar cortes de servicio.' },
+        ],
+      },
     ],
   },
 ]

@@ -51,6 +51,10 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState<{ id: string; plan_interest: string; status: string; created_at: string } | null>(null);
+  const [requestModal, setRequestModal] = useState<{ planSlug: string; planName: string } | null>(null);
+  const [requestNote, setRequestNote] = useState('');
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
 
   useEffect(() => {
     if (params.get('stripe') === 'success') {
@@ -81,12 +85,14 @@ const BillingPage: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [plansRes, subRes] = await Promise.all([
+      const [plansRes, subRes, pendingRes] = await Promise.all([
         api.get('/billing/plans'),
         api.get('/billing/subscription'),
+        api.get('/billing/my-pending-request').catch(() => ({ data: { pending: null } })),
       ]);
       setPlans(plansRes.data || []);
       setSubscription(subRes.data || null);
+      setPendingRequest(pendingRes.data?.pending || null);
     } catch (e: any) {
       console.error('billing load error', e);
       toast.error(e?.response?.data?.error || 'No se pudo cargar la informacion de suscripcion');
@@ -96,6 +102,28 @@ const BillingPage: React.FC = () => {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Flujo principal: crear plan_inquiry interno (manual). El owner ve la
+  // solicitud en Admin Panel > Solicitudes y procesa manualmente.
+  const handleRequestPlan = async () => {
+    if (!requestModal) return;
+    setIsSubmittingRequest(true);
+    try {
+      const res = await api.post('/billing/request-plan-change', {
+        plan_slug: requestModal.planSlug,
+        message: requestNote || undefined,
+      });
+      toast.success(res.data?.message || 'Solicitud enviada');
+      setRequestModal(null);
+      setRequestNote('');
+      const pendingRes = await api.get('/billing/my-pending-request').catch(() => ({ data: { pending: null } }));
+      setPendingRequest(pendingRes.data?.pending || null);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'Error al enviar la solicitud');
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
 
   const handleSubscribe = async (planSlug: string) => {
     setCheckoutLoading(planSlug);
@@ -207,6 +235,20 @@ const BillingPage: React.FC = () => {
         </div>
       )}
 
+      {/* Banner: solicitud pendiente de cambio de plan */}
+      {pendingRequest && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0 text-blue-600" />
+          <div className="flex-1">
+            <p className="font-medium">Tienes una solicitud de cambio de plan en proceso</p>
+            <p className="text-sm mt-1">
+              Plan solicitado: <strong>{pendingRequest.plan_interest}</strong> · Estado: <strong>{pendingRequest.status === 'new' ? 'Nuevo' : pendingRequest.status}</strong> · Enviada el {new Date(pendingRequest.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </p>
+            <p className="text-xs text-blue-700 mt-1">Soporte te contactara pronto. No es necesario que envies otra solicitud.</p>
+          </div>
+        </div>
+      )}
+
       {/* Lista de planes */}
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-4">
@@ -260,12 +302,20 @@ const BillingPage: React.FC = () => {
                     ))}
                   </ul>
                   <button
-                    onClick={() => handleSubscribe(plan.slug)}
-                    disabled={isCurrent || checkoutLoading !== null}
+                    onClick={() => {
+                      if ((plan as any).stripe_price_id) {
+                        handleSubscribe(plan.slug);
+                      } else {
+                        setRequestModal({ planSlug: plan.slug, planName: plan.name });
+                        setRequestNote('');
+                      }
+                    }}
+                    disabled={isCurrent || checkoutLoading !== null || !!pendingRequest}
                     className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${isCurrent ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'}`}
+                    title={pendingRequest ? 'Ya tienes una solicitud pendiente — espera respuesta de soporte' : ''}
                   >
                     {checkoutLoading === plan.slug && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {isCurrent ? 'Plan actual' : checkoutLoading === plan.slug ? 'Redirigiendo...' : 'Suscribirse'}
+                    {isCurrent ? 'Plan actual' : pendingRequest ? 'Solicitud pendiente' : checkoutLoading === plan.slug ? 'Redirigiendo...' : ((plan as any).stripe_price_id ? 'Suscribirse' : 'Solicitar este plan')}
                   </button>
                 </div>
               );
@@ -275,9 +325,51 @@ const BillingPage: React.FC = () => {
       </div>
 
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
-        <p>El pago de la suscripcion se gestiona de forma manual con nuestro equipo. Contacta a soporte para activar, cambiar o cancelar tu plan.</p>
+        <p>El pago de la suscripcion se gestiona de forma manual con nuestro equipo. Cuando seleccionas un plan se crea una solicitud que soporte procesa contactandote por WhatsApp o email.</p>
         <p className="mt-1">Pronto habilitaremos pago automatico con tarjeta.</p>
       </div>
+
+      {/* Modal: confirmar solicitud de plan */}
+      {requestModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => !isSubmittingRequest && setRequestModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900">Solicitar plan: {requestModal.planName}</h3>
+              <p className="text-sm text-gray-500 mt-1">Soporte recibira tu solicitud y te contactara por WhatsApp o email.</p>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="block text-sm font-medium text-gray-700">Nota (opcional)</label>
+              <textarea
+                value={requestNote}
+                onChange={e => setRequestNote(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Ej: Quiero activar para el 15 de este mes, prefiero pagar trimestral, etc."
+              />
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
+                Esta solicitud quedara registrada en Admin Panel &gt; Solicitudes y el equipo de soporte te contactara pronto.
+              </div>
+            </div>
+            <div className="p-5 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setRequestModal(null)}
+                disabled={isSubmittingRequest}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRequestPlan}
+                disabled={isSubmittingRequest}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isSubmittingRequest && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isSubmittingRequest ? 'Enviando...' : 'Enviar solicitud'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
