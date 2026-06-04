@@ -51,7 +51,7 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
-  const [pendingRequest, setPendingRequest] = useState<{ id: string; plan_interest: string; status: string; created_at: string } | null>(null);
+  const [pendingRequest, setPendingRequest] = useState<{ id: string; planInterest: string; status: string; createdAt: string } | null>(null);
   const [requestModal, setRequestModal] = useState<{ planSlug: string; planName: string } | null>(null);
   const [requestNote, setRequestNote] = useState('');
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
@@ -242,7 +242,7 @@ const BillingPage: React.FC = () => {
           <div className="flex-1">
             <p className="font-medium">Tienes una solicitud de cambio de plan en proceso</p>
             <p className="text-sm mt-1">
-              Plan solicitado: <strong>{pendingRequest.plan_interest}</strong> · Estado: <strong>{pendingRequest.status === 'new' ? 'Nuevo' : pendingRequest.status}</strong> · Enviada el {new Date(pendingRequest.created_at).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })}
+              Plan solicitado: <strong>{pendingRequest.planInterest}</strong> · Estado: <strong>{pendingRequest.status === 'new' ? 'Nuevo' : pendingRequest.status}</strong> · Enviada el {new Date(pendingRequest.createdAt).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })}
             </p>
             <p className="text-xs text-blue-700 mt-1">Soporte te contactara pronto. No es necesario que envies otra solicitud.</p>
           </div>
