@@ -405,9 +405,6 @@ const PlatformAdminPage: React.FC = () => {
     }
   }
 
-  // ── Limpiar TODA la data transaccional de TODOS los tenants ─────────────────
-  // Mantiene users, productos, cuentas bancarias, settings. Util antes de
-  // poblar con datos demo limpios.
   const handleCleanAllData = async () => {
     const ok1 = await confirmDialog({
       title: '¿BORRAR TODA la data de TODOS los tenants?',
@@ -427,10 +424,7 @@ const PlatformAdminPage: React.FC = () => {
       setIsCleaningAll(true)
       const res = await api.post('/admin/clean-all-tenants-data', { confirm: 'BORRAR TODO' })
       const counts = res.data?.deleted || {}
-      const summary = Object.entries(counts)
-        .filter(([_, v]: any) => v > 0)
-        .map(([k, v]: any) => `${k}: ${v}`)
-        .join(', ')
+      const summary = Object.entries(counts).filter(([_, v]: any) => v > 0).map(([k, v]: any) => `${k}: ${v}`).join(', ')
       toast.success(`Data limpiada: ${summary || 'no habia data'}`)
       const tenantsRes = await api.get('/admin/tenants')
       setTenants(tenantsRes.data || [])
@@ -438,6 +432,30 @@ const PlatformAdminPage: React.FC = () => {
       toast.error(err?.response?.data?.error || 'Error al limpiar data')
     } finally {
       setIsCleaningAll(false)
+    }
+  }
+
+  // Version NUCLEAR: borra TODO del tenant (configs, accesos, productos, cuentas).
+  const handleDestroyTenantComplete = async (tenantId: string, tenantName: string) => {
+    const ok1 = await confirmDialog({
+      title: `¿DESTRUCCION COMPLETA de "${tenantName}"?`,
+      message: 'Esta opcion borra TODO incluyendo:\n\n• Clientes, prestamos, pagos, contratos\n• Productos de prestamo\n• Cuentas bancarias y sucursales\n• Plantillas de contrato\n• Accesos de usuarios al tenant (tenant_memberships)\n• Configuracion y series de recibos\n\nLos usuarios mismos NO se borran, pero PIERDEN acceso a este tenant.\n\nUsar solo para eliminar empresas obsoletas. IRREVERSIBLE.',
+      confirmText: 'Continuar',
+      variant: 'danger',
+    })
+    if (!ok1) return
+    const name = window.prompt(`Para confirmar, escribe EXACTAMENTE el nombre de la empresa:\n\n${tenantName}`)
+    if (!name || name.trim().toLowerCase() !== tenantName.trim().toLowerCase()) {
+      toast.error('Nombre no coincide. Cancelado.')
+      return
+    }
+    try {
+      const res = await api.delete(`/admin/tenants/${tenantId}/destroy-complete`, { data: { confirm_name: name } })
+      toast.success(res.data.message || 'Tenant destruido por completo.')
+      const tenantsRes = await api.get('/admin/tenants')
+      setTenants(tenantsRes.data || [])
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Error al destruir tenant')
     }
   }
 
@@ -1795,9 +1813,18 @@ const PlatformAdminPage: React.FC = () => {
                               <button
                                 onClick={() => { setPurgeModal({ tenantId: t.id, tenantName: t.name }); setPurgeConfirmName('') }}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 transition-colors border border-red-200"
+                                title="Borra solo data transaccional (clientes/prestamos/pagos). Mantiene usuarios, accesos, productos, cuentas, configs."
                               >
                                 <Trash2 className="w-3.5 h-3.5"/>
                                 Borrar datos
+                              </button>
+                              <button
+                                onClick={() => handleDestroyTenantComplete(t.id, t.name)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-700 hover:bg-red-800 transition-colors border border-red-800"
+                                title="DESTRUCCION COMPLETA: borra todo incluyendo configs, accesos, productos, cuentas bancarias."
+                              >
+                                <Trash2 className="w-3.5 h-3.5"/>
+                                Destruir TODO
                               </button>
                             </div>
                           </div>

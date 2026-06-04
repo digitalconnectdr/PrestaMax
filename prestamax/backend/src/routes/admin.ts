@@ -769,44 +769,47 @@ router.delete('/tenants/:id/purge-data', authenticate, requirePlatformAdmin, (re
 
     const tid = req.params.id;
 
-    // Turn off FK constraints temporarily for bulk delete
-    db.exec('PRAGMA foreign_keys = OFF');
-
-    // Tables to purge (all tenant operational data)
-    const tables = [
-      'account_transfers', 'audit_logs', 'bank_accounts', 'branches',
-      'client_documents', 'client_references', 'collection_notes',
-      'collection_tasks', 'contract_templates', 'contracts',
-      'guarantee_categories', 'guarantors', 'income_expenses', 'installments',
-      'loan_guarantees', 'loan_guarantors', 'loan_products', 'loan_requests',
-      'loans', 'notifications', 'payment_items', 'payment_promises', 'payments',
-      'receipt_series', 'receipts', 'whatsapp_messages', 'whatsapp_templates',
+    // NUEVA LOGICA (Junio 2026): solo borra data TRANSACCIONAL del tenant.
+    // MANTIENE: tenant_memberships (accesos), loan_products, bank_accounts, branches,
+    // contract_templates, receipt_series, tenant_settings, whatsapp_templates.
+    // Equivalente a /admin/clean-all-tenants-data pero filtrado por tenant_id.
+    // Asi los usuarios siguen accediendo al tenant despues del borrado y solo
+    // pierden la data operacional (clientes/prestamos/pagos/etc).
+    const transactionalTables = [
+      'payment_items', 'receipts', 'payments',
+      'installments',
+      'payment_promises', 'collection_notes', 'collection_tasks',
+      'loan_guarantors', 'loan_guarantees',
+      'contracts', 'loan_requests',
+      'investor_payouts', 'investors',
+      'loans', 'clients',
+      'income_expenses',
+      'whatsapp_drafts', 'whatsapp_messages',
+      'leads',
+      'client_documents', 'client_references',
+      'notifications', 'account_transfers',
     ];
 
-    // Client table has tenant_id
-    tables.push('clients');
-
     const counts: Record<string, number> = {};
-    for (const table of tables) {
+    for (const table of transactionalTables) {
       try {
         const before = (db.prepare(`SELECT COUNT(*) as c FROM ${table} WHERE tenant_id=?`).get(tid) as any)?.c ?? 0;
         db.prepare(`DELETE FROM ${table} WHERE tenant_id=?`).run(tid);
         if (before > 0) counts[table] = before;
-      } catch(_) {
-        // Some tables may not have tenant_id — skip silently
-      }
+      } catch(_) { /* tabla no existe o sin tenant_id — saltar */ }
     }
 
-    // Memberships
-    const membersBefore = (db.prepare('SELECT COUNT(*) as c FROM tenant_memberships WHERE tenant_id=?').get(tid) as any).c;
-    db.prepare('DELETE FROM tenant_memberships WHERE tenant_id=?').run(tid);
-    if (membersBefore > 0) counts['tenant_memberships'] = membersBefore;
+    // Resetear saldos de cuentas bancarias al saldo inicial (sin borrar las cuentas)
+    try {
+      db.prepare('UPDATE bank_accounts SET current_balance=initial_balance, loaned_balance=0 WHERE tenant_id=?').run(tid);
+    } catch(_) {}
 
-    // Reset tenant settings
-    db.prepare('DELETE FROM tenant_settings WHERE tenant_id=?').run(tid);
-    db.prepare('INSERT OR IGNORE INTO tenant_settings (id,tenant_id) VALUES (?,?)').run(uuid(), tid);
-
-    db.exec('PRAGMA foreign_keys = ON');
+    // Borrar audit_logs del tenant
+    try {
+      const auditBefore = (db.prepare('SELECT COUNT(*) as c FROM audit_logs WHERE tenant_id=?').get(tid) as any)?.c ?? 0;
+      db.prepare('DELETE FROM audit_logs WHERE tenant_id=?').run(tid);
+      if (auditBefore > 0) counts['audit_logs'] = auditBefore;
+    } catch(_) {}
 
     // Log this action
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)').run(
@@ -1018,6 +1021,79 @@ router.post('/clean-all-tenants-data', authenticate, requirePlatformAdmin, (req:
     });
   } catch (e: any) {
     console.error('POST /admin/clean-all-tenants-data error:', e);
+    res.status(500).json({ error: e.message || 'Failed' });
+  }
+});
+
+// ─── DELETE /tenants/:id/destroy-complete ────────────────────────────────────
+// VERSION NUCLEAR: borra TODO del tenant, incluyendo configs y accesos.
+// MANTIENE solo la fila en `tenants` y los usuarios (pero quita sus memberships
+// a este tenant). Usar para empresas que se quieren eliminar por completo.
+// Solo platform_owner. Requiere body.confirm_name === tenant.name.
+router.delete('/tenants/:id/destroy-complete', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    if (req.user?.platform_role !== 'platform_owner') {
+      return res.status(403).json({ error: 'Solo el platform_owner puede ejecutar esta accion.' });
+    }
+    const tenant = db.prepare('SELECT * FROM tenants WHERE id=?').get(req.params.id) as any;
+    if (!tenant) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const { confirm_name } = req.body;
+    if (!confirm_name || confirm_name.trim().toLowerCase() !== tenant.name.trim().toLowerCase()) {
+      return res.status(400).json({ error: 'El nombre de la empresa no coincide.' });
+    }
+
+    const tid = req.params.id;
+    db.exec('PRAGMA foreign_keys = OFF');
+    const counts: Record<string, number> = {};
+
+    // TODAS las tablas con tenant_id (transaccional + config + accesos)
+    const allTables = [
+      // Transaccional
+      'payment_items', 'receipts', 'payments', 'installments',
+      'payment_promises', 'collection_notes', 'collection_tasks',
+      'loan_guarantors', 'loan_guarantees', 'contracts', 'loan_requests',
+      'investor_payouts', 'investors', 'loans', 'clients',
+      'income_expenses', 'whatsapp_drafts', 'whatsapp_messages', 'leads',
+      'client_documents', 'client_references', 'notifications', 'account_transfers',
+      'audit_logs',
+      // Config + accesos (LO QUE NO BORRA PURGE-DATA NORMAL)
+      'bank_accounts', 'branches', 'contract_templates',
+      'guarantee_categories', 'guarantors', 'loan_products',
+      'receipt_series', 'whatsapp_templates', 'whatsapp_event_settings',
+      'tenant_memberships',
+    ];
+    for (const table of allTables) {
+      try {
+        const before = (db.prepare(`SELECT COUNT(*) as c FROM ${table} WHERE tenant_id=?`).get(tid) as any)?.c ?? 0;
+        db.prepare(`DELETE FROM ${table} WHERE tenant_id=?`).run(tid);
+        if (before > 0) counts[table] = before;
+      } catch(_) {}
+    }
+
+    // Reset settings + dejar fila vacia (para no romper la app si alguien vuelve a este tenant_id)
+    try {
+      db.prepare('DELETE FROM tenant_settings WHERE tenant_id=?').run(tid);
+      db.prepare('INSERT OR IGNORE INTO tenant_settings (id,tenant_id) VALUES (?,?)').run(uuid(), tid);
+    } catch(_) {}
+
+    db.exec('PRAGMA foreign_keys = ON');
+
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)').run(
+      uuid(), tid, req.user.id, req.user.full_name,
+      'tenant_destroyed_complete', 'tenant', tid,
+      `Destruccion completa de la empresa "${tenant.name}" (incluye configs y accesos)`,
+      JSON.stringify({ destroyed_by: req.user.email, counts, timestamp: new Date().toISOString() })
+    );
+
+    res.json({
+      success: true,
+      message: `TODO eliminado de la empresa "${tenant.name}" (configs, accesos, data). La fila del tenant se mantiene.`,
+      deleted_counts: counts,
+    });
+  } catch (e: any) {
+    console.error('DELETE /tenants/:id/destroy-complete error:', e);
     res.status(500).json({ error: e.message || 'Failed' });
   }
 });

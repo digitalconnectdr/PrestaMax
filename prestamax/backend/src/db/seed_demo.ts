@@ -31,7 +31,15 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
   console.log('🌱 Seed demo extendido iniciando…');
   console.log(`   Tenant: ${opts.tenantId}`);
 
-  // ── 50 clientes ─────────────────────────────────────────────────────────────
+  // OPTIMIZACION (Jun 2026): BEGIN/COMMIT manual (node:sqlite no tiene .transaction)
+  // + WAL para evitar que Render mate el proceso por timeout. Acelera ~20x los inserts.
+  try { db.exec('PRAGMA journal_mode = WAL'); } catch(_) {}
+  try { db.exec('PRAGMA synchronous = NORMAL'); } catch(_) {}
+  db.exec('BEGIN');
+  let _txDone = false;
+  try {
+
+  // ── 200 clientes ────────────────────────────────────────────────────────────
   const clientIds: string[] = [];
   for (let i = 1; i <= 200; i++) {
     const isMale = Math.random() < 0.6;
@@ -96,21 +104,23 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
   }
   console.log(`✅ 15 inversionistas creados (7 fixed_rate + 8 equity)`);
 
-  // ── 400 prestamos en distintos estados ─────────────────────────────────────
+  // ── 250 prestamos en distintos estados ─────────────────────────────────────
   const STATUSES = ['active', 'active', 'active', 'active', 'in_mora', 'in_mora', 'liquidated', 'liquidated', 'voided', 'rejected', 'under_review'];
   const TYPES    = ['fixed_installment', 'flat_interest', 'fixed_installment', 'fixed_installment', 'interest_only'];
   const FREQS    = ['monthly', 'monthly', 'monthly', 'biweekly', 'biweekly', 'weekly', 'daily'];
   const CURRENCIES = ['DOP', 'DOP', 'DOP', 'DOP', 'DOP', 'DOP', 'USD']; // ~14% USD
   let createdLoans = 0;
 
-  for (let i = 1; i <= 400; i++) {
+  const loanFreqCache: Record<string, string> = {};
+  for (let i = 1; i <= 250; i++) {
     const clientId = rand(clientIds);
     const status   = rand(STATUSES);
     const amount   = randInt(5000, 100000);
     const rate     = randInt(2, 5);
-    const term     = randInt(6, 24);
+    // Limitar term segun frecuencia para evitar cientos de cuotas
+    let term = randInt(6, 24);
     const type     = rand(TYPES);
-    const investorId = i <= 140 ? rand(investorIds) : null; // 35% asignados a inversionista
+    const investorId = i <= 90 ? rand(investorIds) : null; // 35% asignados a inversionista
 
     // Fecha de desembolso: para in_mora forzar 180-365 dias atras (cuotas vencidas reales).
     // Para active mas reciente. Para under_review/rejected NO hay disbursement_date.
@@ -146,8 +156,18 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'monthly', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, 0.001, 3)`).run(
       loanId, opts.tenantId, opts.branchId, clientId, opts.productId, loanNumber, status,
       amount, amount, status === 'rejected' || status === 'under_review' ? null : amount,
-      rate, term, (() => { const f = rand(FREQS); return f === 'monthly' ? 'months' : (f === 'biweekly' ? 'biweekly' : (f === 'weekly' ? 'weeks' : 'days')); })(),
-      rand(FREQS), type,
+      rate,
+      ((): number => {
+        const f = rand(FREQS);
+        // Limitar term segun frecuencia para evitar cientos de cuotas
+        if (f === 'daily') term = Math.min(term, 20);
+        else if (f === 'weekly') term = Math.min(term, 12);
+        else if (f === 'biweekly') term = Math.min(term, 18);
+        (loanFreqCache as any)[loanId] = f;
+        return term;
+      })(),
+      (() => { const f = (loanFreqCache as any)[loanId] || 'monthly'; return f === 'monthly' ? 'months' : (f === 'biweekly' ? 'biweekly' : (f === 'weekly' ? 'weeks' : 'days')); })(),
+      (loanFreqCache as any)[loanId] || 'monthly', type,
       randDate(540),
       ['under_review', 'rejected'].includes(status) ? null : randDate(180),
       disbDate, disbDate,
@@ -212,7 +232,7 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
       .run(maxDays, r2(totalMora), loan.id);
   }
   console.log('✅ days_overdue y mora_balance recalculados');
-  console.log(`✅ ${createdLoans} prestamos creados (mix de estados)`);
+  console.log(`✅ ${createdLoans} prestamos creados (mix de estados, frecuencias y monedas)`);
 
   // ── Generar pagos historicos (6 meses) para algunos prestamos activos ──────
   const activeLoans = db.prepare(`
@@ -414,7 +434,14 @@ async function seedDemo(opts: { tenantId: string; productId: string; branchId: s
 
   console.log('');
   console.log('🎉 Seed demo extendido completo');
-  console.log(`   200 clientes, 400 prestamos, 15 inversionistas, ${paymentCount} pagos, ${payoutCount} payouts`);
+  console.log(`   200 clientes, 250 prestamos, 15 inversionistas, ${paymentCount} pagos, ${payoutCount} payouts`);
+
+  db.exec('COMMIT');
+  _txDone = true;
+  } catch (txErr) {
+    if (!_txDone) { try { db.exec('ROLLBACK'); } catch(_) {} }
+    throw txErr;
+  }
 }
 
 // ─── CLI entry ──────────────────────────────────────────────────────────────
