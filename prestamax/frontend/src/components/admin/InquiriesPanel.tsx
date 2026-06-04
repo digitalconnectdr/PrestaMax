@@ -16,20 +16,20 @@ import { formatDate } from '@/lib/utils'
 
 interface Inquiry {
   id: string
-  full_name: string
-  business_name: string | null
+  fullName: string
+  businessName: string | null
   whatsapp: string
   email: string
   country: string
-  plan_interest: string | null
-  portfolio_size: string | null
+  planInterest: string | null
+  portfolioSize: string | null
   source: string | null
   message: string | null
   status: 'new' | 'contacted' | 'converted' | 'rejected'
-  contacted_at: string | null
+  contactedAt: string | null
   notes: string | null
-  converted_to_tenant_id: string | null
-  created_at: string
+  convertedToTenantId: string | null
+  createdAt: string
 }
 
 interface Stats {
@@ -151,7 +151,7 @@ const InquiriesPanel: React.FC = () => {
   }
 
   const openWhatsApp = (inq: Inquiry) => {
-    window.open(buildWaLink(inq.whatsapp, inq.full_name, inq.plan_interest), '_blank', 'noopener,noreferrer')
+    window.open(buildWaLink(inq.whatsapp, inq.fullName, inq.planInterest), '_blank', 'noopener,noreferrer')
     // Auto-marcar como contactado si era nuevo
     if (inq.status === 'new') {
       updateStatus(inq.id, 'contacted')
@@ -215,7 +215,7 @@ const InquiriesPanel: React.FC = () => {
           {inquiries.map(inq => {
             const isExp = expanded === inq.id
             const flag = COUNTRY_FLAGS[inq.country] || '🌍'
-            const planLbl = PLAN_LABELS[inq.plan_interest || ''] || inq.plan_interest || '—'
+            const planLbl = PLAN_LABELS[inq.planInterest || ''] || inq.planInterest || '—'
 
             return (
               <div key={inq.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -223,24 +223,24 @@ const InquiriesPanel: React.FC = () => {
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-semibold text-slate-900">{inq.full_name}</h4>
+                        <h4 className="font-semibold text-slate-900">{inq.fullName}</h4>
                         <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_BADGE[inq.status]}`}>
                           {STATUS_LABELS[inq.status]}
                         </span>
                         <span className="text-xs text-slate-500">{flag} {inq.country}</span>
                       </div>
-                      {inq.business_name && (
-                        <p className="text-sm text-slate-600 mt-0.5">🏢 {inq.business_name}</p>
+                      {inq.businessName && (
+                        <p className="text-sm text-slate-600 mt-0.5">🏢 {inq.businessName}</p>
                       )}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-500">
                         <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {inq.whatsapp}</span>
                         <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {inq.email}</span>
-                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(inq.created_at)}</span>
+                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(inq.createdAt)}</span>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
                         <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">{planLbl}</span>
-                        {inq.portfolio_size && (
-                          <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">{SIZE_LABELS[inq.portfolio_size] || inq.portfolio_size}</span>
+                        {inq.portfolioSize && (
+                          <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">{SIZE_LABELS[inq.portfolioSize] || inq.portfolioSize}</span>
                         )}
                         {inq.source && (
                           <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">📍 {SOURCE_LABELS[inq.source] || inq.source}</span>
