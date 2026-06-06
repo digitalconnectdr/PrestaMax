@@ -29,7 +29,21 @@ function recalcClientScore(db: any, clientId: string): void {
       ? db.prepare(`SELECT * FROM installments WHERE loan_id IN (${loanIds.map(() => '?').join(',')})`).all(...loanIds) as any[]
       : [];
     const paidLoans    = loans.filter((l: any) => l.status === 'liquidated').length;
-    const lateInst     = installments.filter((i: any) => i.mora_days > 0 || i.status === 'overdue').length;
+    const lateInst     = installments.filter((i: any) => {
+      // FIX (Jun 2026): NO usar mora_days (no se resetea al pagar).
+      // Criterio correcto: cuota actualmente en atraso, o cuota pagada
+      // tarde (paid_at > due_date). Asi el score refleja comportamiento real.
+      if (i.status === 'overdue' && !i.paid_at) return true;
+      if (i.paid_at && i.due_date) {
+        try {
+          const paidDate = new Date(i.paid_at);
+          const dueDate = new Date(i.due_date);
+          // Tolerancia 1 dia (zona horaria + cierre del dia)
+          if (paidDate.getTime() - dueDate.getTime() > 86400000) return true;
+        } catch (_) { /* fechas invalidas — ignorar */ }
+      }
+      return false;
+    }).length;
     const total        = installments.length || 1;
     const punctuality  = 1 - (lateInst / total);
     const paidRatio    = loans.length > 0 ? paidLoans / loans.length : 0;
