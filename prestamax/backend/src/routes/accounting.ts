@@ -58,59 +58,73 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
-    let csv = csvLine(['Fecha', 'Hora', 'Tipo', 'Concepto', 'Cliente', 'Prestamo', 'Debe (RD$)', 'Haber (RD$)', 'Cuenta Bancaria', 'Referencia']);
+    // FIX (Jun 2026): agregar columna Moneda para multi-tenant DOP+USD.
+    // Header cambia: Debe = entradas a la caja; Haber = salidas.
+    let csv = csvLine(['Fecha', 'Hora', 'Tipo', 'Concepto', 'Cliente', 'Prestamo', 'Moneda', 'Debe (entrada)', 'Haber (salida)', 'Cuenta Bancaria', 'Referencia']);
 
+    // FIX: usar date() para que BETWEEN funcione con fechas ISO completas
+    // (sin date() '2026-06-30T15:00:00Z' > '2026-06-30' lexicograficamente).
     const disbursements = db.prepare(`
       SELECT l.disbursement_date as fecha, l.loan_number, l.disbursed_amount as monto,
+             l.currency as currency,
              c.full_name as cliente, b.bank_name as cuenta
       FROM loans l
       LEFT JOIN clients c ON c.id = l.client_id
       LEFT JOIN bank_accounts b ON b.id = l.disbursement_bank_account_id
       WHERE l.tenant_id=? AND l.is_voided=0
-        AND l.disbursement_date BETWEEN ? AND ?
+        AND date(l.disbursement_date) BETWEEN date(?) AND date(?)
       ORDER BY l.disbursement_date
     `).all(req.tenant.id, from, to) as any[];
     for (const d of disbursements) {
-      csv += csvLine([formatDate(d.fecha), formatTime(d.fecha), 'Desembolso', `Préstamo ${d.loan_number}`, d.cliente || '', d.loan_number, d.monto, 0, d.cuenta || '', d.loan_number]);
+      // FIX: desembolso es SALIDA de banco → Haber, no Debe (estaba invertido).
+      csv += csvLine([formatDate(d.fecha), formatTime(d.fecha), 'Desembolso', `Préstamo ${d.loan_number}`, d.cliente || '', d.loan_number, d.currency || 'DOP', 0, d.monto, d.cuenta || '', d.loan_number]);
     }
 
+    // FIX: filtrar pagos contra prestamos anulados (l.is_voided=0).
     const payments = db.prepare(`
       SELECT p.payment_date as fecha, p.payment_number, p.amount as monto,
+             p.currency as currency,
              c.full_name as cliente, l.loan_number, b.bank_name as cuenta
       FROM payments p
       LEFT JOIN loans l ON l.id = p.loan_id
       LEFT JOIN clients c ON c.id = l.client_id
       LEFT JOIN bank_accounts b ON b.id = p.bank_account_id
       WHERE p.tenant_id=? AND p.is_voided=0
-        AND p.payment_date BETWEEN ? AND ?
+        AND (l.is_voided IS NULL OR l.is_voided=0)
+        AND date(p.payment_date) BETWEEN date(?) AND date(?)
       ORDER BY p.payment_date
     `).all(req.tenant.id, from, to) as any[];
     for (const p of payments) {
-      csv += csvLine([formatDate(p.fecha), formatTime(p.fecha), 'Pago Recibido', `Pago ${p.payment_number}`, p.cliente || '', p.loan_number || '', 0, p.monto, p.cuenta || '', p.payment_number]);
+      // FIX: pago recibido es ENTRADA al banco → Debe, no Haber (estaba invertido).
+      csv += csvLine([formatDate(p.fecha), formatTime(p.fecha), 'Pago Recibido', `Pago ${p.payment_number}`, p.cliente || '', p.loan_number || '', p.currency || 'DOP', p.monto, 0, p.cuenta || '', p.payment_number]);
     }
 
     const incomes = db.prepare(`
-      SELECT i.transaction_date as fecha, i.amount as monto, i.category, i.description, b.bank_name as cuenta
+      SELECT i.transaction_date as fecha, i.amount as monto, i.category, i.description, b.bank_name as cuenta,
+             COALESCE(b.currency, 'DOP') as currency
       FROM income_expenses i
       LEFT JOIN bank_accounts b ON b.id = i.bank_account_id
       WHERE i.tenant_id=? AND i.type='income'
-        AND i.transaction_date BETWEEN ? AND ?
+        AND date(i.transaction_date) BETWEEN date(?) AND date(?)
       ORDER BY i.transaction_date
     `).all(req.tenant.id, from, to) as any[];
     for (const i of incomes) {
-      csv += csvLine([formatDate(i.fecha), formatTime(i.fecha), 'Ingreso', `${i.category}${i.description ? ': '+i.description : ''}`, '', '', 0, i.monto, i.cuenta || '', '']);
+      // Ingreso es entrada al banco → Debe (esto ya estaba correcto en la version vieja como Haber, ahora coherente con desembolso/pago).
+      csv += csvLine([formatDate(i.fecha), formatTime(i.fecha), 'Ingreso', `${i.category}${i.description ? ': '+i.description : ''}`, '', '', i.currency, i.monto, 0, i.cuenta || '', '']);
     }
 
     const expenses = db.prepare(`
-      SELECT i.transaction_date as fecha, i.amount as monto, i.category, i.description, b.bank_name as cuenta
+      SELECT i.transaction_date as fecha, i.amount as monto, i.category, i.description, b.bank_name as cuenta,
+             COALESCE(b.currency, 'DOP') as currency
       FROM income_expenses i
       LEFT JOIN bank_accounts b ON b.id = i.bank_account_id
       WHERE i.tenant_id=? AND i.type='expense'
-        AND i.transaction_date BETWEEN ? AND ?
+        AND date(i.transaction_date) BETWEEN date(?) AND date(?)
       ORDER BY i.transaction_date
     `).all(req.tenant.id, from, to) as any[];
     for (const e of expenses) {
-      csv += csvLine([formatDate(e.fecha), formatTime(e.fecha), 'Gasto', `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.monto, 0, e.cuenta || '', '']);
+      // Gasto es salida del banco → Haber (coherente).
+      csv += csvLine([formatDate(e.fecha), formatTime(e.fecha), 'Gasto', `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.currency, 0, e.monto, e.cuenta || '', '']);
     }
 
     sendCsv(res, `libro-diario_${from}_${to}.csv`, csv);
@@ -124,18 +138,51 @@ router.get('/by-account', authenticate, requireTenant, requirePermission('report
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
-    let csv = csvLine(['Cuenta Bancaria', 'Banco', 'Moneda', 'Entradas (RD$)', 'Salidas (RD$)', 'Neto (RD$)', '# Movimientos']);
+    // FIX (Jun 2026): header generico 'Monto' en vez de 'RD$' fijo. Cada cuenta
+    // tiene su propia moneda y los totales NO se convierten (saldos en su moneda nativa).
+    let csv = csvLine(['Cuenta Bancaria', 'Banco', 'Moneda', 'Entradas', 'Salidas', 'Neto', '# Movimientos', 'Saldo Inicial', 'Saldo Actual']);
 
-    const accounts = db.prepare(`SELECT id, bank_name, account_number, currency FROM bank_accounts WHERE tenant_id=?`).all(req.tenant.id) as any[];
+    const accounts = db.prepare(`SELECT id, bank_name, account_number, currency, initial_balance, current_balance FROM bank_accounts WHERE tenant_id=?`).all(req.tenant.id) as any[];
     for (const acc of accounts) {
-      const pagosIn = (db.prepare(`SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c FROM payments WHERE tenant_id=? AND bank_account_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
-      const incomesIn = (db.prepare(`SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND bank_account_id=? AND type='income' AND transaction_date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
-      const desembolsos = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount),0) as t, COUNT(*) as c FROM loans WHERE tenant_id=? AND disbursement_bank_account_id=? AND is_voided=0 AND disbursement_date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
-      const gastos = (db.prepare(`SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND bank_account_id=? AND type='expense' AND transaction_date BETWEEN ? AND ?`).get(req.tenant.id, acc.id, from, to) as any);
+      // FIX: usar date() para BETWEEN funcione con timestamps ISO.
+      // FIX: filtrar payments contra prestamos anulados.
+      const pagosIn = (db.prepare(`
+        SELECT COALESCE(SUM(p.amount),0) as t, COUNT(*) as c
+        FROM payments p
+        LEFT JOIN loans l ON l.id = p.loan_id
+        WHERE p.tenant_id=? AND p.bank_account_id=? AND p.is_voided=0
+          AND (l.is_voided IS NULL OR l.is_voided=0)
+          AND date(p.payment_date) BETWEEN date(?) AND date(?)
+      `).get(req.tenant.id, acc.id, from, to) as any);
+      const incomesIn = (db.prepare(`
+        SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c
+        FROM income_expenses
+        WHERE tenant_id=? AND bank_account_id=? AND type='income'
+          AND date(transaction_date) BETWEEN date(?) AND date(?)
+      `).get(req.tenant.id, acc.id, from, to) as any);
+      const desembolsos = (db.prepare(`
+        SELECT COALESCE(SUM(disbursed_amount),0) as t, COUNT(*) as c
+        FROM loans
+        WHERE tenant_id=? AND disbursement_bank_account_id=? AND is_voided=0
+          AND date(disbursement_date) BETWEEN date(?) AND date(?)
+      `).get(req.tenant.id, acc.id, from, to) as any);
+      const gastos = (db.prepare(`
+        SELECT COALESCE(SUM(amount),0) as t, COUNT(*) as c
+        FROM income_expenses
+        WHERE tenant_id=? AND bank_account_id=? AND type='expense'
+          AND date(transaction_date) BETWEEN date(?) AND date(?)
+      `).get(req.tenant.id, acc.id, from, to) as any);
       const entradas = (pagosIn.t || 0) + (incomesIn.t || 0);
       const salidas = (desembolsos.t || 0) + (gastos.t || 0);
       const movs = (pagosIn.c || 0) + (incomesIn.c || 0) + (desembolsos.c || 0) + (gastos.c || 0);
-      csv += csvLine([`${acc.bank_name} ${acc.account_number || ''}`, acc.bank_name, acc.currency || 'DOP', entradas.toFixed(2), salidas.toFixed(2), (entradas - salidas).toFixed(2), movs]);
+      csv += csvLine([
+        `${acc.bank_name} ${acc.account_number || ''}`,
+        acc.bank_name, acc.currency || 'DOP',
+        entradas.toFixed(2), salidas.toFixed(2), (entradas - salidas).toFixed(2),
+        movs,
+        Number(acc.initial_balance || 0).toFixed(2),
+        Number(acc.current_balance || 0).toFixed(2),
+      ]);
     }
 
     sendCsv(res, `mayor-por-cuenta_${from}_${to}.csv`, csv);
@@ -149,35 +196,105 @@ router.get('/summary', authenticate, requireTenant, requirePermission('reports.d
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
-    const interestMora = (db.prepare(`SELECT COALESCE(SUM(applied_interest), 0) as interest, COALESCE(SUM(applied_mora), 0) as mora, COUNT(*) as cnt FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
-    const capital = (db.prepare(`SELECT COALESCE(SUM(applied_capital), 0) as v FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
-    const desembolsos = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount), 0) as v, COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND disbursement_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
-    const otherIncomes = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c FROM income_expenses WHERE tenant_id=? AND type='income' AND transaction_date BETWEEN ? AND ?`).get(req.tenant.id, from, to) as any);
-    const expenses = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c, category FROM income_expenses WHERE tenant_id=? AND type='expense' AND transaction_date BETWEEN ? AND ? GROUP BY category`).all(req.tenant.id, from, to) as any[]);
-    const totalExpenses = expenses.reduce((s, e) => s + (e.v || 0), 0);
-    const grossIncome = (interestMora.interest || 0) + (interestMora.mora || 0) + (otherIncomes.v || 0);
-    const netIncome = grossIncome - totalExpenses;
 
-    let csv = csvLine(['Concepto', 'Monto (RD$)', 'Detalle']);
-    csv += csvLine([`PERIODO: ${from} a ${to}`, '', '']);
+    // FIX (Jun 2026): agrupar por moneda. NO sumamos DOP+USD.
+    // FIX: date() en BETWEEN. Filtrar pagos contra prestamos anulados.
+
+    // Lista de monedas presentes en este tenant
+    const currenciesRows = db.prepare(`
+      SELECT DISTINCT currency FROM (
+        SELECT COALESCE(currency,'DOP') as currency FROM payments WHERE tenant_id=?
+        UNION
+        SELECT COALESCE(currency,'DOP') as currency FROM loans WHERE tenant_id=?
+        UNION
+        SELECT COALESCE(b.currency,'DOP') as currency FROM income_expenses i
+          LEFT JOIN bank_accounts b ON b.id=i.bank_account_id WHERE i.tenant_id=?
+      )
+    `).all(req.tenant.id, req.tenant.id, req.tenant.id) as any[];
+    const currencies = currenciesRows.map(r => r.currency).filter(Boolean);
+    if (currencies.length === 0) currencies.push('DOP');
+
+    let csv = csvLine(['Concepto', 'Moneda', 'Monto', 'Detalle']);
+    csv += csvLine([`PERIODO: ${from} a ${to}`, '', '', '']);
     csv += '\n';
-    csv += csvLine(['INGRESOS', '', '']);
-    csv += csvLine(['  Interés cobrado', (interestMora.interest || 0).toFixed(2), `${interestMora.cnt} pagos`]);
-    csv += csvLine(['  Mora cobrada', (interestMora.mora || 0).toFixed(2), '']);
-    csv += csvLine(['  Otros ingresos', (otherIncomes.v || 0).toFixed(2), `${otherIncomes.c || 0} entradas`]);
-    csv += csvLine(['TOTAL INGRESOS BRUTOS', grossIncome.toFixed(2), '']);
-    csv += '\n';
-    csv += csvLine(['GASTOS POR CATEGORIA', '', '']);
-    for (const e of expenses) {
-      csv += csvLine([`  ${e.category}`, (e.v || 0).toFixed(2), `${e.c} movimientos`]);
+
+    for (const cur of currencies) {
+      const interestMora = (db.prepare(`
+        SELECT COALESCE(SUM(p.applied_interest),0) as interest,
+               COALESCE(SUM(p.applied_mora),0) as mora,
+               COUNT(*) as cnt
+        FROM payments p
+        LEFT JOIN loans l ON l.id = p.loan_id
+        WHERE p.tenant_id=? AND p.is_voided=0
+          AND COALESCE(p.currency,'DOP')=?
+          AND (l.is_voided IS NULL OR l.is_voided=0)
+          AND date(p.payment_date) BETWEEN date(?) AND date(?)
+      `).get(req.tenant.id, cur, from, to) as any);
+
+      const capital = (db.prepare(`
+        SELECT COALESCE(SUM(p.applied_capital),0) as v
+        FROM payments p
+        LEFT JOIN loans l ON l.id = p.loan_id
+        WHERE p.tenant_id=? AND p.is_voided=0
+          AND COALESCE(p.currency,'DOP')=?
+          AND (l.is_voided IS NULL OR l.is_voided=0)
+          AND date(p.payment_date) BETWEEN date(?) AND date(?)
+      `).get(req.tenant.id, cur, from, to) as any);
+
+      const desembolsos = (db.prepare(`
+        SELECT COALESCE(SUM(disbursed_amount),0) as v, COUNT(*) as c
+        FROM loans
+        WHERE tenant_id=? AND is_voided=0
+          AND COALESCE(currency,'DOP')=?
+          AND date(disbursement_date) BETWEEN date(?) AND date(?)
+      `).get(req.tenant.id, cur, from, to) as any);
+
+      const otherIncomes = (db.prepare(`
+        SELECT COALESCE(SUM(i.amount),0) as v, COUNT(*) as c
+        FROM income_expenses i
+        LEFT JOIN bank_accounts b ON b.id=i.bank_account_id
+        WHERE i.tenant_id=? AND i.type='income'
+          AND COALESCE(b.currency,'DOP')=?
+          AND date(i.transaction_date) BETWEEN date(?) AND date(?)
+      `).get(req.tenant.id, cur, from, to) as any);
+
+      const expenses = (db.prepare(`
+        SELECT COALESCE(SUM(i.amount),0) as v, COUNT(*) as c, i.category
+        FROM income_expenses i
+        LEFT JOIN bank_accounts b ON b.id=i.bank_account_id
+        WHERE i.tenant_id=? AND i.type='expense'
+          AND COALESCE(b.currency,'DOP')=?
+          AND date(i.transaction_date) BETWEEN date(?) AND date(?)
+        GROUP BY i.category
+      `).all(req.tenant.id, cur, from, to) as any[]);
+
+      const totalExpenses = expenses.reduce((s, e) => s + (e.v || 0), 0);
+      const grossIncome = (interestMora.interest || 0) + (interestMora.mora || 0) + (otherIncomes.v || 0);
+      const netIncome = grossIncome - totalExpenses;
+
+      // Saltar moneda completamente vacia
+      if (grossIncome === 0 && totalExpenses === 0 && (desembolsos.v || 0) === 0 && (capital.v || 0) === 0) continue;
+
+      csv += csvLine([`=== ${cur} ===`, '', '', '']);
+      csv += csvLine(['INGRESOS', cur, '', '']);
+      csv += csvLine(['  Interés cobrado', cur, (interestMora.interest || 0).toFixed(2), `${interestMora.cnt} pagos`]);
+      csv += csvLine(['  Mora cobrada', cur, (interestMora.mora || 0).toFixed(2), '']);
+      csv += csvLine(['  Otros ingresos', cur, (otherIncomes.v || 0).toFixed(2), `${otherIncomes.c || 0} entradas`]);
+      csv += csvLine(['TOTAL INGRESOS BRUTOS', cur, grossIncome.toFixed(2), '']);
+      csv += '\n';
+      csv += csvLine(['GASTOS POR CATEGORIA', cur, '', '']);
+      for (const e of expenses) {
+        csv += csvLine([`  ${e.category}`, cur, (e.v || 0).toFixed(2), `${e.c} movimientos`]);
+      }
+      csv += csvLine(['TOTAL GASTOS', cur, totalExpenses.toFixed(2), '']);
+      csv += '\n';
+      csv += csvLine(['UTILIDAD NETA', cur, netIncome.toFixed(2), grossIncome ? `${((netIncome/grossIncome)*100).toFixed(1)}% margen` : '']);
+      csv += '\n';
+      csv += csvLine(['INFORMACION ADICIONAL', cur, '', '']);
+      csv += csvLine(['  Capital desembolsado', cur, (desembolsos.v || 0).toFixed(2), `${desembolsos.c} préstamos`]);
+      csv += csvLine(['  Capital recuperado', cur, (capital.v || 0).toFixed(2), 'amortización a capital']);
+      csv += '\n';
     }
-    csv += csvLine(['TOTAL GASTOS', totalExpenses.toFixed(2), '']);
-    csv += '\n';
-    csv += csvLine(['UTILIDAD NETA', netIncome.toFixed(2), grossIncome ? `${((netIncome/grossIncome)*100).toFixed(1)}% margen` : '']);
-    csv += '\n';
-    csv += csvLine(['INFORMACION ADICIONAL', '', '']);
-    csv += csvLine(['  Capital desembolsado', (desembolsos.v || 0).toFixed(2), `${desembolsos.c} préstamos`]);
-    csv += csvLine(['  Capital recuperado', (capital.v || 0).toFixed(2), 'amortización a capital']);
 
     sendCsv(res, `resumen-financiero_${from}_${to}.csv`, csv);
   } catch (e: any) {
