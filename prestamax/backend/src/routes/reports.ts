@@ -9,19 +9,19 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
   try {
     const db = getDb(); const tid = req.tenant.id;
     const today = new Date().toISOString().slice(0,10);
-    const totalPortfolio = (db.prepare("SELECT COALESCE(SUM(disbursed_amount),0) as v FROM loans WHERE tenant_id=?").get(tid) as any).v;
-    const totalLoans = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=?").get(tid) as any).c;
-    const activeBalance = (db.prepare("SELECT COALESCE(SUM(total_balance),0) as v FROM loans WHERE tenant_id=? AND status IN ('active','current','overdue','in_mora')").get(tid) as any).v;
-    const activeLoans = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND status IN ('active','current','overdue','in_mora')").get(tid) as any).c;
-    const overdueCount = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND status IN ('overdue','in_mora')").get(tid) as any).c;
-    const moraBalance = (db.prepare("SELECT COALESCE(SUM(mora_balance),0) as v FROM loans WHERE tenant_id=? AND status='in_mora'").get(tid) as any).v;
+    const totalPortfolio = (db.prepare("SELECT COALESCE(SUM(disbursed_amount),0) as v FROM loans WHERE tenant_id=? AND is_voided=0").get(tid) as any).v;
+    const totalLoans = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0").get(tid) as any).c;
+    const activeBalance = (db.prepare("SELECT COALESCE(SUM(total_balance),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('active','current','overdue','in_mora')").get(tid) as any).v;
+    const activeLoans = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('active','current','overdue','in_mora')").get(tid) as any).c;
+    const overdueCount = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('overdue','in_mora')").get(tid) as any).c;
+    const moraBalance = (db.prepare("SELECT COALESCE(SUM(mora_balance),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('in_mora','overdue')").get(tid) as any).v;
     const todayPayments = (db.prepare("SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c FROM payments WHERE tenant_id=? AND is_voided=0 AND date(payment_date)=?").get(tid,today) as any);
     const totalClients = (db.prepare("SELECT COUNT(*) as c FROM clients WHERE tenant_id=? AND is_active=1").get(tid) as any).c;
-    const liquidated = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND status='liquidated'").get(tid) as any).c;
+    const liquidated = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND status='liquidated'").get(tid) as any).c;
 
-    const statusDist = db.prepare("SELECT status, COUNT(*) as count FROM loans WHERE tenant_id=? GROUP BY status").all(tid);
-    const recentPayments = db.prepare(`SELECT p.*, l.loan_number, l.currency, c.full_name as client_name FROM payments p JOIN loans l ON l.id=p.loan_id JOIN clients c ON c.id=l.client_id WHERE p.tenant_id=? AND p.is_voided=0 ORDER BY p.payment_date DESC LIMIT 8`).all(tid);
-    const topOverdue = db.prepare(`SELECT l.*, c.full_name as client_name, c.phone_personal FROM loans l JOIN clients c ON c.id=l.client_id WHERE l.tenant_id=? AND l.status IN ('overdue','in_mora') ORDER BY l.mora_balance DESC LIMIT 8`).all(tid);
+    const statusDist = db.prepare("SELECT status, COUNT(*) as count FROM loans WHERE tenant_id=? AND is_voided=0 GROUP BY status").all(tid);
+    const recentPayments = db.prepare(`SELECT p.*, l.loan_number, l.currency, c.full_name as client_name FROM payments p JOIN loans l ON l.id=p.loan_id JOIN clients c ON c.id=l.client_id WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0 ORDER BY p.payment_date DESC LIMIT 8`).all(tid);
+    const topOverdue = db.prepare(`SELECT l.*, c.full_name as client_name, c.phone_personal FROM loans l JOIN clients c ON c.id=l.client_id WHERE l.tenant_id=? AND l.is_voided=0 AND l.status IN ('overdue','in_mora') ORDER BY l.mora_balance DESC LIMIT 8`).all(tid);
     const dailyColl = db.prepare("SELECT date(payment_date) as day, SUM(amount) as total, COUNT(*) as count FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date >= date('now','-30 days') GROUP BY date(payment_date) ORDER BY day").all(tid);
 
     // Multi-currency: per-currency breakdown of active portfolio
@@ -32,18 +32,18 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
              COALESCE(SUM(mora_balance),0) as mora_balance,
              COALESCE(SUM(CASE WHEN status IN ('active','current','overdue','in_mora') THEN total_balance ELSE 0 END),0) as portfolio_balance,
              COALESCE(AVG(CASE WHEN currency!='DOP' THEN exchange_rate_to_dop ELSE NULL END),1) as avg_rate
-      FROM loans WHERE tenant_id=? GROUP BY COALESCE(currency,'DOP')
+      FROM loans WHERE tenant_id=? AND is_voided=0 GROUP BY COALESCE(currency,'DOP')
     `).all(tid);
 
     // ── Investors split (Fase 1.5): cartera propia vs de terceros + pasivo pendiente ──
     const carteraPropia = (db.prepare(`
       SELECT COALESCE(SUM(total_balance),0) as v
-      FROM loans WHERE tenant_id=? AND investor_id IS NULL
+      FROM loans WHERE tenant_id=? AND is_voided=0 AND investor_id IS NULL
         AND status IN ('active','current','overdue','in_mora')
     `).get(tid) as any).v;
     const carteraTerceros = (db.prepare(`
       SELECT COALESCE(SUM(total_balance),0) as v
-      FROM loans WHERE tenant_id=? AND investor_id IS NOT NULL
+      FROM loans WHERE tenant_id=? AND is_voided=0 AND investor_id IS NOT NULL
         AND status IN ('active','current','overdue','in_mora')
     `).get(tid) as any).v;
     // Pasivo: por inversionista, calcula segun model_type.
@@ -58,7 +58,7 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
              (SELECT MAX(paid_at) FROM investor_payouts WHERE investor_id=i.id AND tenant_id=? AND status='paid') as last_payout_at,
              i.created_at as investor_created_at
       FROM investors i
-      LEFT JOIN loans l ON l.investor_id=i.id AND l.tenant_id=?
+      LEFT JOIN loans l ON l.investor_id=i.id AND l.tenant_id=? AND l.is_voided=0
       LEFT JOIN payments p ON p.loan_id=l.id AND p.is_voided=0 AND p.liquidated_in_payout_id IS NULL
       WHERE i.tenant_id=? AND i.is_active=1
       GROUP BY i.id
@@ -104,7 +104,7 @@ router.get('/portfolio', authenticate, requireTenant, requirePermission('reports
 router.get('/mora', authenticate, requireTenant, requirePermission('reports.mora'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    res.json(db.prepare(`SELECT l.*,c.full_name as client_name,c.phone_personal,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.status IN ('overdue','in_mora') ORDER BY l.mora_balance DESC`).all(req.tenant.id));
+    res.json(db.prepare(`SELECT l.*,c.full_name as client_name,c.phone_personal,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.is_voided=0 AND l.status IN ('overdue','in_mora') ORDER BY l.mora_balance DESC`).all(req.tenant.id));
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
 
@@ -193,7 +193,7 @@ router.get('/advanced', authenticate, requireTenant, requirePermission('reports.
     // Business health alerts
     const moraRate = (() => {
       const active = (db.prepare(`SELECT COALESCE(SUM(total_balance),0) as v FROM loans WHERE tenant_id=? AND status IN ('active','overdue','in_mora')`).get(tid) as any).v
-      const mora = (db.prepare(`SELECT COALESCE(SUM(mora_balance),0) as v FROM loans WHERE tenant_id=? AND status='in_mora'`).get(tid) as any).v
+      const mora = (db.prepare(`SELECT COALESCE(SUM(mora_balance),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('in_mora','overdue')`).get(tid) as any).v
       return active > 0 ? (mora / active) * 100 : 0
     })()
 

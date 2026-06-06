@@ -252,7 +252,7 @@ router.get('/:id/liquidation-report', authenticate, requireTenant, requirePermis
              l.loan_number, l.id as loan_id
       FROM payments p
       JOIN loans l ON l.id=p.loan_id
-      WHERE p.tenant_id=? AND p.is_voided=0
+      WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0
         AND l.investor_id=?
         AND date(p.payment_date) >= date(?)
         AND date(p.payment_date) <= date(?)
@@ -282,7 +282,8 @@ router.get('/:id/liquidation-report', authenticate, requireTenant, requirePermis
       const fixedRateMonthly = parseFloat(investor.fixed_rate_monthly) || 0;
       const capital          = parseFloat(investor.capital_contributed) || 0;
       // Meses transcurridos en el periodo (usa 30.44 dias por mes promedio).
-      const msDiff = new Date(to).getTime() - new Date(from).getTime();
+      // FIX (Jun 2026): incluir ultimo dia del periodo (BETWEEN dia X-Y son Y-X+1 dias).
+      const msDiff = new Date(to).getTime() - new Date(from).getTime() + 86400000;
       monthsInPeriod = Math.max(0, msDiff / (1000 * 60 * 60 * 24 * 30.44));
       fixedRateGross = r2(capital * (fixedRateMonthly / 100) * monthsInPeriod);
       // En fixed_rate NO hay comision (la tasa ya es neta)
@@ -296,7 +297,7 @@ router.get('/:id/liquidation-report', authenticate, requireTenant, requirePermis
 
     const activeLoans = db.prepare(`
       SELECT COUNT(*) as n, COALESCE(SUM(principal_balance),0) as outstanding
-      FROM loans WHERE investor_id=? AND tenant_id=? AND status IN ('active','in_mora','disbursed','restructured')
+      FROM loans WHERE investor_id=? AND tenant_id=? AND is_voided=0 AND status IN ('active','in_mora','disbursed','restructured')
     `).get(req.params.id, req.tenant.id) as any;
 
     const lastPayout = db.prepare(`
@@ -363,7 +364,7 @@ router.post('/:id/payouts', authenticate, requireTenant, requirePermission('inve
       SELECT p.id, p.applied_capital, p.applied_interest, p.applied_mora
       FROM payments p
       JOIN loans l ON l.id=p.loan_id
-      WHERE p.tenant_id=? AND p.is_voided=0
+      WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0
         AND l.investor_id=?
         AND date(p.payment_date) >= date(?)
         AND date(p.payment_date) <= date(?)

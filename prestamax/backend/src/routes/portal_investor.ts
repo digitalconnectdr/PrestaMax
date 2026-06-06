@@ -57,7 +57,7 @@ router.get('/summary', authenticate, requireTenant, requireInvestor, (req: AuthR
     const capCol = (db.prepare(`
       SELECT COALESCE(SUM(principal_balance), 0) as v, COUNT(*) as n
       FROM loans
-      WHERE investor_id=? AND tenant_id=?
+      WHERE investor_id=? AND tenant_id=? AND is_voided=0
         AND status IN ('active','in_mora','disbursed','restructured')
     `).get(inv.id, req.tenant!.id) as any);
 
@@ -69,14 +69,28 @@ router.get('/summary', authenticate, requireTenant, requireInvestor, (req: AuthR
         COUNT(*) as payments
       FROM payments p
       JOIN loans l ON l.id=p.loan_id
-      WHERE p.tenant_id=? AND p.is_voided=0
+      WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0
         AND l.investor_id=?
     `).get(req.tenant!.id, inv.id) as any);
 
     const lifetimeGross = r2((lifetime.interest || 0) + (lifetime.mora || 0));
+    const modelType = inv.model_type || 'equity';
     const commissionPct = parseFloat(inv.commission_percent) || 0;
-    const lifetimeCommission = r2(lifetimeGross * (commissionPct / 100));
-    const lifetimeNet = r2(lifetimeGross - lifetimeCommission);
+    // FIX (Jun 2026): fixed_rate NO tiene comision; ademas el lifetime "ganado"
+    // se basa en tasa fija sobre capital aportado, no en gross_interest/mora.
+    // Para coherencia visual con liquidation-report, mostramos el net_earned
+    // como el TOTAL YA PAGADO en payouts (mas representativo de lo recibido).
+    let lifetimeCommission = 0;
+    let lifetimeNet = 0;
+    if (modelType === 'fixed_rate') {
+      lifetimeCommission = 0;
+      // Suma de net_amount de payouts pagados representa lo realmente recibido
+      // (acumulamos de paidOut en bloque siguiente; aqui dejamos en 0).
+      lifetimeNet = 0;
+    } else {
+      lifetimeCommission = r2(lifetimeGross * (commissionPct / 100));
+      lifetimeNet = r2(lifetimeGross - lifetimeCommission);
+    }
 
     // Total ya recibido en payouts pagados
     const paidOut = (db.prepare(`
