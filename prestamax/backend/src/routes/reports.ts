@@ -9,20 +9,26 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
   try {
     const db = getDb(); const tid = req.tenant.id;
     const today = new Date().toISOString().slice(0,10);
-    const totalPortfolio = (db.prepare("SELECT COALESCE(SUM(disbursed_amount),0) as v FROM loans WHERE tenant_id=? AND is_voided=0").get(tid) as any).v;
+    // FIX multi-moneda (Jun 2026): los KPIs agregados de Dashboard convierten
+    // a DOP usando exchange_rate_to_dop (default 1). El detalle por moneda
+    // sigue disponible en portfolio_by_currency (mas abajo).
+    const RATE = "COALESCE(exchange_rate_to_dop, 1)";
+    const totalPortfolio = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount * ${RATE}),0) as v FROM loans WHERE tenant_id=? AND is_voided=0`).get(tid) as any).v;
     const totalLoans = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0").get(tid) as any).c;
-    const activeBalance = (db.prepare("SELECT COALESCE(SUM(total_balance),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('active','current','overdue','in_mora')").get(tid) as any).v;
+    const activeBalance = (db.prepare(`SELECT COALESCE(SUM(total_balance * ${RATE}),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('active','current','overdue','in_mora')`).get(tid) as any).v;
     const activeLoans = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('active','current','overdue','in_mora')").get(tid) as any).c;
     const overdueCount = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('overdue','in_mora')").get(tid) as any).c;
-    const moraBalance = (db.prepare("SELECT COALESCE(SUM(mora_balance),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('in_mora','overdue')").get(tid) as any).v;
-    const todayPayments = (db.prepare("SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c FROM payments WHERE tenant_id=? AND is_voided=0 AND date(payment_date)=?").get(tid,today) as any);
+    const moraBalance = (db.prepare(`SELECT COALESCE(SUM(mora_balance * ${RATE}),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('in_mora','overdue')`).get(tid) as any).v;
+    // Para payments: JOIN con loans para obtener exchange_rate y convertir a DOP
+    const todayPayments = (db.prepare(`SELECT COALESCE(SUM(p.amount * COALESCE(l.exchange_rate_to_dop, 1)),0) as v, COUNT(*) as c FROM payments p JOIN loans l ON l.id=p.loan_id WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0 AND date(p.payment_date)=?`).get(tid,today) as any);
     const totalClients = (db.prepare("SELECT COUNT(*) as c FROM clients WHERE tenant_id=? AND is_active=1").get(tid) as any).c;
     const liquidated = (db.prepare("SELECT COUNT(*) as c FROM loans WHERE tenant_id=? AND is_voided=0 AND status='liquidated'").get(tid) as any).c;
 
     const statusDist = db.prepare("SELECT status, COUNT(*) as count FROM loans WHERE tenant_id=? AND is_voided=0 GROUP BY status").all(tid);
     const recentPayments = db.prepare(`SELECT p.*, l.loan_number, l.currency, c.full_name as client_name FROM payments p JOIN loans l ON l.id=p.loan_id JOIN clients c ON c.id=l.client_id WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0 ORDER BY p.payment_date DESC LIMIT 8`).all(tid);
     const topOverdue = db.prepare(`SELECT l.*, c.full_name as client_name, c.phone_personal FROM loans l JOIN clients c ON c.id=l.client_id WHERE l.tenant_id=? AND l.is_voided=0 AND l.status IN ('overdue','in_mora') ORDER BY l.mora_balance DESC LIMIT 8`).all(tid);
-    const dailyColl = db.prepare("SELECT date(payment_date) as day, SUM(amount) as total, COUNT(*) as count FROM payments WHERE tenant_id=? AND is_voided=0 AND payment_date >= date('now','-30 days') GROUP BY date(payment_date) ORDER BY day").all(tid);
+    // Conversion a DOP por exchange_rate del prestamo (multi-moneda)
+    const dailyColl = db.prepare(`SELECT date(p.payment_date) as day, SUM(p.amount * COALESCE(l.exchange_rate_to_dop, 1)) as total, COUNT(*) as count FROM payments p JOIN loans l ON l.id=p.loan_id WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0 AND p.payment_date >= date('now','-30 days') GROUP BY date(p.payment_date) ORDER BY day`).all(tid);
 
     // Multi-currency: per-currency breakdown of active portfolio
     const portfolioByCurrency = db.prepare(`
@@ -37,12 +43,12 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
 
     // ── Investors split (Fase 1.5): cartera propia vs de terceros + pasivo pendiente ──
     const carteraPropia = (db.prepare(`
-      SELECT COALESCE(SUM(total_balance),0) as v
+      SELECT COALESCE(SUM(total_balance * COALESCE(exchange_rate_to_dop, 1)),0) as v
       FROM loans WHERE tenant_id=? AND is_voided=0 AND investor_id IS NULL
         AND status IN ('active','current','overdue','in_mora')
     `).get(tid) as any).v;
     const carteraTerceros = (db.prepare(`
-      SELECT COALESCE(SUM(total_balance),0) as v
+      SELECT COALESCE(SUM(total_balance * COALESCE(exchange_rate_to_dop, 1)),0) as v
       FROM loans WHERE tenant_id=? AND is_voided=0 AND investor_id IS NOT NULL
         AND status IN ('active','current','overdue','in_mora')
     `).get(tid) as any).v;
@@ -53,8 +59,8 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
       SELECT i.id as investor_id,
              i.model_type, i.commission_percent,
              i.fixed_rate_monthly, i.capital_contributed,
-             COALESCE(SUM(p.applied_interest), 0) as gross_interest,
-             COALESCE(SUM(p.applied_mora), 0) as gross_mora,
+             COALESCE(SUM(p.applied_interest * COALESCE(l.exchange_rate_to_dop, 1)), 0) as gross_interest,
+             COALESCE(SUM(p.applied_mora * COALESCE(l.exchange_rate_to_dop, 1)), 0) as gross_mora,
              (SELECT MAX(paid_at) FROM investor_payouts WHERE investor_id=i.id AND tenant_id=? AND status='paid') as last_payout_at,
              i.created_at as investor_created_at
       FROM investors i
@@ -177,23 +183,24 @@ router.get('/advanced', authenticate, requireTenant, requirePermission('reports.
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const lastMonth = lastMonthDate.toISOString().slice(0, 7)
 
-    const thisMonthPayments = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c FROM payments WHERE tenant_id=? AND is_voided=0 AND strftime('%Y-%m',payment_date)=?`).get(tid, thisMonth) as any)
-    const lastMonthPayments = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v, COUNT(*) as c FROM payments WHERE tenant_id=? AND is_voided=0 AND strftime('%Y-%m',payment_date)=?`).get(tid, lastMonth) as any)
-    const thisMonthLoans = (db.prepare(`SELECT COUNT(*) as c, COALESCE(SUM(disbursed_amount),0) as v FROM loans WHERE tenant_id=? AND strftime('%Y-%m',disbursement_date)=?`).get(tid, thisMonth) as any)
-    const lastMonthLoans = (db.prepare(`SELECT COUNT(*) as c, COALESCE(SUM(disbursed_amount),0) as v FROM loans WHERE tenant_id=? AND strftime('%Y-%m',disbursement_date)=?`).get(tid, lastMonth) as any)
+    // FIX multi-moneda (Jun 2026): convertir a DOP usando exchange_rate del prestamo
+    const thisMonthPayments = (db.prepare(`SELECT COALESCE(SUM(p.amount * COALESCE(l.exchange_rate_to_dop, 1)),0) as v, COUNT(*) as c FROM payments p JOIN loans l ON l.id=p.loan_id WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0 AND strftime('%Y-%m',p.payment_date)=?`).get(tid, thisMonth) as any)
+    const lastMonthPayments = (db.prepare(`SELECT COALESCE(SUM(p.amount * COALESCE(l.exchange_rate_to_dop, 1)),0) as v, COUNT(*) as c FROM payments p JOIN loans l ON l.id=p.loan_id WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0 AND strftime('%Y-%m',p.payment_date)=?`).get(tid, lastMonth) as any)
+    const thisMonthLoans = (db.prepare(`SELECT COUNT(*) as c, COALESCE(SUM(disbursed_amount * COALESCE(exchange_rate_to_dop, 1)),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND strftime('%Y-%m',disbursement_date)=?`).get(tid, thisMonth) as any)
+    const lastMonthLoans = (db.prepare(`SELECT COUNT(*) as c, COALESCE(SUM(disbursed_amount * COALESCE(exchange_rate_to_dop, 1)),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND strftime('%Y-%m',disbursement_date)=?`).get(tid, lastMonth) as any)
     const thisMonthClients = (db.prepare(`SELECT COUNT(*) as c FROM clients WHERE tenant_id=? AND strftime('%Y-%m',created_at)=?`).get(tid, thisMonth) as any)
     const lastMonthClients = (db.prepare(`SELECT COUNT(*) as c FROM clients WHERE tenant_id=? AND strftime('%Y-%m',created_at)=?`).get(tid, lastMonth) as any)
 
-    // YTD stats
+    // YTD stats — convertir a DOP
     const yearStart = `${now.getFullYear()}-01-01`
-    const ytdCollected = (db.prepare(`SELECT COALESCE(SUM(amount),0) as v FROM payments WHERE tenant_id=? AND is_voided=0 AND date(payment_date) >= date(?)`).get(tid, yearStart) as any).v
-    const ytdDisbursed = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount),0) as v FROM loans WHERE tenant_id=? AND date(disbursement_date) >= date(?)`).get(tid, yearStart) as any).v
+    const ytdCollected = (db.prepare(`SELECT COALESCE(SUM(p.amount * COALESCE(l.exchange_rate_to_dop, 1)),0) as v FROM payments p JOIN loans l ON l.id=p.loan_id WHERE p.tenant_id=? AND p.is_voided=0 AND l.is_voided=0 AND date(p.payment_date) >= date(?)`).get(tid, yearStart) as any).v
+    const ytdDisbursed = (db.prepare(`SELECT COALESCE(SUM(disbursed_amount * COALESCE(exchange_rate_to_dop, 1)),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND date(disbursement_date) >= date(?)`).get(tid, yearStart) as any).v
     const ytdNewClients = (db.prepare(`SELECT COUNT(*) as c FROM clients WHERE tenant_id=? AND date(created_at) >= date(?)`).get(tid, yearStart) as any).c
 
-    // Business health alerts
+    // Business health alerts (mora rate calculado en DOP para coherencia)
     const moraRate = (() => {
-      const active = (db.prepare(`SELECT COALESCE(SUM(total_balance),0) as v FROM loans WHERE tenant_id=? AND status IN ('active','overdue','in_mora')`).get(tid) as any).v
-      const mora = (db.prepare(`SELECT COALESCE(SUM(mora_balance),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('in_mora','overdue')`).get(tid) as any).v
+      const active = (db.prepare(`SELECT COALESCE(SUM(total_balance * COALESCE(exchange_rate_to_dop, 1)),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('active','overdue','in_mora')`).get(tid) as any).v
+      const mora = (db.prepare(`SELECT COALESCE(SUM(mora_balance * COALESCE(exchange_rate_to_dop, 1)),0) as v FROM loans WHERE tenant_id=? AND is_voided=0 AND status IN ('in_mora','overdue')`).get(tid) as any).v
       return active > 0 ? (mora / active) * 100 : 0
     })()
 
@@ -807,7 +814,6 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
         'ESTATUS':                mapEstatus(loan.status),
         'TIPO DE PRESTAMO':       mapTipoPrestamo(loan.loan_type || 'personal'),
         'MONEDA':                 mapMoneda(loan.currency || 'DOP'),
-        'CREDITO APROBADO':       creditApproved,
         'MONTO ADEUDADO':         montoAdeudado,
         'PAGO MANDATORIO O CUOTA': firstInst ? r2(firstInst.total_amount) : 0,
         'MONTO ULTIMO PAGO':      lastPay ? r2(lastPay.amount) : 0,
