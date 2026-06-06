@@ -303,3 +303,203 @@ describe('Reestructuracion — casos limites peligrosos', () => {
     expect(getInstallmentCount(6, 'months', 'biweekly')).toBe(12);
   });
 });
+
+// ─── COBERTURA EXHAUSTIVA: TODAS LAS FRECUENCIAS DEL SISTEMA ────────────────
+// Frecuencias soportadas: daily, every_2_days, weekly, biweekly, monthly,
+// quarterly, annual/yearly.
+
+interface FreqCase {
+  freq: string;
+  termUnit: 'days' | 'weeks' | 'biweekly' | 'months' | 'years';
+  term: number;
+  expectedCount: number;
+  amount: number;
+  rate: number;
+  rateType: string;
+}
+
+const FREQ_CASES: FreqCase[] = [
+  { freq: 'daily',        termUnit: 'days',     term: 30, expectedCount: 30, amount: 5000,  rate: 0.5, rateType: 'daily' },
+  { freq: 'every_2_days', termUnit: 'days',     term: 30, expectedCount: 15, amount: 6000,  rate: 1,   rateType: 'daily' },
+  { freq: 'weekly',       termUnit: 'weeks',    term: 12, expectedCount: 12, amount: 8000,  rate: 1,   rateType: 'weekly' },
+  { freq: 'biweekly',     termUnit: 'biweekly', term: 12, expectedCount: 12, amount: 10000, rate: 2,   rateType: 'biweekly' },
+  { freq: 'monthly',      termUnit: 'months',   term: 12, expectedCount: 12, amount: 15000, rate: 3,   rateType: 'monthly' },
+  { freq: 'quarterly',    termUnit: 'months',   term: 12, expectedCount: 4,  amount: 20000, rate: 6,   rateType: 'monthly' },
+  { freq: 'annual',       termUnit: 'years',    term: 3,  expectedCount: 3,  amount: 30000, rate: 24,  rateType: 'annual' },
+];
+
+describe('Cobertura exhaustiva: TODAS las frecuencias del sistema', () => {
+  for (const c of FREQ_CASES) {
+    describe(`freq=${c.freq}`, () => {
+      it(`getInstallmentCount: ${c.term} ${c.termUnit} = ${c.expectedCount} cuotas`, () => {
+        expect(getInstallmentCount(c.term, c.termUnit, c.freq)).toBe(c.expectedCount);
+      });
+
+      it(`generateSchedule produce ${c.expectedCount} cuotas (fixed_installment)`, () => {
+        const s = generateSchedule({
+          amount: c.amount, rate: c.rate, rateType: c.rateType as any,
+          term: c.term, termUnit: c.termUnit, freq: c.freq,
+          type: 'fixed_installment', firstDate: '2026-01-01',
+        });
+        expect(s.length).toBe(c.expectedCount);
+      });
+
+      it(`generateSchedule: SUM(principal) == amount (invariante)`, () => {
+        const s = generateSchedule({
+          amount: c.amount, rate: c.rate, rateType: c.rateType as any,
+          term: c.term, termUnit: c.termUnit, freq: c.freq,
+          type: 'fixed_installment', firstDate: '2026-01-01',
+        });
+        const totalPrincipal = s.reduce((a, r) => a + r.principal_amount, 0);
+        // Tolerancia 0.1 para acumulacion de redondeos en planes largos
+        expect(Math.abs(totalPrincipal - c.amount)).toBeLessThan(0.1);
+      });
+
+      it(`flat_interest: SUM(principal) == amount`, () => {
+        const s = generateSchedule({
+          amount: c.amount, rate: c.rate, rateType: c.rateType as any,
+          term: c.term, termUnit: c.termUnit, freq: c.freq,
+          type: 'flat_interest', firstDate: '2026-01-01',
+        });
+        const totalPrincipal = s.reduce((a, r) => a + r.principal_amount, 0);
+        expect(Math.abs(totalPrincipal - c.amount)).toBeLessThan(c.expectedCount * 0.01);
+      });
+
+      it(`reestructura: pagar 1ra cuota, regenerar resto preserva saldo`, () => {
+        const original = generateSchedule({
+          amount: c.amount, rate: c.rate, rateType: c.rateType as any,
+          term: c.term, termUnit: c.termUnit, freq: c.freq,
+          type: 'fixed_installment', firstDate: '2026-01-01',
+        });
+        if (original.length < 2) return; // skip si solo hay 1 cuota
+        const paidPrincipal = original[0].principal_amount;
+        const remainingBalance = r2(c.amount - paidPrincipal);
+        // Regenerar las cuotas restantes
+        const remainingCount = original.length - 1;
+        const newSchedule = generateSchedule({
+          amount: remainingBalance, rate: c.rate, rateType: c.rateType as any,
+          term: c.term * (remainingCount / original.length), // proporcional
+          termUnit: c.termUnit, freq: c.freq,
+          type: 'fixed_installment', firstDate: original[1].due_date,
+        });
+        // El capital sumado tras la regeneracion + lo pagado debe == amount original
+        const sumPrincipalNew = newSchedule.reduce((a, r) => a + r.principal_amount, 0);
+        const totalPrincipal = paidPrincipal + sumPrincipalNew;
+        expect(Math.abs(totalPrincipal - c.amount)).toBeLessThan(0.5);
+      });
+    });
+  }
+});
+
+// ─── Matriz de cambios de frecuencia (reestructura con freq distinta) ───────
+describe('Matriz de cambio de frecuencia en reestructura', () => {
+  const FREQS = ['daily', 'every_2_days', 'weekly', 'biweekly', 'monthly', 'quarterly', 'annual'];
+
+  for (const fromFreq of FREQS) {
+    for (const toFreq of FREQS) {
+      if (fromFreq === toFreq) continue;
+      it(`cambio ${fromFreq} → ${toFreq} preserva monto principal`, () => {
+        // Generar plan original. Para freq grandes (annual/quarterly) con
+        // term=12 months solo dan 1-4 cuotas. Usamos 24 months para que SIEMPRE
+        // haya al menos 2 cuotas y podamos pagar la primera.
+        const original = generateSchedule({
+          amount: 12000, rate: 2, rateType: 'monthly',
+          term: 24, termUnit: 'months', freq: fromFreq,
+          type: 'fixed_installment', firstDate: '2026-01-01',
+        });
+        if (original.length < 2) return; // sanidad
+        // Pagar 1 cuota
+        const paidPrincipal = original[0].principal_amount;
+        const remainingBalance = r2(12000 - paidPrincipal);
+        // Regenerar con nueva freq
+        const termUnitNew = toFreq === 'daily' ? 'days'
+          : toFreq === 'every_2_days' ? 'days'
+          : toFreq === 'weekly' ? 'weeks'
+          : toFreq === 'biweekly' ? 'biweekly'
+          : toFreq === 'monthly' ? 'months'
+          : toFreq === 'quarterly' ? 'months'
+          : 'years';
+        const termNew = toFreq === 'daily' ? 90
+          : toFreq === 'every_2_days' ? 90
+          : toFreq === 'weekly' ? 13
+          : toFreq === 'biweekly' ? 6
+          : toFreq === 'monthly' ? 3
+          : toFreq === 'quarterly' ? 12
+          : toFreq === 'annual' ? 1
+          : 3;
+        const newSchedule = generateSchedule({
+          amount: remainingBalance, rate: 2, rateType: 'monthly',
+          term: termNew, termUnit: termUnitNew as any, freq: toFreq,
+          type: 'fixed_installment', firstDate: original[1].due_date,
+        });
+        expect(newSchedule.length).toBeGreaterThan(0);
+        const sumPrincipalNew = newSchedule.reduce((a, r) => a + r.principal_amount, 0);
+        // Suma de capital nuevo = saldo restante (tolerancia generosa por redondeos)
+        expect(Math.abs(sumPrincipalNew - remainingBalance)).toBeLessThan(1.0);
+      });
+    }
+  }
+});
+
+// ─── Cada freq con fecha "peligrosa" (dia 31, anio bisiesto) ────────────────
+describe('Edge cases de fechas por frecuencia', () => {
+  it('monthly: empieza 31 enero → siguiente cuota = 28 febrero (no 3 marzo)', () => {
+    const s = generateSchedule({
+      amount: 5000, rate: 2, rateType: 'monthly',
+      term: 3, termUnit: 'months', freq: 'monthly',
+      type: 'fixed_installment', firstDate: '2026-01-31',
+    });
+    expect(s.length).toBe(3);
+    // 2026 no es bisiesto: feb tiene 28 dias
+    const d2 = new Date(s[1].due_date);
+    expect(d2.getUTCMonth()).toBe(1); // febrero
+    expect(d2.getUTCDate()).toBe(28); // dia 28 (clamp)
+  });
+
+  it('monthly: 31 marzo → 30 abril (clamp)', () => {
+    const s = generateSchedule({
+      amount: 5000, rate: 2, rateType: 'monthly',
+      term: 3, termUnit: 'months', freq: 'monthly',
+      type: 'fixed_installment', firstDate: '2026-03-31',
+    });
+    const d2 = new Date(s[1].due_date);
+    expect(d2.getUTCMonth()).toBe(3); // abril
+    expect(d2.getUTCDate()).toBe(30); // dia 30 (clamp porque abril tiene 30)
+  });
+
+  it('quarterly: empieza 30 noviembre → siguiente cuota = 28/29 febrero', () => {
+    const s = generateSchedule({
+      amount: 5000, rate: 2, rateType: 'monthly',
+      term: 6, termUnit: 'months', freq: 'quarterly',
+      type: 'fixed_installment', firstDate: '2026-11-30',
+    });
+    expect(s.length).toBe(2);
+    const d2 = new Date(s[1].due_date);
+    expect(d2.getUTCMonth()).toBe(1); // febrero 2027
+    // 2027 no bisiesto: feb = 28
+    expect(d2.getUTCDate()).toBe(28);
+  });
+
+  it('annual: empieza 29 febrero (bisiesto) → siguiente cuota = 28 feb (no bisiesto)', () => {
+    const s = generateSchedule({
+      amount: 5000, rate: 5, rateType: 'annual',
+      term: 2, termUnit: 'years', freq: 'annual',
+      type: 'fixed_installment', firstDate: '2024-02-29',
+    });
+    expect(s.length).toBe(2);
+    const d2 = new Date(s[1].due_date);
+    expect(d2.getUTCMonth()).toBe(1); // febrero 2025
+    expect(d2.getUTCDate()).toBe(28); // clamp porque 2025 no es bisiesto
+  });
+
+  it('daily no hace clamp (avanza 1 dia exacto)', () => {
+    const s = generateSchedule({
+      amount: 3000, rate: 0.1, rateType: 'daily',
+      term: 5, termUnit: 'days', freq: 'daily',
+      type: 'fixed_installment', firstDate: '2026-01-31',
+    });
+    const d2 = new Date(s[1].due_date);
+    expect(d2.getUTCMonth()).toBe(1); // febrero
+    expect(d2.getUTCDate()).toBe(1);  // 1 feb
+  });
+});
