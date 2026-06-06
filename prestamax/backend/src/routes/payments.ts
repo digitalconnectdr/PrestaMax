@@ -151,13 +151,15 @@ function calcMoraPerInstallment(loan: any, installments: any[], asOf: Date): Rec
   const fixedAmt = loan.mora_fixed_amount || 0;
   // mora_start_date: si esta seteada, la mora se cuenta solo a partir de esa fecha
   // (para prestamos migrados que ya estaban al dia, evita mora retroactiva).
-  const moraStart = loan.mora_start_date ? new Date(loan.mora_start_date) : null;
+  // FIX P1 (Jun 2026): parsear local-midnight para evitar offsets de zona horaria.
+  const toLocalMidnight = (s: string) => new Date(s.length > 10 ? s : s + 'T00:00:00');
+  const moraStart = loan.mora_start_date ? toLocalMidnight(loan.mora_start_date) : null;
   const out: Record<string, number> = {};
   for (const inst of installments) {
     if (inst.status === 'paid' || inst.status === 'waived') continue;
     const effectiveDue = inst.deferred_due_date
-      ? new Date(inst.deferred_due_date)
-      : new Date(inst.due_date);
+      ? toLocalMidnight(inst.deferred_due_date)
+      : toLocalMidnight(inst.due_date);
     // El "punto de partida" para contar dias en mora es el mayor entre
     // (fecha de vencimiento) y (mora_start_date si existe).
     const startFrom = moraStart && moraStart.getTime() > effectiveDue.getTime()

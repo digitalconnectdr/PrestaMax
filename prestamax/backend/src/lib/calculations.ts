@@ -7,16 +7,28 @@ export function r2(n: number): number {
 }
 
 // ─── Date helper: siguiente fecha según frecuencia de pago ───────────────────
+// FIX P1 (Jun 2026): Date.setMonth con dia 31 hace rollover (ene 31 -> mar 3
+// en lugar de feb 28). Para freq mensual/trimestral/anual, clampear al
+// ultimo dia del mes destino cuando el dia origen sea > dias del mes destino.
+function addMonthsClamped(d: Date, months: number): Date {
+  const nd = new Date(d);
+  const origDay = nd.getDate();
+  nd.setDate(1);
+  nd.setMonth(nd.getMonth() + months);
+  const lastDay = new Date(nd.getFullYear(), nd.getMonth() + 1, 0).getDate();
+  nd.setDate(Math.min(origDay, lastDay));
+  return nd;
+}
+
 export function getNextDate(d: Date, freq: string): Date {
   const nd = new Date(d);
-  if (freq === 'daily')             nd.setDate(nd.getDate() + 1);
-  else if (freq === 'every_2_days') nd.setDate(nd.getDate() + 2);
-  else if (freq === 'weekly')       nd.setDate(nd.getDate() + 7);
-  else if (freq === 'biweekly')     nd.setDate(nd.getDate() + 15);
-  else if (freq === 'quarterly')    nd.setMonth(nd.getMonth() + 3);
-  else if (freq === 'annual' || freq === 'yearly') nd.setFullYear(nd.getFullYear() + 1);
-  else                              nd.setMonth(nd.getMonth() + 1); // monthly
-  return nd;
+  if (freq === 'daily')             { nd.setDate(nd.getDate() + 1); return nd; }
+  else if (freq === 'every_2_days') { nd.setDate(nd.getDate() + 2); return nd; }
+  else if (freq === 'weekly')       { nd.setDate(nd.getDate() + 7); return nd; }
+  else if (freq === 'biweekly')     { nd.setDate(nd.getDate() + 15); return nd; }
+  else if (freq === 'quarterly')    return addMonthsClamped(d, 3);
+  else if (freq === 'annual' || freq === 'yearly') return addMonthsClamped(d, 12);
+  else                              return addMonthsClamped(d, 1); // monthly
 }
 
 // ─── Conversión de plazo a número de cuotas ──────────────────────────────────
@@ -170,13 +182,16 @@ export function calcMora(loan: MoraLoanConfig, installments: MoraInstallment[], 
   const useFixed = !!loan.mora_fixed_enabled;
   const fixedAmt = loan.mora_fixed_amount || 0;
   // mora_start_date: si seteada, dias en mora se cuentan desde max(due_date, mora_start_date)
-  const moraStart = loan.mora_start_date ? new Date(loan.mora_start_date) : null;
+  // FIX P1 (Jun 2026): parsear fechas con T00:00:00 explicito para evitar
+  // que JS las interprete como UTC y produzca desfases horarios.
+  const toLocalMidnight = (s: string) => new Date(s.length > 10 ? s : s + 'T00:00:00');
+  const moraStart = loan.mora_start_date ? toLocalMidnight(loan.mora_start_date) : null;
   let total = 0;
   for (const inst of installments) {
     if (inst.status === 'paid' || inst.status === 'waived') continue;
     const effectiveDue = inst.deferred_due_date
-      ? new Date(inst.deferred_due_date)
-      : new Date(inst.due_date);
+      ? toLocalMidnight(inst.deferred_due_date)
+      : toLocalMidnight(inst.due_date);
     const startFrom = moraStart && moraStart.getTime() > effectiveDue.getTime()
       ? moraStart
       : effectiveDue;
@@ -399,17 +414,21 @@ export interface AgingResult {
 }
 
 export function agingBuckets(loans: AgingLoan[]): AgingResult {
+  // FIX P1 (Jun 2026): unificar metrica. Antes el bucket "current" sumaba
+  // total_balance mientras los demas sumaban mora_balance, dando totales
+  // inconsistentes entre filas. Ahora todos usan total_balance.
   const aging: AgingResult = {
     current: 0, d1_7: 0, d8_15: 0, d16_30: 0, over30: 0,
     amounts: { current: 0, d1_7: 0, d8_15: 0, d16_30: 0, over30: 0 },
   };
   for (const l of loans) {
     const d = l.days_overdue || 0;
-    if (d === 0)      { aging.current++; aging.amounts.current += l.total_balance || 0; }
-    else if (d <= 7)  { aging.d1_7++;    aging.amounts.d1_7    += l.mora_balance || 0; }
-    else if (d <= 15) { aging.d8_15++;   aging.amounts.d8_15   += l.mora_balance || 0; }
-    else if (d <= 30) { aging.d16_30++;  aging.amounts.d16_30  += l.mora_balance || 0; }
-    else              { aging.over30++;  aging.amounts.over30  += l.mora_balance || 0; }
+    const amount = l.total_balance || 0;
+    if (d === 0)      { aging.current++; aging.amounts.current += amount; }
+    else if (d <= 7)  { aging.d1_7++;    aging.amounts.d1_7    += amount; }
+    else if (d <= 15) { aging.d8_15++;   aging.amounts.d8_15   += amount; }
+    else if (d <= 30) { aging.d16_30++;  aging.amounts.d16_30  += amount; }
+    else              { aging.over30++;  aging.amounts.over30  += amount; }
   }
   return aging;
 }

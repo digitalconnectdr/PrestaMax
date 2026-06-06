@@ -125,9 +125,10 @@ describe('agingBuckets', () => {
     expect(r.d8_15).toBe(1);
     expect(r.d16_30).toBe(1);
     expect(r.over30).toBe(2);
+    // FIX P1 (Jun 2026): todos los buckets usan total_balance ahora
     expect(r.amounts.current).toBe(1000); // total_balance
-    expect(r.amounts.d1_7).toBe(50);       // mora_balance
-    expect(r.amounts.over30).toBe(1200);   // 500 + 700
+    expect(r.amounts.d1_7).toBe(1000);    // total_balance (antes: mora_balance)
+    expect(r.amounts.over30).toBe(2000);  // 1000 + 1000 (antes: 500+700 mora)
   });
 
   it('lista vacía da ceros', () => {

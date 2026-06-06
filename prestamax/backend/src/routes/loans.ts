@@ -459,9 +459,11 @@ router.post('/:id/migrate-history', authenticate, requireTenant, requirePermissi
     // asumimos que el cliente pagaba puntualmente — si no, se debe usar el
     // flujo manual de pagos para registrar atrasos historicos reales).
     // mora_days=0 para que no penalice el score por atrasos retroactivos.
+    // FIX P1 (Jun 2026): date(due_date) extrae solo 'YYYY-MM-DD' — evita
+    // que un timestamp con timezone copiado tal cual desfase la fecha al renderizar.
     for (const inst of toPay) {
       db.prepare(`UPDATE installments SET paid_principal=principal_amount, paid_interest=interest_amount,
-        paid_total=principal_amount+interest_amount, status='paid', paid_at=due_date,
+        paid_total=principal_amount+interest_amount, status='paid', paid_at=date(due_date),
         mora_days=0, paid_mora=0 WHERE id=?`).run(inst.id);
     }
 
@@ -536,8 +538,9 @@ router.post('/:id/fix-migrated-paid-at', authenticate, requireTenant, requirePer
       ORDER BY created_at DESC LIMIT 1`).get(req.params.id, req.tenant.id) as any;
     if (!migPay) return res.status(400).json({ error: 'Este prestamo no tiene un registro de migracion para corregir.' });
 
+    // FIX P1 (Jun 2026): date() para normalizar timezone-safe
     const result = db.prepare(`UPDATE installments
-      SET paid_at=due_date, mora_days=0, paid_mora=0
+      SET paid_at=date(due_date), mora_days=0, paid_mora=0
       WHERE loan_id=? AND status='paid' AND paid_at IS NOT NULL`).run(req.params.id);
 
     if (loan.client_id) recalcClientScoreLoans(db, loan.client_id);
@@ -629,7 +632,10 @@ router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'),
     if (d.first_payment_date!== undefined) alwaysFields.first_payment_date= d.first_payment_date || null;
     if (d.maturity_date     !== undefined) alwaysFields.maturity_date     = d.maturity_date || null;
 
-    // ── Fields editable only pre-disbursement (also allowed post-disbursement as record corrections by owners) ──
+    // ── Fields del schedule (rate/term/freq/amortizacion) ────────────────────
+    // FIX P1 (Jun 2026): se permite editar incluso en prestamo desembolsado.
+    // Al regenerar: si hay pagos previos, solo se reemplazan las cuotas pending
+    // (reestructuracion ligera) con base en el saldo principal restante.
     const termFields: Record<string, any> = {};
     if (d.requested_amount   !== undefined) termFields.requested_amount   = parseFloat(d.requested_amount);
     if (d.approved_amount    !== undefined) termFields.approved_amount    = parseFloat(d.approved_amount);
@@ -646,27 +652,88 @@ router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'),
     const values = [...Object.values(updates), req.params.id, req.tenant.id];
     db.prepare(`UPDATE loans SET ${setClauses} WHERE id=? AND tenant_id=?`).run(...values);
 
-    // ── Regenerate installment schedule if pre-disbursement and term fields changed ──
-    const scheduleChanged = !isDisbursed && Object.keys(termFields).length > 0;
+    // ── Regenerate installment schedule ──────────────────────────────────────
+    const scheduleChanged = Object.keys(termFields).length > 0;
     if (scheduleChanged) {
       const updated = db.prepare('SELECT * FROM loans WHERE id=?').get(req.params.id) as any;
-      if (updated.first_payment_date) {
-        const schedule = generateSchedule({
-          amount: updated.disbursed_amount || updated.approved_amount || updated.requested_amount,
-          rate: updated.rate, rateType: updated.rate_type, term: updated.term,
-          termUnit: updated.term_unit, freq: updated.payment_frequency,
-          type: updated.amortization_type,
-          firstDate: new Date(updated.first_payment_date),
-        });
-        if (schedule.length > 0) {
-          db.prepare('DELETE FROM installments WHERE loan_id=?').run(req.params.id);
-          const insertInst = db.prepare('INSERT INTO installments (id,loan_id,installment_number,due_date,principal_amount,interest_amount,total_amount,status) VALUES (?,?,?,?,?,?,?,?)');
-          for (const s of schedule) {
-            insertInst.run(uuid(), req.params.id, s.installment_number, s.due_date, s.principal_amount, s.interest_amount, s.total_amount, 'pending');
+
+      if (!isDisbursed) {
+        // PRE-DESEMBOLSO: regenerar todo desde cero
+        if (updated.first_payment_date) {
+          const schedule = generateSchedule({
+            amount: updated.disbursed_amount || updated.approved_amount || updated.requested_amount,
+            rate: updated.rate, rateType: updated.rate_type, term: updated.term,
+            termUnit: updated.term_unit, freq: updated.payment_frequency,
+            type: updated.amortization_type,
+            firstDate: new Date(updated.first_payment_date),
+          });
+          if (schedule.length > 0) {
+            db.prepare('DELETE FROM installments WHERE loan_id=?').run(req.params.id);
+            const insertInst = db.prepare('INSERT INTO installments (id,loan_id,installment_number,due_date,principal_amount,interest_amount,total_amount,status) VALUES (?,?,?,?,?,?,?,?)');
+            for (const s of schedule) {
+              insertInst.run(uuid(), req.params.id, s.installment_number, s.due_date, s.principal_amount, s.interest_amount, s.total_amount, 'pending');
+            }
+            const totalInterest = schedule.reduce((s: number, i: any) => s + i.interest_amount, 0);
+            const maturityDate = schedule[schedule.length - 1].due_date;
+            db.prepare('UPDATE loans SET total_interest=?,maturity_date=?,updated_at=? WHERE id=? AND tenant_id=?').run(r2(totalInterest), maturityDate, now(), req.params.id, req.tenant.id);
           }
-          const totalInterest = schedule.reduce((s: number, i: any) => s + i.interest_amount, 0);
-          const maturityDate = schedule[schedule.length - 1].due_date;
-          db.prepare('UPDATE loans SET total_interest=?,maturity_date=?,updated_at=? WHERE id=? AND tenant_id=?').run(r2(totalInterest), maturityDate, now(), req.params.id, req.tenant.id);
+        }
+      } else {
+        // POST-DESEMBOLSO (reestructuracion): solo regenerar cuotas pending
+        const paidInstallments = db.prepare(
+          `SELECT * FROM installments WHERE loan_id=? AND status IN ('paid','partial','interest_paid') ORDER BY installment_number`
+        ).all(req.params.id) as any[];
+        const pendingInstallments = db.prepare(
+          `SELECT * FROM installments WHERE loan_id=? AND status NOT IN ('paid','partial','interest_paid','waived') ORDER BY installment_number`
+        ).all(req.params.id) as any[];
+        const principalBalance = r2(updated.principal_balance || 0);
+
+        if (principalBalance > 0.01 && pendingInstallments.length > 0) {
+          const refDateStr = pendingInstallments[0].due_date as string;
+          const firstDate = new Date(refDateStr.length > 10 ? refDateStr : refDateStr + 'T00:00:00');
+          const newCount = getInstallmentCount(updated.term, updated.term_unit, updated.payment_frequency);
+          const remainingCount = Math.max(1, newCount - paidInstallments.length);
+
+          let scheduleTerm = remainingCount;
+          let scheduleTermUnit: 'months' | 'biweekly' | 'weeks' | 'days' | 'years' = 'months';
+          switch (updated.payment_frequency) {
+            case 'daily':     scheduleTermUnit = 'days'; break;
+            case 'weekly':    scheduleTermUnit = 'weeks'; break;
+            case 'biweekly':  scheduleTermUnit = 'biweekly'; break;
+            case 'monthly':   scheduleTermUnit = 'months'; break;
+            case 'quarterly': scheduleTerm = remainingCount * 3; scheduleTermUnit = 'months'; break;
+            case 'annual':
+            case 'yearly':    scheduleTermUnit = 'years'; break;
+            default:          scheduleTermUnit = 'months';
+          }
+          const newSchedule = libGenerateSchedule({
+            amount: principalBalance,
+            rate: updated.rate, rateType: updated.rate_type,
+            term: scheduleTerm, termUnit: scheduleTermUnit,
+            freq: updated.payment_frequency, type: updated.amortization_type,
+            firstDate,
+          });
+
+          if (newSchedule.length > 0) {
+            db.prepare(`DELETE FROM installments WHERE loan_id=? AND status NOT IN ('paid','partial','interest_paid','waived')`).run(req.params.id);
+            const insertInst = db.prepare('INSERT INTO installments (id,loan_id,installment_number,due_date,principal_amount,interest_amount,total_amount,status) VALUES (?,?,?,?,?,?,?,?)');
+            const startNum = paidInstallments.length;
+            for (let i = 0; i < newSchedule.length; i++) {
+              const s = newSchedule[i];
+              insertInst.run(uuid(), req.params.id, startNum + i + 1, s.due_date, s.principal_amount, s.interest_amount, s.total_amount, 'pending');
+            }
+            const paidInterest = paidInstallments.reduce((acc, ins) => acc + (ins.interest_amount || 0), 0);
+            const newInterest  = newSchedule.reduce((acc, s) => acc + s.interest_amount, 0);
+            const maturityDate = newSchedule[newSchedule.length - 1].due_date;
+            db.prepare(`UPDATE loans SET total_interest=?, maturity_date=?, interest_balance=?, total_balance=?, updated_at=? WHERE id=? AND tenant_id=?`)
+              .run(r2(paidInterest + newInterest), maturityDate, r2(newInterest), r2(principalBalance + newInterest), now(), req.params.id, req.tenant.id);
+
+            db.prepare(`INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)`).run(
+              uuid(), req.tenant.id, req.user.id, req.user.full_name, 'loan_restructured', 'loan', req.params.id,
+              `Reestructuro prestamo activo: ${newSchedule.length} cuotas regeneradas sobre saldo RD$${principalBalance.toLocaleString()}`,
+              JSON.stringify({ restructured: true, new_installments: newSchedule.length, principal_balance: principalBalance })
+            );
+          }
         }
       }
     }
