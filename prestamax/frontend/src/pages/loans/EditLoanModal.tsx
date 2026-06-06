@@ -75,7 +75,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
     }).catch(() => {})
   }, [])
 
-  // Detecta si el usuario cambio algun campo del schedule (tasa/plazo/freq/amortizacion)
+  // Detecta si el usuario cambio algun campo del schedule
   const scheduleFieldsChanged = (): boolean => {
     return (
       parseFloat(form.rate) !== (loan.rate ?? 0) ||
@@ -91,13 +91,13 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
     // Confirmacion extra si vamos a reestructurar un prestamo activo
     if (isDisbursed && scheduleFieldsChanged()) {
       const ok = window.confirm(
-        '⚠️ REESTRUCTURACIÓN DE PRÉSTAMO\n\n' +
-        'Estás cambiando tasa/plazo/frecuencia/amortización de un préstamo activo.\n\n' +
+        '\u26A0\uFE0F REESTRUCTURACION DE PRESTAMO\n\n' +
+        'Estas cambiando tasa/plazo/frecuencia/amortizacion de un prestamo activo.\n\n' +
         'El sistema:\n' +
-        '• MANTENDRÁ intactas las cuotas ya pagadas o parciales.\n' +
-        '• REGENERARÁ las cuotas pendientes con base en el saldo principal restante.\n' +
-        '• Registrará esta acción en el historial de auditoría.\n\n' +
-        '¿Confirmas la reestructuración?'
+        '* MANTENDRA intactas las cuotas ya pagadas o parciales.\n' +
+        '* REGENERARA las cuotas pendientes con base en el saldo principal restante.\n' +
+        '* Registrara esta accion en el historial de auditoria.\n\n' +
+        'Confirmas la reestructuracion?'
       )
       if (!ok) return
     }
@@ -482,4 +482,55 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                 onChange={e => set('purpose', e.target.value)}
                 className={inputCls}
                 placeholder="Ej. Capital de trabajo, Consumo personal..."
-              /
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Notas Internas</label>
+              <textarea
+                value={form.notes}
+                onChange={e => set('notes', e.target.value)}
+                rows={4}
+                className={`${inputCls} resize-none`}
+                placeholder="Notas internas sobre el préstamo..."
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Cargo de Pr&#xF3;rroga</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.prorrogaFee}
+                  onChange={e => set('prorrogaFee', e.target.value)}
+                  className={`${inputCls} pl-8`}
+                  placeholder="0.00"
+                />
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Cargo fijo para extender el vencimiento de una cuota un per&#xED;odo. Dejar en 0 para deshabilitar la opci&#xF3;n de pr&#xF3;rroga.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex gap-2 mt-6 pt-4 border-t border-slate-200">
+          <Button variant="secondary" className="flex-1" onClick={onClose} disabled={isSubmitting}>
+            Cancelar
+          </Button>
+          <Button
+            className="flex-1 bg-blue-600 hover:bg-blue-700"
+            onClick={handleSave}
+            disabled={isSubmitting || permissionDenied}
+          >
+            {isSubmitting ? 'Guardando...' : '✓ Guardar Cambios'}
+          </Button>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+export default EditLoanModal
