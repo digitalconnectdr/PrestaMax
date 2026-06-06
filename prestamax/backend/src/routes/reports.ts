@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { getDb } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+// Importamos calcMora unificado para evitar drift entre copias.
+import { calcMora as libCalcMora } from '../lib/calculations';
 const router = Router();
 
 router.get('/dashboard', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
@@ -471,40 +473,14 @@ router.get('/projection', authenticate, requireTenant, requirePermission('report
       rangeInstByLoan[inst.loan_id].push(inst);
     }
 
-    // ── Helper: replicate calcMora from payments.ts ───────────────────────────
+    // FIX P0 (Jun 2026): usar el calcMora unificado de lib/calculations.ts en vez
+    // de re-implementarlo aqui. La copia anterior tenia 2 bugs:
+    //  1) new Date(due_date + 'T00:00:00') con due_date ya en formato ISO completo
+    //     ('2026-01-15T00:00:00.000Z') producia 'Invalid Date' -> mora = NaN.
+    //  2) Drift futuro: cada cambio a calcMora habia que aplicarlo 3 veces.
+    // libCalcMora maneja correctamente fechas ISO y plain YYYY-MM-DD via new Date().
     function r2(n: number) { return Math.round(n * 100) / 100; }
-
-    function calcMora(loan: any, pendingInsts: any[], asOf: Date): number {
-      const useFixed = !!loan.mora_fixed_enabled;
-      const fixedAmt = loan.mora_fixed_amount || 0;
-      const base     = loan.mora_base || 'cuota_vencida';
-      const moraStart = loan.mora_start_date ? new Date(loan.mora_start_date + 'T00:00:00') : null;
-      let total = 0;
-      for (const inst of pendingInsts) {
-        const effectiveDue = inst.deferred_due_date
-          ? new Date(inst.deferred_due_date + 'T00:00:00')
-          : new Date(inst.due_date + 'T00:00:00');
-        const startFrom = moraStart && moraStart.getTime() > effectiveDue.getTime()
-          ? moraStart
-          : effectiveDue;
-        const days     = Math.max(0, Math.floor((asOf.getTime() - startFrom.getTime()) / 86400000));
-        const moraDays = Math.max(0, days - (loan.mora_grace_days || 0));
-        if (moraDays > 0) {
-          if (useFixed) {
-            total += fixedAmt;
-          } else {
-            let baseAmount = 0;
-            if (base === 'cuota_vencida') {
-              baseAmount = r2((inst.principal_amount + inst.interest_amount) - (inst.paid_total || 0));
-            } else {
-              baseAmount = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
-            }
-            total += Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays;
-          }
-        }
-      }
-      return r2(total);
-    }
+    const calcMora = libCalcMora;
 
     // ── Build projection items ────────────────────────────────────────────────
     const items: any[] = [];
@@ -537,7 +513,7 @@ router.get('/projection', authenticate, requireTenant, requirePermission('report
 
       const isOverdue = ['overdue','in_mora'].includes(loan.status);
       const daysLate  = pendingInsts.length > 0
-        ? Math.max(0, Math.floor((asOfDate.getTime() - new Date((pendingInsts[0].deferred_due_date || pendingInsts[0].due_date) + 'T00:00:00').getTime()) / 86400000) - (loan.mora_grace_days || 0))
+        ? Math.max(0, Math.floor((asOfDate.getTime() - new Date(pendingInsts[0].deferred_due_date || pendingInsts[0].due_date).getTime()) / 86400000) - (loan.mora_grace_days || 0))
         : 0;
 
       summaryCapital  += capital;
@@ -580,7 +556,7 @@ router.get('/projection', authenticate, requireTenant, requirePermission('report
       if (mora <= 0) continue;
 
       const daysLate = Math.max(0,
-        Math.floor((asOfDate.getTime() - new Date((pendingInsts[0].deferred_due_date || pendingInsts[0].due_date) + 'T00:00:00').getTime()) / 86400000)
+        Math.floor((asOfDate.getTime() - new Date(pendingInsts[0].deferred_due_date || pendingInsts[0].due_date).getTime()) / 86400000)
         - (loan.mora_grace_days || 0)
       );
 

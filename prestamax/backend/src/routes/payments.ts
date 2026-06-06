@@ -598,7 +598,7 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
 
     // Recalculate days_overdue from remaining unpaid installments after this payment
     const remainingOverdue = db.prepare(`
-      SELECT MIN(CAST(julianday('now') - julianday(COALESCE(i.deferred_due_date, i.due_date)) AS INTEGER)) as oldest_overdue
+      SELECT MAX(CAST(julianday('now') - julianday(COALESCE(i.deferred_due_date, i.due_date)) AS INTEGER)) as oldest_overdue
       FROM installments i
       WHERE i.loan_id=? AND i.status IN ('pending','partial')
         AND COALESCE(i.deferred_due_date, i.due_date) < date('now')
@@ -754,18 +754,27 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
       }
       principalBalance = r2(Math.max(0, principalBalance));
       interestBalance = r2(Math.max(0, interestBalance));
-      const moraBalance = r2(Math.max(0, (loan.mora_balance || 0) - (payment.applied_mora || 0)));
+      // FIX P0 (Jun 2026): re-calcular mora desde cero con calcMora sobre las cuotas
+      // post-reaplicacion. La aritmetica anterior restaba la mora del pago anulado
+      // sobre loan.mora_balance que YA habia sido reducido en el pago original,
+      // produciendo descuento DOBLE -> mora_balance subestimada.
+      const moraBalance = r2(calcMora(loan, finalInst, new Date()));
       const totalBalance = r2(principalBalance + interestBalance + moraBalance);
-      const newStatus = principalBalance <= 0.01 ? 'liquidated' : 'active';
 
       // Recalculate days_overdue after void
       const voidedOverdue = db.prepare(`
-        SELECT MIN(CAST(julianday('now') - julianday(COALESCE(i.deferred_due_date, i.due_date)) AS INTEGER)) as oldest_overdue
+        SELECT MAX(CAST(julianday('now') - julianday(COALESCE(i.deferred_due_date, i.due_date)) AS INTEGER)) as oldest_overdue
         FROM installments i
         WHERE i.loan_id=? AND i.status IN ('pending','partial')
           AND COALESCE(i.deferred_due_date, i.due_date) < date('now')
       `).get(loan.id) as any;
       const voidDaysOverdue = Math.max(0, voidedOverdue?.oldest_overdue ?? 0);
+
+      // FIX P1: respetar in_mora cuando hay cuotas vencidas tras grace_days.
+      // Antes el void siempre devolvia 'active' aunque hubiera mora real.
+      const newStatus = principalBalance <= 0.01
+        ? 'liquidated'
+        : (voidDaysOverdue > (loan.mora_grace_days || 0)) ? 'in_mora' : 'active';
 
       db.prepare(`UPDATE loans SET principal_balance=?,interest_balance=?,mora_balance=?,total_balance=?,
         total_paid=?,total_paid_principal=?,total_paid_interest=?,total_paid_mora=?,

@@ -333,7 +333,7 @@ router.post('/:id/disburse', authenticate, requireTenant, requirePermission('loa
     // su estado real (no quedar como 'active' verde si ya esta atrasado).
     if (disbIsPast) {
       const overdueRow = db.prepare(`
-        SELECT MIN(CAST(julianday('now') - julianday(due_date) AS INTEGER)) as oldest_overdue
+        SELECT MAX(CAST(julianday('now') - julianday(due_date) AS INTEGER)) as oldest_overdue
         FROM installments
         WHERE loan_id=? AND status='pending' AND date(due_date) < date('now')
       `).get(req.params.id) as any;
@@ -477,7 +477,7 @@ router.post('/:id/migrate-history', authenticate, requireTenant, requirePermissi
 
     // Recalcular dias overdue de cuotas restantes
     const overdueRow = db.prepare(`
-      SELECT MIN(CAST(julianday('now') - julianday(due_date) AS INTEGER)) as oldest_overdue
+      SELECT MAX(CAST(julianday('now') - julianday(due_date) AS INTEGER)) as oldest_overdue
       FROM installments
       WHERE loan_id=? AND status IN ('pending','partial') AND date(due_date) < date('now')
     `).get(req.params.id) as any;
