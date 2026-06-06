@@ -2,88 +2,28 @@ import { Router, Response } from 'express';
 import { getDb, uuid, now, r2 } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { generateDraft } from '../services/whatsappService';
+// FIX P0 (Jun 2026): usar el MOTOR UNIFICADO de calculations.ts que respeta
+// freq + rateType correctamente. La version inline anterior (eliminada) calculaba
+// mRate ignorando freq, asi prestamos no-mensuales se desembolsaban con cuotas
+// INFLADAS hasta ~90%. Ahora todos los motores (preview, calculadora, BD) usan
+// la misma logica.
+import { generateSchedule as libGenerateSchedule, getInstallmentCount, getNextDate } from '../lib/calculations';
 
 const router = Router();
 
-function getNextDate(d: Date, freq: string): Date {
-  const nd = new Date(d);
-  if (freq==='daily') nd.setDate(nd.getDate()+1);
-  else if (freq==='every_2_days') nd.setDate(nd.getDate()+2);
-  else if (freq==='weekly') nd.setDate(nd.getDate()+7);
-  else if (freq==='biweekly') nd.setDate(nd.getDate()+15);
-  else if (freq==='quarterly') nd.setMonth(nd.getMonth()+3);
-  else if (freq==='annual' || freq==='yearly') nd.setFullYear(nd.getFullYear()+1);
-  else nd.setMonth(nd.getMonth()+1); // monthly (default)
-  return nd;
-}
-
-// Calcula el numero total de cuotas a generar.
-// Soporta todas las combinaciones de termUnit (months|biweekly|weeks|days|years)
-// y freq (daily|every_2_days|weekly|biweekly|monthly|quarterly|annual).
-// IMPORTANTE: si termUnit coincide con freq (ej. termUnit=biweekly, freq=biweekly)
-// el numero de cuotas es exactamente el termino — caso comun en RD.
-function getInstallmentCount(term: number, termUnit: string, freq: string): number {
-  // Caso directo: termUnit y freq son la misma unidad → term cuotas
-  if (
-    (termUnit === 'months'   && freq === 'monthly')  ||
-    (termUnit === 'biweekly' && freq === 'biweekly') ||
-    (termUnit === 'weeks'    && freq === 'weekly')   ||
-    (termUnit === 'days'     && freq === 'daily')
-  ) return Math.max(1, Math.round(term));
-
-  // Convertir term a meses
-  let months: number;
-  if      (termUnit === 'months')   months = term;
-  else if (termUnit === 'years')    months = term * 12;
-  else if (termUnit === 'biweekly') months = term / 2;       // 2 quincenas = 1 mes
-  else if (termUnit === 'weeks')    months = term / 4.33;
-  else if (termUnit === 'days')     months = term / 30;
-  else                              months = term;            // fallback: tratar como meses
-
-  // Convertir meses a cuotas segun freq
-  let n: number;
-  if      (freq === 'daily')        n = months * 30;
-  else if (freq === 'every_2_days') n = months * 15;
-  else if (freq === 'weekly')       n = months * 4.33;
-  else if (freq === 'biweekly')     n = months * 2;
-  else if (freq === 'quarterly')    n = months / 3;
-  else if (freq === 'annual' || freq === 'yearly') n = months / 12;
-  else                              n = months;               // monthly (default)
-
-  return Math.max(1, Math.round(n));
-}
-
+// Wrapper que mantiene la firma anterior (params object) y delega a la libreria.
+// Pasa la frecuencia REAL para que getRatePerInstallment(rate, rateType, freq) calcule bien.
 function generateSchedule(params: any) {
-  const { amount, rate, rateType, term, termUnit, freq, type, firstDate } = params;
-  const mRate = rateType==='daily'?rate/100*30:rateType==='weekly'?rate/100*4.33:rateType==='biweekly'?rate/100*2:rateType==='annual'?rate/100/12:rate/100;
-  const n = getInstallmentCount(term, termUnit, freq);
-  const schedule = [];
-  let balance = amount;
-  let currentDate = new Date(firstDate);
-  const fixedPayment = mRate>0 ? amount*(mRate*Math.pow(1+mRate,n))/(Math.pow(1+mRate,n)-1) : amount/n;
-
-  for (let i=1; i<=n; i++) {
-    let principal=0, interest=0;
-    if (type==='fixed_installment') {
-      interest = r2(balance*mRate);
-      principal = i===n ? r2(balance) : r2(fixedPayment-interest);
-    } else if (type==='flat_interest') {
-      interest = r2(amount*mRate);
-      principal = r2(amount/n);
-    } else if (type==='interest_only') {
-      interest = r2(balance*mRate);
-      principal = i===n ? r2(balance) : 0;
-    } else {
-      interest = r2(balance*mRate);
-      principal = r2(amount/n);
-    }
-    principal = Math.max(0, Math.min(principal, balance));
-    balance = r2(balance - principal);
-    schedule.push({ installment_number:i, due_date:currentDate.toISOString(), principal_amount:principal, interest_amount:interest, total_amount:r2(principal+interest), status:'pending' });
-    currentDate = getNextDate(currentDate, freq);
-    if (Math.abs(balance)<0.01) break;
-  }
-  return schedule;
+  return libGenerateSchedule({
+    amount: params.amount,
+    rate: params.rate,
+    rateType: params.rateType,
+    term: params.term,
+    termUnit: params.termUnit,
+    freq: params.freq,
+    type: params.type,
+    firstDate: params.firstDate,
+  });
 }
 
 router.get('/', authenticate, requireTenant, requirePermission('loans.view'), (req: AuthRequest, res: Response) => {
