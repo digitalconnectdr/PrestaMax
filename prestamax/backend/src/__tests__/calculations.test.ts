@@ -352,3 +352,196 @@ describe('generateSchedule — frecuencia ANUAL', () => {
   });
 });
 
+
+// ─── TESTS NUEVOS (Jun 2026) — escenarios reales que causaron bugs ───────────
+
+describe('generateSchedule — rateType DISTINTO de freq (escenarios reales)', () => {
+  it('tasa MENSUAL 5% con freq DIARIA, 30 cuotas — bug previo daba ~650/cuota', () => {
+    // Bug previo: disburse usaba inline schedule que ignoraba freq y trataba
+    // rate como simple porcentaje, generando cuotas casi 2x demasiado caras.
+    const s = generateSchedule({
+      amount: 10000, rate: 5, rateType: 'monthly', term: 30, termUnit: 'days',
+      freq: 'daily', type: 'fixed_installment', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(30);
+    // Suma total ~ 10342 (10k + ~342 interés total con tasa diaria efectiva ≈ 0.164%)
+    const total = s.reduce((a, r) => a + r.principal_amount + r.interest_amount, 0);
+    // No debe pasar de ~10500 (caso de bug daba ~19500)
+    expect(total).toBeLessThan(10600);
+    expect(total).toBeGreaterThan(10100);
+  });
+
+  it('tasa ANUAL 24% con freq MENSUAL = tasa efectiva 2%/cuota', () => {
+    const s = generateSchedule({
+      amount: 12000, rate: 24, rateType: 'annual', term: 12, termUnit: 'months',
+      freq: 'monthly', type: 'flat_interest', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(12);
+    // 24% anual -> 2% mensual. 12000 * 0.02 = 240/mes interés
+    expect(s[0].interest_amount).toBeCloseTo(240, 0);
+  });
+
+  it('tasa DIARIA 0.5% con freq SEMANAL = tasa efectiva 3.5%/semana aprox', () => {
+    const s = generateSchedule({
+      amount: 5000, rate: 0.5, rateType: 'daily', term: 8, termUnit: 'weeks',
+      freq: 'weekly', type: 'flat_interest', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(8);
+    // 0.5% diario ~ 3.5% semanal (7 días). 5000 * 0.035 = 175
+    expect(s[0].interest_amount).toBeGreaterThan(150);
+    expect(s[0].interest_amount).toBeLessThan(200);
+  });
+});
+
+describe('calcMora — mora_start_date', () => {
+  it('si mora_start_date > due_date, mora se cuenta desde mora_start_date', () => {
+    // Cuota vencida hace 60 días, pero el cliente acordó empezar mora hace solo 10
+    const dueDate = new Date('2026-04-01').toISOString().slice(0,10);
+    const moraStart = new Date('2026-05-25').toISOString().slice(0,10);
+    const asOf = new Date('2026-06-05');
+    const loan = {
+      mora_base: 'cuota_vencida' as const,
+      mora_rate_daily: 0.001, // 0.1%/día
+      mora_grace_days: 0,
+      mora_start_date: moraStart,
+    };
+    const installments = [{
+      status: 'overdue',
+      due_date: dueDate,
+      principal_amount: 1000,
+      interest_amount: 0,
+      paid_total: 0,
+    }];
+    const mora = calcMora(loan, installments, asOf);
+    // Días desde moraStart hasta asOf: 11 días (25 may al 5 jun)
+    // 1000 * 0.001 * 11 = 11
+    expect(mora).toBeCloseTo(11, 0);
+  });
+
+  it('si mora_start_date < due_date, mora se cuenta desde due_date (no antes)', () => {
+    const dueDate = '2026-05-15';
+    const moraStart = '2026-01-01'; // muy temprano
+    const asOf = new Date('2026-05-25');
+    const loan = {
+      mora_base: 'cuota_vencida' as const,
+      mora_rate_daily: 0.001,
+      mora_grace_days: 0,
+      mora_start_date: moraStart,
+    };
+    const installments = [{
+      status: 'overdue',
+      due_date: dueDate,
+      principal_amount: 1000,
+      interest_amount: 0,
+      paid_total: 0,
+    }];
+    const mora = calcMora(loan, installments, asOf);
+    // Solo 10 días vencidos: 1000 * 0.001 * 10 = 10
+    expect(mora).toBeCloseTo(10, 0);
+  });
+
+  it('mora_start_date null: comportamiento clásico (desde due_date)', () => {
+    const loan = {
+      mora_base: 'cuota_vencida' as const,
+      mora_rate_daily: 0.001,
+      mora_grace_days: 0,
+      mora_start_date: null,
+    };
+    const installments = [{
+      status: 'overdue',
+      due_date: '2026-05-15',
+      principal_amount: 2000,
+      interest_amount: 0,
+      paid_total: 0,
+    }];
+    const mora = calcMora(loan, installments, new Date('2026-06-04'));
+    // 20 días * 0.001 * 2000 = 40
+    expect(mora).toBeCloseTo(40, 0);
+  });
+
+  it('cuota PAGADA no genera mora aunque mora_start_date sea reciente', () => {
+    const loan = {
+      mora_base: 'cuota_vencida' as const,
+      mora_rate_daily: 0.001,
+      mora_grace_days: 0,
+      mora_start_date: '2026-05-01',
+    };
+    const installments = [{
+      status: 'paid',
+      due_date: '2026-04-15',
+      principal_amount: 1000,
+      interest_amount: 50,
+      paid_total: 1050,
+    }];
+    const mora = calcMora(loan, installments, new Date('2026-06-05'));
+    expect(mora).toBe(0);
+  });
+
+  it('mora respeta días de gracia incluso con mora_start_date', () => {
+    const loan = {
+      mora_base: 'cuota_vencida' as const,
+      mora_rate_daily: 0.001,
+      mora_grace_days: 5, // 5 días gracia
+      mora_start_date: '2026-05-01',
+    };
+    const installments = [{
+      status: 'overdue',
+      due_date: '2026-04-15',
+      principal_amount: 1000,
+      interest_amount: 0,
+      paid_total: 0,
+    }];
+    // asOf = 2026-05-03 → 2 días desde moraStart → con gracia 5 = 0 días de mora
+    const m1 = calcMora(loan, installments, new Date('2026-05-03'));
+    expect(m1).toBe(0);
+    // asOf = 2026-05-10 → 9 días desde moraStart → con gracia 5 = 4 días de mora
+    const m2 = calcMora(loan, installments, new Date('2026-05-10'));
+    expect(m2).toBeCloseTo(1000 * 0.001 * 4, 1);
+  });
+});
+
+describe('getRatePerInstallment — conversiones cruzadas adicionales', () => {
+  it('mensual 30% -> diaria (cuotas diarias) ≈ 0.986%/día', () => {
+    // 30%/mes / 30.4375 días/mes ≈ 0.986%
+    const r = getRatePerInstallment(30, 'monthly', 'daily');
+    expect(r).toBeCloseTo(0.00986, 4);
+  });
+  it('anual 12% -> mensual = 1%/mes', () => {
+    const r = getRatePerInstallment(12, 'annual', 'monthly');
+    expect(r).toBeCloseTo(0.01, 5);
+  });
+  it('diaria 0.1% -> mensual = ~3.04%', () => {
+    const r = getRatePerInstallment(0.1, 'daily', 'monthly');
+    expect(r).toBeCloseTo(0.001 * 30.4375, 4);
+  });
+  it('semanal 2% -> quincenal = 4% (via anualizacion 52->26)', () => {
+    const r = getRatePerInstallment(2, 'weekly', 'biweekly');
+    // 2%/semana * 52 semanas/ano = 104% anual / 26 quincenas = 4%/quincena
+    expect(r).toBeCloseTo(0.04, 5);
+  });
+});
+
+describe('Invariantes de generateSchedule — fixed_installment cuotas constantes', () => {
+  it('todas las cuotas tienen el mismo total (cuota fija)', () => {
+    const s = generateSchedule({
+      amount: 50000, rate: 2, rateType: 'monthly', term: 24, termUnit: 'months',
+      freq: 'monthly', type: 'fixed_installment', firstDate: '2026-01-01',
+    });
+    expect(s.length).toBe(24);
+    const totales = s.map(r => r2(r.principal_amount + r.interest_amount));
+    // Todas las cuotas excepto quizás la última deben ser iguales (±0.05)
+    for (let i = 1; i < s.length - 1; i++) {
+      expect(Math.abs(totales[i] - totales[0])).toBeLessThan(0.05);
+    }
+  });
+
+  it('suma de principal == amount (no over/under amortization)', () => {
+    const amount = 75000;
+    const s = generateSchedule({
+      amount, rate: 1.5, rateType: 'monthly', term: 18, termUnit: 'months',
+      freq: 'monthly', type: 'fixed_installment', firstDate: '2026-01-01',
+    });
+    const totalPrincipal = s.reduce((a, r) => a + r.principal_amount, 0);
+    expect(totalPrincipal).toBeCloseTo(amount, 0);
+  });
+});
