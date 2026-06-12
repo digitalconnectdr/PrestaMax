@@ -38,10 +38,16 @@ export const requireTenant = async (req: AuthRequest, res: Response, next: NextF
     if (!isPlatform) {
       const subStatus = tenant.subscription_status || 'trial';
       const subEnd    = tenant.subscription_end ? new Date(tenant.subscription_end) : null;
-      const isExpired = subStatus === 'expired' || (subEnd && subEnd < new Date());
+      // FIX P0 (Jun 2026): 'pending' (registro con plan pago pero checkout NO
+      // completado) tenia subscription_end=NULL y nunca expiraba -> acceso
+      // completo gratis e indefinido, ademas de evadir el anti-reuso de trial.
+      // Ahora 'pending' se trata como no-activo: solo billing/auth/notifications
+      // accesibles hasta que el webhook de Stripe lo marque 'active'.
+      const isPending = subStatus === 'pending';
+      const isExpired = subStatus === 'expired' || isPending || (subEnd && subEnd < new Date());
       if (isExpired) {
         // Whitelist: endpoints de billing y notificaciones SIEMPRE accesibles
-        // aunque la suscripcion este expirada, sino es imposible renovar.
+        // aunque la suscripcion este expirada/pendiente, sino es imposible pagar.
         // Tambien /auth/* para que el user pueda revisar su estado y cerrar sesion.
         const url = req.originalUrl || req.url || '';
         const allowedWhenExpired = [
@@ -52,11 +58,13 @@ export const requireTenant = async (req: AuthRequest, res: Response, next: NextF
         const isAllowed = allowedWhenExpired.some(p => url.startsWith(p));
         if (!isAllowed) {
           return res.status(402).json({
-            error: 'Tu suscripción ha expirado. Contacta al administrador para renovarla.',
-            code: 'SUBSCRIPTION_EXPIRED'
+            error: isPending
+              ? 'Completa el pago de tu suscripción para activar tu cuenta.'
+              : 'Tu suscripción ha expirado. Contacta al administrador para renovarla.',
+            code: isPending ? 'SUBSCRIPTION_PENDING' : 'SUBSCRIPTION_EXPIRED'
           });
         }
-        // Marca para que el endpoint sepa que esta operando con suscripcion expirada
+        // Marca para que el endpoint sepa que esta operando con suscripcion expirada/pendiente
         (req as any).subscriptionExpired = true;
       }
     }

@@ -297,6 +297,33 @@ router.post('/users/invite', authenticate, requireTenant, requirePermission('set
     const branchId = req.body.branchId || req.body.branch_id;
     if (!email || !fullName) return res.status(400).json({ error: 'Email y nombre son requeridos' });
 
+    // ── FIX P0 (Jun 2026): validar roles del invite ───────────────────────────
+    // Antes este endpoint aceptaba cualquier array de roles del body sin validar.
+    // Un usuario con settings.users podia invitar a alguien con roles:['tenant_owner']
+    // (cuenta que el controla) y tomar el control total del tenant, saltandose la
+    // jerarquia que el PUT de membresias si protege. Replicamos esas defensas aqui.
+    if (!Array.isArray(roles) || roles.length === 0) {
+      return res.status(400).json({ error: 'Debes asignar al menos un rol al usuario.' });
+    }
+    // 1) Solo roles conocidos (los definidos en ROLE_DEFAULTS)
+    const ASSIGNABLE_ROLES = Object.keys(ROLE_DEFAULTS).filter(r => r !== 'tenant_owner');
+    const unknownRoles = roles.filter(r => !ASSIGNABLE_ROLES.includes(r));
+    if (unknownRoles.length > 0) {
+      return res.status(400).json({ error: `Rol(es) no válido(s): ${unknownRoles.join(', ')}` });
+    }
+    // 2) tenant_owner NUNCA se asigna por API (igual que en el PUT)
+    if (roles.includes('tenant_owner')) {
+      return res.status(403).json({ error: 'El rol tenant_owner no puede ser asignado manualmente' });
+    }
+    // 3) Jerarquia: no puedes crear a alguien de nivel >= al tuyo (evita que un
+    //    admin invite a otro admin para escalar lateralmente). Owner (lvl 4) si
+    //    puede crear admins (lvl 3).
+    const requesterLevel = getRequesterRoleLevel(db, req.user.id, req.tenant.id);
+    const newUserLevel = maxRoleLevel(roles);
+    if (newUserLevel >= requesterLevel) {
+      return res.status(403).json({ error: 'No puedes crear un usuario con un rol igual o superior al tuyo.' });
+    }
+
     // ── Plan limit check ──────────────────────────────────────────────────────
     const plan = db.prepare(`
       SELECT p.max_users, p.max_collectors
