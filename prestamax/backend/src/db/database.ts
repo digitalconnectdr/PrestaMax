@@ -1149,3 +1149,24 @@ export function uuid(): string {
 export function now(): string {
   return new Date().toISOString();
 }
+
+/** Siguiente numero de documento con formato `PREFIJO-000123`.
+ *  FIX P2 (Jun 2026): usa MAX(sufijo numerico) en vez de COUNT(*)+1 — con
+ *  COUNT, al eliminar un registro el siguiente documento reutilizaba un
+ *  numero ya emitido (duplicados en prestamos/pagos/recibos).
+ *  `prefix` debe incluir todo lo anterior al numero (p.ej. 'PRE-2026-'). */
+export function nextDocNumber(
+  db: any,
+  table: 'loans' | 'payments' | 'receipts',
+  column: 'loan_number' | 'payment_number' | 'receipt_number',
+  tenantId: string,
+  prefix: string,
+  pad: number,
+): string {
+  const row = db.prepare(
+    `SELECT MAX(CAST(SUBSTR(${column}, ${prefix.length + 1}) AS INTEGER)) AS maxn
+     FROM ${table} WHERE tenant_id=? AND ${column} LIKE ?`
+  ).get(tenantId, prefix + '%') as any;
+  const next = (Number(row?.maxn) || 0) + 1;
+  return `${prefix}${String(next).padStart(pad, '0')}`;
+}

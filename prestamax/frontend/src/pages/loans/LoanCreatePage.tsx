@@ -12,6 +12,7 @@ import toast from 'react-hot-toast'
 import { AMORTIZATION_TYPES, AMORT_LABELS, DEFAULT_AMORTIZATION, getAmortLabel } from '@/lib/amortization'
 import AmortizationHelpModal from '@/components/shared/AmortizationHelpModal'
 import { HelpCircle } from 'lucide-react'
+import { generateSchedule as generateLoanSchedule, getNextDate } from '@/lib/loanMath'
 
 interface Client {
   id: string
@@ -225,77 +226,35 @@ const LoanCreatePage: React.FC = () => {
   const computePreview = () => {
     const amount = parseFloat(form.requestedAmount)
     const rate = parseFloat(form.rate)
-    const n = parseInt(form.term)
-    if (!amount || !rate || !n) return
+    const term = parseInt(form.term)
+    if (!amount || !rate || !term) return
 
-    // Tasa POR PERIODO de cuota: la unica forma matematicamente correcta
-    // cuando rateType y frequency difieren.
-    const yearlyRate =
-      form.rateType === 'daily'    ? rate * 365
-      : form.rateType === 'weekly' ? rate * 52
-      : form.rateType === 'biweekly' ? rate * 26
-      : form.rateType === 'monthly' ? rate * 12
-      : form.rateType === 'annual' ? rate
-      : rate * 12
-    const installmentsPerYear =
-      form.paymentFrequency === 'daily'     ? 365
-      : form.paymentFrequency === 'weekly'  ? 52
-      : form.paymentFrequency === 'biweekly' ? 26
-      : form.paymentFrequency === 'monthly' ? 12
-      : form.paymentFrequency === 'quarterly' ? 4
-      : form.paymentFrequency === 'annual' || form.paymentFrequency === 'yearly' ? 1
-      : 12
-    const mRate = (yearlyRate / 100) / installmentsPerYear
-    const schedule = []
-    let balance = amount
-
-    const fixedPayment = mRate > 0
-      ? amount * (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1)
-      : amount / n
-
-    // Calcular fechas segun firstPaymentDate y frecuencia
+    // FIX P2 (Jun 2026): usar el MISMO motor que el backend (lib/loanMath es
+    // un port exacto de backend/lib/calculations). La version inline anterior
+    // usaba term directo como numero de cuotas (12 meses con frecuencia
+    // semanal mostraba 12 cuotas; el backend generaba ~52) y avanzaba fechas
+    // sin clamp de fin de mes (31 ene → 3 mar).
     const startDate = form.firstPaymentDate
-      ? new Date(form.firstPaymentDate + 'T00:00:00')
-      : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d })()
-    let currentDate = new Date(startDate)
-    const advanceDate = (d: Date, freq: string): Date => {
-      const nd = new Date(d)
-      if (freq === 'daily')         nd.setDate(nd.getDate() + 1)
-      else if (freq === 'weekly')   nd.setDate(nd.getDate() + 7)
-      else if (freq === 'biweekly') nd.setDate(nd.getDate() + 15)
-      else if (freq === 'quarterly')nd.setMonth(nd.getMonth() + 3)
-      else if (freq === 'annual' || freq === 'yearly') nd.setFullYear(nd.getFullYear() + 1)
-      else                          nd.setMonth(nd.getMonth() + 1)  // monthly
-      return nd
-    }
+      ? new Date(form.firstPaymentDate + 'T00:00:00Z')
+      : getNextDate(new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z'), form.paymentFrequency)
 
-    for (let i = 1; i <= n; i++) {
-      let principal = 0, interest = 0
-      if (form.amortizationType === 'fixed_installment') {
-        interest = Math.round(balance * mRate * 100) / 100
-        principal = i === n ? Math.round(balance * 100) / 100 : Math.round((fixedPayment - interest) * 100) / 100
-      } else if (form.amortizationType === 'flat_interest') {
-        interest = Math.round(amount * mRate * 100) / 100
-        principal = Math.round(amount / n * 100) / 100
-      } else if (form.amortizationType === 'interest_only') {
-        interest = Math.round(balance * mRate * 100) / 100
-        principal = i === n ? Math.round(balance * 100) / 100 : 0
-      } else {
-        interest = Math.round(balance * mRate * 100) / 100
-        principal = Math.round(amount / n * 100) / 100
-      }
-      principal = Math.max(0, Math.min(principal, balance))
-      balance = Math.round((balance - principal) * 100) / 100
-      schedule.push({
-        num: i,
-        dueDate: currentDate.toISOString().slice(0, 10),
-        principal, interest,
-        total: Math.round((principal + interest) * 100) / 100,
-        balance,
-      })
-      currentDate = advanceDate(currentDate, form.paymentFrequency)
-      if (Math.abs(balance) < 0.01) break
-    }
+    const schedule = generateLoanSchedule({
+      amount,
+      rate,
+      rateType: form.rateType,
+      term,
+      termUnit: form.termUnit,
+      freq: form.paymentFrequency,
+      type: form.amortizationType,
+      firstDate: startDate,
+    }).map(s => ({
+      num: s.installment_number,
+      dueDate: s.due_date.slice(0, 10),
+      principal: s.principal_amount,
+      interest: s.interest_amount,
+      total: s.total_amount,
+      balance: s.balance,
+    }))
     setPreviewSchedule(schedule)
   }
 

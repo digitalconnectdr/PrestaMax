@@ -36,9 +36,11 @@ router.get('/loans', authenticate, requireTenant, requirePermission('collections
     const targetStr  = target.toISOString().split('T')[0];
 
     // Base WHERE: tenant + active statuses + optional collector scope
+    // FIX P2 (Jun 2026): collector_id parametrizado (antes iba interpolado en el SQL)
     const scopeClause = wideView
       ? `l.status IN ('active', 'in_mora', 'overdue', 'disbursed')`
-      : `l.status IN ('active', 'in_mora', 'overdue', 'disbursed') AND l.collector_id = '${req.user.id}'`;
+      : `l.status IN ('active', 'in_mora', 'overdue', 'disbursed') AND l.collector_id = ?`;
+    const scopeParams: any[] = wideView ? [] : [req.user.id];
 
     // HAVING clause applied after GROUP BY (aggregate filter)
     let havingClause = '';
@@ -89,7 +91,7 @@ router.get('/loans', authenticate, requireTenant, requirePermission('collections
              ELSE 2 END,
         next_due_date ASC
       LIMIT 200
-    `).all(targetStr, req.tenant.id, ...extraParams, targetStr) as any[];
+    `).all(targetStr, req.tenant.id, ...scopeParams, ...extraParams, targetStr) as any[];
 
     // Attach next 3 installments for expanded view
     const result = loans.map((loan: any) => {

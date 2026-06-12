@@ -49,6 +49,20 @@ router.post('/apply/:token', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Las fotos de la cédula (frente y reverso) son obligatorias' });
     }
 
+    // Validación de imágenes base64 (endpoint público sin auth → endurecer):
+    // deben ser data-URLs de imagen y no exceder ~4 MB cada una para evitar
+    // abuso de almacenamiento / DoS por payloads enormes.
+    // Tope por imagen alineado con el límite global de body (2 MB): el par de
+    // fotos debe caber, dejando margen para los demás campos del formulario.
+    const MAX_IMG_CHARS = 950 * 1024; // ~0.93 MB de base64 por imagen
+    const isValidImage = (img: any) =>
+      typeof img === 'string' &&
+      /^data:image\/(png|jpe?g|webp);base64,/.test(img) &&
+      img.length <= MAX_IMG_CHARS;
+    if (!isValidImage(idFrontImage) || !isValidImage(idBackImage)) {
+      return res.status(400).json({ error: 'Las fotos de la cédula deben ser imágenes válidas (JPG/PNG/WEBP) de tamaño moderado.' });
+    }
+
     const id = uuid();
     db.prepare(`
       INSERT INTO loan_requests

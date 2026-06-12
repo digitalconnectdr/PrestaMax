@@ -7,15 +7,24 @@ import { computePermissions } from '../lib/permissions';
 
 const router = Router();
 
+// Hash "señuelo" (de una contraseña aleatoria) para igualar el tiempo de cómputo
+// cuando el email NO existe. Evita la enumeración de usuarios por timing:
+// con o sin usuario, siempre se ejecuta un bcrypt.compare de costo equivalente.
+const DUMMY_HASH = bcrypt.hashSync('prestamax-timing-guard-' + Math.random().toString(36), 12);
+
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email y contraseña requeridos' });
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Credenciales invalidas' });
+    }
     const db = getDb();
     const user = db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1').get(email.toLowerCase()) as any;
-    if (!user) return res.status(401).json({ error: 'Credenciales invalidas' });
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Credenciales invalidas' });
+    // Siempre comparamos contra un hash (real o señuelo) para no filtrar por timing
+    // si el email existe o no.
+    const valid = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
+    if (!user || !valid) return res.status(401).json({ error: 'Credenciales invalidas' });
     db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(now(), user.id);
     const JWT_SECRET = process.env.JWT_SECRET;
     if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');

@@ -7,6 +7,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+import { validateEnv } from './lib/validateEnv';
+validateEnv();
+
 import { initializeDatabase, getDb } from './db/database';
 import { router } from './routes';
 import { webhookHandler } from './routes/billing';
@@ -183,13 +186,33 @@ app.use(errorHandler);
 // del servidor. Evita doble-corrida usando una bandera en memoria.
 import { runOverdueCron } from './services/whatsappService';
 import { createBackup, BACKUP_CONFIG } from './services/backupService';
+import { syncLoanStatuses } from './services/loanStatusSync';
 let lastCronDate = '';
 let lastBackupDate = '';
+let lastStatusSyncDate = '';
+
+// FIX P2 (Jun 2026): sincronizar estados (in_mora/days_overdue/mora_balance)
+// al arrancar, para que listas y dashboards reflejen la realidad tras un deploy
+// o reinicio sin esperar a que alguien abra cada prestamo.
+setTimeout(() => {
+  try {
+    const r = syncLoanStatuses(getDb());
+    console.log(`[loan-status-sync] arranque: ${r.updated}/${r.checked} prestamos actualizados`);
+  } catch (e) { console.error('[loan-status-sync] arranque fallo:', e); }
+}, 5000);
+
 setInterval(() => {
   try {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
     const hour = now.getHours();
+
+    // 1am: sincronizar status/days_overdue/mora_balance de prestamos vivos
+    if (hour === 1 && lastStatusSyncDate !== todayStr) {
+      lastStatusSyncDate = todayStr;
+      const r = syncLoanStatuses(getDb());
+      console.log(`[loan-status-sync] cron OK: ${r.updated}/${r.checked} prestamos actualizados`);
+    }
 
     // 8am: WhatsApp mora cron
     if (hour === 8 && lastCronDate !== todayStr) {

@@ -1,7 +1,17 @@
 import { Router, Response } from 'express';
-import { getDb, uuid, now, r2 } from '../db/database';
+import { getDb, uuid, now, r2, nextDocNumber } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { generateDraft } from '../services/whatsappService';
+// FIX P0/P1 (Jun 2026): usar el motor UNIFICADO de calculations.ts.
+// Antes este archivo tenia copias locales de allocatePayment/calcMora con el
+// mismo codigo — riesgo de drift. Ademas la libreria ahora hace la aritmetica
+// de fechas en calendario UTC (deterministico entre zonas horarias).
+import {
+  allocatePayment,
+  calcMora,
+  calcMoraPerInstallment,
+  getNextDate,
+} from '../lib/calculations';
 
 const router = Router();
 
@@ -59,16 +69,12 @@ function recalcClientScore(db: any, clientId: string): void {
 /**
  * Given an installment's original due_date and the loan payment_frequency,
  * returns the new deferred due date as an ISO string (1 period later).
+ * FIX P0 (Jun 2026): delega en getNextDate (calendario UTC + clamp de fin de
+ * mes). La version anterior usaba setDate/setMonth locales: dependia de la
+ * zona horaria del servidor y ene-31 + 1 mes saltaba a mar-3.
  */
 function calcDeferredDate(dueDateStr: string, paymentFrequency: string): string {
-  const d = new Date(dueDateStr);
-  const freq = paymentFrequency || 'monthly';
-  if (freq === 'daily')        d.setDate(d.getDate() + 1);
-  else if (freq === 'every_2_days') d.setDate(d.getDate() + 2);
-  else if (freq === 'weekly')  d.setDate(d.getDate() + 7);
-  else if (freq === 'biweekly') d.setDate(d.getDate() + 15);
-  else                          d.setMonth(d.getMonth() + 1); // monthly / quarterly
-  return d.toISOString();
+  return getNextDate(new Date(dueDateStr), paymentFrequency || 'monthly').toISOString();
 }
 
 /**
@@ -119,176 +125,9 @@ function applyProrrogaShift(
   }
 }
 
-/** Calculate current mora for a loan as of a given date.
- *  Respects mora_base:
- *   'cuota_vencida'   — mora on the full unpaid installment (principal + interest)
- *   'capital_pendiente' — mora only on unpaid principal
- *   'capital_vencido'   — same as capital_pendiente for overdue installments
- *
- *  When an installment has deferred_due_date set (interest was pre-paid),
- *  mora is calculated from that date instead of the original due_date.
- */
-function calcMora(loan: any, installments: any[], asOf: Date): number {
-  // Reutiliza calcMoraPerInstallment para garantizar consistencia:
-  // SUM(calcMoraPerInstallment) === calcMora siempre.
-  const perInst = calcMoraPerInstallment(loan, installments, asOf);
-  let total = 0;
-  for (const k in perInst) total += perInst[k];
-  return r2(total);
-}
-
-/** Calculate mora INDIVIDUAL per installment as of a given date.
- *  Returns Record<installment_id, moraAmount>.
- *
- *  Misma logica que calcMora() pero retornando por cuota. Es la base para
- *  la nueva asignacion "waterfall por cuota" de allocatePayment:
- *  cada pago liquida la mora de SU cuota antes de pasar a la siguiente,
- *  en vez de cobrar la mora global consolidada antes de tocar cuotas.
- */
-function calcMoraPerInstallment(loan: any, installments: any[], asOf: Date): Record<string, number> {
-  const base     = loan.mora_base || 'cuota_vencida';
-  const useFixed = !!loan.mora_fixed_enabled;
-  const fixedAmt = loan.mora_fixed_amount || 0;
-  // mora_start_date: si esta seteada, la mora se cuenta solo a partir de esa fecha
-  // (para prestamos migrados que ya estaban al dia, evita mora retroactiva).
-  // FIX P1 (Jun 2026): parsear local-midnight para evitar offsets de zona horaria.
-  const toLocalMidnight = (s: string) => new Date(s.length > 10 ? s : s + 'T00:00:00');
-  const moraStart = loan.mora_start_date ? toLocalMidnight(loan.mora_start_date) : null;
-  const out: Record<string, number> = {};
-  for (const inst of installments) {
-    if (inst.status === 'paid' || inst.status === 'waived') continue;
-    const effectiveDue = inst.deferred_due_date
-      ? toLocalMidnight(inst.deferred_due_date)
-      : toLocalMidnight(inst.due_date);
-    // El "punto de partida" para contar dias en mora es el mayor entre
-    // (fecha de vencimiento) y (mora_start_date si existe).
-    const startFrom = moraStart && moraStart.getTime() > effectiveDue.getTime()
-      ? moraStart
-      : effectiveDue;
-    const days     = Math.max(0, Math.floor((asOf.getTime() - startFrom.getTime()) / 86400000));
-    const moraDays = Math.max(0, days - (loan.mora_grace_days || 0));
-    if (moraDays <= 0) { out[inst.id] = 0; continue; }
-    if (useFixed) {
-      out[inst.id] = r2(fixedAmt);
-    } else {
-      let baseAmount = 0;
-      if (base === 'cuota_vencida') {
-        baseAmount = r2((inst.principal_amount + inst.interest_amount) - (inst.paid_total || 0));
-      } else {
-        baseAmount = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
-      }
-      out[inst.id] = r2(Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays);
-    }
-  }
-  return out;
-}
-
-/** Apply amount to pending installments with WATERFALL-PER-INSTALLMENT logic.
- *
- *  NUEVA LOGICA (May 2026): a diferencia del modelo anterior que cobraba
- *  TODA la mora vigente global ANTES de tocar cualquier cuota, ahora por
- *  cada cuota en orden cronologico se aplica: mora-de-esa-cuota -> interes
- *  -> capital. El sobrante pasa a la siguiente cuota.
- *
- *  Motivacion:
- *    - Mas intuitivo para el cliente ("paso de cuota a cuota").
- *    - Cuotas viejas se liquidan ordenadamente en vez de quedar parciales
- *      por absorcion global de mora.
- *    - Coincide con el sistema frances/bancario que ya usamos en el plan.
- *
- *  paymentType:
- *    'regular' | 'full_payoff' — mora -> interes -> capital, por cuota
- *    'interest_only'           — NO cobra mora, NO cobra capital, solo interes
- *    'capital_only'            — NO cobra mora, cobra interes pendiente y luego capital
- *
- *  moraPerInst: mapa { installment_id -> mora_de_esa_cuota } generado por
- *  calcMoraPerInstallment(). Garantiza SUM(moraPerInst) === calcMora().
- */
-function allocatePayment(
-  installments: any[],
-  amount: number,
-  paymentType: string,
-  overpaymentAction: string,
-  moraPerInst: Record<string, number>
-) {
-  let remaining = r2(amount);
-  const updates: Array<{ id: string; addPrincipal: number; addInterest: number; addMora: number }> = [];
-  let totalInterest = 0, totalPrincipal = 0, totalMora = 0, excessToCapital = 0;
-
-  // Reglas por tipo de pago:
-  //   regular / full_payoff -> cobra MORA + INTERES + CAPITAL (en ese orden, por cuota)
-  //   interest_only         -> NO mora, NO capital, solo INTERES
-  //   capital_only          -> NO mora, cobra INTERES pendiente PRIMERO, luego CAPITAL
-  //                             (estandar bancario: no se toca capital con interes vencido)
-  const chargesMora    = paymentType !== 'interest_only' && paymentType !== 'capital_only';
-  const chargesCapital = paymentType !== 'interest_only';
-
-  // Cuotas pendientes en orden cronologico efectivo (deferred_due_date tiene precedencia)
-  const pending = installments
-    .filter(i => !['paid', 'waived'].includes(i.status))
-    .sort((a, b) => {
-      const dateA = a.deferred_due_date || a.due_date;
-      const dateB = b.deferred_due_date || b.due_date;
-      return new Date(dateA).getTime() - new Date(dateB).getTime();
-    });
-
-  for (const inst of pending) {
-    if (remaining <= 0.001) break;
-    let addM = 0, addI = 0, addP = 0;
-
-    // 1) MORA de esta cuota
-    if (chargesMora) {
-      const moraOfInst   = r2(moraPerInst[inst.id] || 0);
-      const moraPendInst = Math.max(0, r2(moraOfInst - (inst.paid_mora || 0)));
-      if (moraPendInst > 0 && remaining > 0) {
-        addM = r2(Math.min(remaining, moraPendInst));
-        totalMora += addM;
-        remaining = r2(remaining - addM);
-      }
-    }
-
-    // 2) INTERES de esta cuota (todos los tipos cobran interes pendiente)
-    const interestOwed = Math.max(0, r2((inst.interest_amount || 0) - (inst.paid_interest || 0)));
-    if (interestOwed > 0 && remaining > 0) {
-      addI = r2(Math.min(remaining, interestOwed));
-      totalInterest += addI;
-      remaining = r2(remaining - addI);
-    }
-
-    // 3) CAPITAL de esta cuota (todos excepto interest_only)
-    if (chargesCapital) {
-      const principalOwed = Math.max(0, r2((inst.principal_amount || 0) - (inst.paid_principal || 0)));
-      if (principalOwed > 0 && remaining > 0) {
-        addP = r2(Math.min(remaining, principalOwed));
-        totalPrincipal += addP;
-        remaining = r2(remaining - addP);
-      }
-    }
-
-    if (addM > 0 || addI > 0 || addP > 0) {
-      updates.push({ id: inst.id, addPrincipal: addP, addInterest: addI, addMora: addM });
-    }
-  }
-
-  // OVERPAYMENT: sobrante despues de cubrir todas las cuotas
-  if (remaining > 0.01) {
-    if (overpaymentAction === 'apply_to_capital' && paymentType !== 'interest_only') {
-      excessToCapital = remaining;
-      totalPrincipal += remaining;
-      remaining = 0;
-    }
-    // 'apply_to_next_installment': remaining queda > 0 (caller decide)
-  }
-
-  return {
-    updates,
-    totalInterest: r2(totalInterest),
-    totalPrincipal: r2(totalPrincipal),
-    totalMora: r2(totalMora),
-    excessToCapital: r2(excessToCapital),
-    remaining: r2(remaining),
-  };
-}
+// NOTA (Jun 2026): calcMora, calcMoraPerInstallment y allocatePayment viven
+// ahora en ../lib/calculations (motor unificado, testeado y timezone-safe).
+// Las copias locales fueron eliminadas para evitar divergencia.
 
 // ─── GET preview (calculate allocation without saving) ────────────────────────
 router.post('/preview', authenticate, requireTenant, requirePermission('payments.create'), (req: AuthRequest, res: Response) => {
@@ -343,7 +182,9 @@ router.post('/preview', authenticate, requireTenant, requirePermission('payments
       amount: parseFloat(amount),
       breakdown: { interest: totalInterest, capital: totalPrincipal, mora: totalMora, excessToCapital },
       remaining,
-      isOverpayment: remaining > 0.01 && payment_type !== 'interest_only',
+      isOverpayment: r2(remaining + excessToCapital) > 0.01,
+      // Monto maximo que el POST aceptara para este tipo de pago (el resto se rechaza)
+      max_payable: r2(parseFloat(amount) - remaining - excessToCapital),
       currentMora: mora,
       totalDue,
       pendingInstallments: pendingInstCount,
@@ -478,9 +319,11 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
         return res.status(400).json({ error: 'Este prestamo no tiene cargo de prorroga configurado.' });
       }
 
+      // FIX P1 (Jun 2026): todas las escrituras de la prorroga en UNA transaccion.
+      db.exec('BEGIN');
+
       // -- Record the payment (no capital/interest reduction) --------
-      const count2 = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE tenant_id=?').get(req.tenant.id) as any).c;
-      const payment_number2 = `PAG-${new Date().getFullYear()}-${String(count2 + 1).padStart(6, '0')}`;
+      const payment_number2 = nextDocNumber(db, 'payments', 'payment_number', req.tenant.id, `PAG-${new Date().getFullYear()}-`, 6);
       const payId2 = uuid();
       db.prepare(`INSERT INTO payments (id,tenant_id,loan_id,registered_by,collector_id,payment_number,payment_date,amount,
         applied_mora,applied_charges,applied_interest,applied_capital,payment_method,bank_account_id,reference,type,notes,currency) VALUES
@@ -518,8 +361,7 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
         const updated2 = db.prepare('SELECT * FROM receipt_series WHERE id=?').get(series2.id) as any;
         receiptNum2 = `${series2.prefix}-${String(updated2.last_number).padStart(6, '0')}`;
       } else {
-        const rc2 = (db.prepare('SELECT COUNT(*) as c FROM receipts WHERE tenant_id=?').get(req.tenant.id) as any).c;
-        receiptNum2 = `REC-${new Date().getFullYear()}-${String(rc2 + 1).padStart(6, '0')}`;
+        receiptNum2 = nextDocNumber(db, 'receipts', 'receipt_number', req.tenant.id, `REC-${new Date().getFullYear()}-`, 6);
       }
       const receiptId2 = uuid();
       db.prepare(`INSERT INTO receipts (id,tenant_id,payment_id,loan_id,issued_by,series_id,receipt_number,
@@ -543,6 +385,7 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
         JSON.stringify({ totalCharge, prorrogaFee, mora: moraAmount, payment_number: payment_number2 })
       );
       recalcClientScore(db, loan.client_id);
+      db.exec('COMMIT');
 
       // Devolver el payment con registered_by_name resuelto (LEFT JOIN users)
       // para que el recibo en el frontend muestre "Registrado por: <Nombre>".
@@ -555,12 +398,36 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     }
     // ----------------------------------------------------------------
 
+    const payAmount = r2(Number(amount));
     const { updates, totalInterest, totalPrincipal, totalMora, excessToCapital, remaining } =
-      allocatePayment(installments, amount, payment_type, overpayment_action, moraPerInst);
+      allocatePayment(installments, payAmount, payment_type, overpayment_action, moraPerInst);
+
+    // ── FIX P1 (Jun 2026): rechazar montos que no se pueden asignar ───────────
+    // Antes, un sobrante con 'apply_to_next_installment' (o un pago mayor a la
+    // deuda total) se registraba como pagado (subia total_paid y el banco) pero
+    // no reducia ningun balance ni quedaba como credito a favor — dinero
+    // invisible contablemente. Ahora se rechaza con el monto maximo aplicable
+    // para que el cajero registre la cifra correcta y devuelva el cambio.
+    const unallocated = r2(remaining + excessToCapital);
+    if (unallocated > 0.01) {
+      const maxPayable = r2(payAmount - unallocated);
+      return res.status(400).json({
+        error: maxPayable > 0
+          ? `El monto excede lo adeudado del préstamo. Máximo aplicable para este tipo de pago: ${maxPayable.toFixed(2)} ${loanCurrency}. Registra ese monto y entrega la diferencia como cambio.`
+          : 'Este préstamo no tiene montos pendientes para este tipo de pago.',
+        code: 'AMOUNT_EXCEEDS_DEBT',
+        max_payable: maxPayable,
+        unallocated,
+      });
+    }
+
+    // FIX P1 (Jun 2026): todas las escrituras del pago en UNA transaccion —
+    // antes un fallo a mitad (p.ej. en el recibo) dejaba el pago insertado
+    // con cuotas y balances a medias.
+    db.exec('BEGIN');
 
     // ── Save payment record ───────────────────────────────────────────────────
-    const count = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE tenant_id=?').get(req.tenant.id) as any).c;
-    const payment_number = `PAG-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`;
+    const payment_number = nextDocNumber(db, 'payments', 'payment_number', req.tenant.id, `PAG-${new Date().getFullYear()}-`, 6);
     const payId = uuid();
 
     // applied_charges: future use for origination fees / extra charges module.
@@ -570,7 +437,7 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       applied_mora,applied_charges,applied_interest,applied_capital,payment_method,bank_account_id,reference,type,notes,currency) VALUES
       (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       payId, req.tenant.id, loan_id, req.user.id, collector_id || null,
-      payment_number, pDate.toISOString(), amount,
+      payment_number, pDate.toISOString(), payAmount,
       r2(totalMora), appliedCharges, r2(totalInterest), r2(totalPrincipal),
       payment_method, bank_account_id || null, reference || null, payment_type, notes || null,
       loanCurrency
@@ -604,7 +471,10 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     }
 
     // ── Update loan balances ──────────────────────────────────────────────────
-    const newPrincipal = r2(Math.max(0, loan.principal_balance - totalPrincipal - excessToCapital));
+    // FIX P1 (Jun 2026): totalPrincipal YA incluye excessToCapital (ver
+    // allocatePayment en lib/calculations). Restarlo de nuevo descontaba el
+    // excedente DOS veces del principal y de loaned_balance del banco.
+    const newPrincipal = r2(Math.max(0, loan.principal_balance - totalPrincipal));
     const newInterest = r2(Math.max(0, (loan.interest_balance || 0) - totalInterest));
     const newMoraBalance = r2(Math.max(0, (loan.mora_balance || 0) - totalMora));
     const newCharges   = r2(loan.charges_balance || 0); // charges are not reduced by regular payments
@@ -625,8 +495,8 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       total_paid=?,total_paid_principal=?,total_paid_interest=?,total_paid_mora=?,
       days_overdue=?,status=?,actual_close_date=?,updated_at=? WHERE id=? AND tenant_id=?`).run(
       newPrincipal, newInterest, newMoraBalance, totalBalance,
-      r2((loan.total_paid || 0) + amount),
-      r2((loan.total_paid_principal || 0) + totalPrincipal + excessToCapital),
+      r2((loan.total_paid || 0) + payAmount),
+      r2((loan.total_paid_principal || 0) + totalPrincipal),
       r2((loan.total_paid_interest || 0) + totalInterest),
       r2((loan.total_paid_mora || 0) + totalMora),
       newDaysOverdue, newStatus, fullyPaid ? pDate.toISOString() : null, now(), loan_id, req.tenant.id
@@ -641,8 +511,7 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       const updated = db.prepare('SELECT * FROM receipt_series WHERE id=?').get(series.id) as any;
       receiptNum = `${series.prefix}-${String(updated.last_number).padStart(6, '0')}`;
     } else {
-      const rc = (db.prepare('SELECT COUNT(*) as c FROM receipts WHERE tenant_id=?').get(req.tenant.id) as any).c;
-      receiptNum = `REC-${new Date().getFullYear()}-${String(rc + 1).padStart(6, '0')}`;
+      receiptNum = nextDocNumber(db, 'receipts', 'receipt_number', req.tenant.id, `REC-${new Date().getFullYear()}-`, 6);
     }
     const receiptId = uuid();
     db.prepare(`INSERT INTO receipts (id,tenant_id,payment_id,loan_id,issued_by,series_id,receipt_number,
@@ -653,18 +522,17 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     );
 
     // ── Credit bank account if specified ─────────────────────────────────────
+    // FIX P1 (Jun 2026): payedCapital = totalPrincipal (ya incluye el excess).
     if (bank_account_id) {
       const bankAcc = db.prepare('SELECT * FROM bank_accounts WHERE id=? AND tenant_id=? AND is_active=1').get(bank_account_id, req.tenant.id) as any;
       if (bankAcc) {
-        const payedCapital = r2(totalPrincipal + excessToCapital);
-        db.prepare('UPDATE bank_accounts SET current_balance=current_balance+?, loaned_balance=MAX(0,loaned_balance-?) WHERE id=?').run(amount, payedCapital, bank_account_id);
+        db.prepare('UPDATE bank_accounts SET current_balance=current_balance+?, loaned_balance=MAX(0,loaned_balance-?) WHERE id=?').run(payAmount, r2(totalPrincipal), bank_account_id);
       }
     } else {
       // If loan has a disbursement bank account, auto-credit it
       const disbBankId = loan.disbursement_bank_account_id;
       if (disbBankId) {
-        const payedCapital = r2(totalPrincipal + excessToCapital);
-        db.prepare('UPDATE bank_accounts SET current_balance=current_balance+?, loaned_balance=MAX(0,loaned_balance-?) WHERE id=?').run(amount, payedCapital, disbBankId);
+        db.prepare('UPDATE bank_accounts SET current_balance=current_balance+?, loaned_balance=MAX(0,loaned_balance-?) WHERE id=?').run(payAmount, r2(totalPrincipal), disbBankId);
       }
     }
 
@@ -677,7 +545,10 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     // ── Auto-update client score after payment ────────────────────────────────
     recalcClientScore(db, loan.client_id);
 
+    db.exec('COMMIT');
+
     // ── Generar draft de WhatsApp transaccional (payment_received). Best-effort.
+    // Fuera de la transaccion: un fallo aqui no debe revertir el pago.
     generateDraft(db, req.tenant.id, 'payment_received', { payment_id: payId, loan_id: loan.id, user_id: req.user.id });
 
     // Devolver el payment con registered_by_name resuelto (LEFT JOIN users) para
@@ -688,7 +559,10 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       receipt: db.prepare('SELECT * FROM receipts WHERE id=?').get(receiptId),
       breakdown: { interest: r2(totalInterest), capital: r2(totalPrincipal), mora: r2(totalMora), excessToCapital: r2(excessToCapital), remaining: r2(remaining) },
     });
-  } catch (e: any) { console.error(e); res.status(500).json({ error: 'Failed to register payment: ' + e.message }); }
+  } catch (e: any) {
+    try { getDb().exec('ROLLBACK'); } catch (_) { /* sin transaccion activa */ }
+    console.error(e); res.status(500).json({ error: 'Failed to register payment: ' + e.message });
+  }
 });
 
 // ─── POST void ────────────────────────────────────────────────────────────────
@@ -710,10 +584,17 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
     if (!payment) return res.status(404).json({ error: 'Pago no encontrado' });
     if (payment.is_voided) return res.status(400).json({ error: 'Pago ya anulado' });
 
+    // Migracion idempotente FUERA de la transaccion
+    try { db.exec(`ALTER TABLE receipts ADD COLUMN is_voided INTEGER NOT NULL DEFAULT 0`); } catch(_) {}
+
+    // FIX P1 (Jun 2026): el void resetea cuotas y re-aplica todos los pagos
+    // restantes — un fallo a mitad dejaba el prestamo en estado intermedio.
+    // Ahora todo el reverso ocurre en UNA transaccion.
+    db.exec('BEGIN');
+
     // ── Mark payment as voided ────────────────────────────────────────────────
     db.prepare('UPDATE payments SET is_voided=1,voided_at=?,voided_by=?,void_reason=? WHERE id=? AND tenant_id=?').run(now(), req.user.id, voidReasonBody, payment.id, req.tenant.id);
     // ── Mark associated receipts as voided ───────────────────────────────────
-    try { db.exec(`ALTER TABLE receipts ADD COLUMN is_voided INTEGER NOT NULL DEFAULT 0`); } catch(_) {}
     db.prepare('UPDATE receipts SET is_voided=1 WHERE payment_id=?').run(payment.id);
 
     const loan = db.prepare('SELECT * FROM loans WHERE id=?').get(payment.loan_id) as any;
@@ -815,8 +696,12 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
       `Anuló pago de RD$${Number(payment.amount).toLocaleString()} — Préstamo ${voidLoan?.loan_number||payment.loan_id}. Motivo: ${voidReasonBody||'Sin motivo'}`,
       JSON.stringify({ void_reason: voidReasonBody, amount: payment.amount })
     );
+    db.exec('COMMIT');
     res.json(db.prepare('SELECT * FROM payments WHERE id=?').get(payment.id));
-  } catch (e: any) { console.error(e); res.status(500).json({ error: 'Failed to void payment: ' + e.message }); }
+  } catch (e: any) {
+    try { getDb().exec('ROLLBACK'); } catch (_) { /* sin transaccion activa */ }
+    console.error(e); res.status(500).json({ error: 'Failed to void payment: ' + e.message });
+  }
 });
 
 // ── Edit payment metadata (date, method, bank account, reference, notes) ──────

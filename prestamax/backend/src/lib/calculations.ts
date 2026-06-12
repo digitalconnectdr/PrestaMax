@@ -10,25 +10,44 @@ export function r2(n: number): number {
 // FIX P1 (Jun 2026): Date.setMonth con dia 31 hace rollover (ene 31 -> mar 3
 // en lugar de feb 28). Para freq mensual/trimestral/anual, clampear al
 // ultimo dia del mes destino cuando el dia origen sea > dias del mes destino.
+// FIX P0 (Jun 2026): operar SIEMPRE en componentes UTC. Las fechas 'YYYY-MM-DD'
+// se parsean como medianoche UTC; usar setDate/setMonth (componentes locales)
+// hacia que el resultado dependiera de la zona horaria del servidor (en UTC-4
+// el dia retrocedia 1 y el clamp de fin de mes caia en el mes equivocado).
 function addMonthsClamped(d: Date, months: number): Date {
   const nd = new Date(d);
-  const origDay = nd.getDate();
-  nd.setDate(1);
-  nd.setMonth(nd.getMonth() + months);
-  const lastDay = new Date(nd.getFullYear(), nd.getMonth() + 1, 0).getDate();
-  nd.setDate(Math.min(origDay, lastDay));
+  const origDay = nd.getUTCDate();
+  nd.setUTCDate(1);
+  nd.setUTCMonth(nd.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(nd.getUTCFullYear(), nd.getUTCMonth() + 1, 0)).getUTCDate();
+  nd.setUTCDate(Math.min(origDay, lastDay));
   return nd;
 }
 
 export function getNextDate(d: Date, freq: string): Date {
   const nd = new Date(d);
-  if (freq === 'daily')             { nd.setDate(nd.getDate() + 1); return nd; }
-  else if (freq === 'every_2_days') { nd.setDate(nd.getDate() + 2); return nd; }
-  else if (freq === 'weekly')       { nd.setDate(nd.getDate() + 7); return nd; }
-  else if (freq === 'biweekly')     { nd.setDate(nd.getDate() + 15); return nd; }
+  if (freq === 'daily')             { nd.setUTCDate(nd.getUTCDate() + 1); return nd; }
+  else if (freq === 'every_2_days') { nd.setUTCDate(nd.getUTCDate() + 2); return nd; }
+  else if (freq === 'weekly')       { nd.setUTCDate(nd.getUTCDate() + 7); return nd; }
+  else if (freq === 'biweekly')     { nd.setUTCDate(nd.getUTCDate() + 15); return nd; }
   else if (freq === 'quarterly')    return addMonthsClamped(d, 3);
   else if (freq === 'annual' || freq === 'yearly') return addMonthsClamped(d, 12);
   else                              return addMonthsClamped(d, 1); // monthly
+}
+
+// ─── Helpers de calendario UTC ───────────────────────────────────────────────
+// Toda la aritmetica de "dias de atraso" se hace comparando FECHAS DE
+// CALENDARIO en UTC, no timestamps. Asi el resultado es deterministico e
+// independiente de la zona horaria del servidor.
+/** Medianoche UTC (ms) de la fecha contenida en un string 'YYYY-MM-DD' o ISO. */
+export function utcDateOnlyMs(s: string): number {
+  return Date.parse(s.slice(0, 10) + 'T00:00:00Z');
+}
+
+/** Dias de calendario (UTC) transcurridos desde `fromMs` (medianoche UTC) hasta `asOf`. */
+export function calendarDaysSince(asOf: Date, fromMs: number): number {
+  const asOfMs = Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate());
+  return Math.floor((asOfMs - fromMs) / 86400000);
 }
 
 // ─── Conversión de plazo a número de cuotas ──────────────────────────────────
@@ -168,6 +187,7 @@ export interface MoraLoanConfig {
 }
 
 export interface MoraInstallment {
+  id?: string;
   status: string;
   due_date: string;
   deferred_due_date?: string | null;
@@ -177,40 +197,67 @@ export interface MoraInstallment {
   paid_principal?: number;
 }
 
-export function calcMora(loan: MoraLoanConfig, installments: MoraInstallment[], asOf: Date): number {
+export interface MoraDetail {
+  days: number;    // dias en mora (ya descontados los dias de gracia)
+  amount: number;  // monto de mora de esa cuota
+}
+
+/** Mora individual por cuota (dias + monto), as-of una fecha dada.
+ *  FIX P0 (Jun 2026): los dias se cuentan comparando fechas de CALENDARIO en
+ *  UTC (utcDateOnlyMs / calendarDaysSince), no timestamps locales — el conteo
+ *  ya no varia ±1 dia segun la zona horaria del servidor. */
+export function calcMoraDetails(
+  loan: MoraLoanConfig,
+  installments: MoraInstallment[],
+  asOf: Date,
+): Record<string, MoraDetail> {
   const base     = loan.mora_base || 'cuota_vencida';
   const useFixed = !!loan.mora_fixed_enabled;
   const fixedAmt = loan.mora_fixed_amount || 0;
   // mora_start_date: si seteada, dias en mora se cuentan desde max(due_date, mora_start_date)
-  // FIX P1 (Jun 2026): parsear fechas con T00:00:00 explicito para evitar
-  // que JS las interprete como UTC y produzca desfases horarios.
-  const toLocalMidnight = (s: string) => new Date(s.length > 10 ? s : s + 'T00:00:00');
-  const moraStart = loan.mora_start_date ? toLocalMidnight(loan.mora_start_date) : null;
-  let total = 0;
-  for (const inst of installments) {
-    if (inst.status === 'paid' || inst.status === 'waived') continue;
-    const effectiveDue = inst.deferred_due_date
-      ? toLocalMidnight(inst.deferred_due_date)
-      : toLocalMidnight(inst.due_date);
-    const startFrom = moraStart && moraStart.getTime() > effectiveDue.getTime()
-      ? moraStart
-      : effectiveDue;
-    const days     = Math.max(0, Math.floor((asOf.getTime() - startFrom.getTime()) / 86400000));
+  const moraStartMs = loan.mora_start_date ? utcDateOnlyMs(loan.mora_start_date) : null;
+  const out: Record<string, MoraDetail> = {};
+  for (let idx = 0; idx < installments.length; idx++) {
+    const inst = installments[idx];
+    const key = inst.id || String(idx);
+    if (inst.status === 'paid' || inst.status === 'waived') { out[key] = { days: 0, amount: 0 }; continue; }
+    const effectiveDueMs = utcDateOnlyMs(inst.deferred_due_date || inst.due_date);
+    const startFromMs = moraStartMs !== null && moraStartMs > effectiveDueMs ? moraStartMs : effectiveDueMs;
+    const days     = Math.max(0, calendarDaysSince(asOf, startFromMs));
     const moraDays = Math.max(0, days - (loan.mora_grace_days || 0));
-    if (moraDays > 0) {
-      if (useFixed) {
-        total += fixedAmt;
+    if (moraDays <= 0) { out[key] = { days: 0, amount: 0 }; continue; }
+    if (useFixed) {
+      out[key] = { days: moraDays, amount: r2(fixedAmt) };
+    } else {
+      let baseAmount = 0;
+      if (base === 'cuota_vencida') {
+        baseAmount = r2((inst.principal_amount + inst.interest_amount) - (inst.paid_total || 0));
       } else {
-        let baseAmount = 0;
-        if (base === 'cuota_vencida') {
-          baseAmount = r2((inst.principal_amount + inst.interest_amount) - (inst.paid_total || 0));
-        } else {
-          baseAmount = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
-        }
-        total += Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays;
+        baseAmount = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
       }
+      out[key] = { days: moraDays, amount: r2(Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays) };
     }
   }
+  return out;
+}
+
+/** Mora por cuota — solo montos { installment_id -> mora }. Base del waterfall. */
+export function calcMoraPerInstallment(
+  loan: MoraLoanConfig,
+  installments: MoraInstallment[],
+  asOf: Date,
+): Record<string, number> {
+  const details = calcMoraDetails(loan, installments, asOf);
+  const out: Record<string, number> = {};
+  for (const k in details) out[k] = details[k].amount;
+  return out;
+}
+
+/** Mora total del prestamo. Garantiza SUM(calcMoraPerInstallment) === calcMora. */
+export function calcMora(loan: MoraLoanConfig, installments: MoraInstallment[], asOf: Date): number {
+  const details = calcMoraDetails(loan, installments, asOf);
+  let total = 0;
+  for (const k in details) total += details[k].amount;
   return r2(total);
 }
 

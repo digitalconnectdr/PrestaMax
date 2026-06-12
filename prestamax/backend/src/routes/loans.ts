@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { getDb, uuid, now, r2 } from '../db/database';
+import { getDb, uuid, now, r2, nextDocNumber } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { generateDraft } from '../services/whatsappService';
 // FIX P0 (Jun 2026): usar el MOTOR UNIFICADO de calculations.ts que respeta
@@ -7,7 +7,7 @@ import { generateDraft } from '../services/whatsappService';
 // mRate ignorando freq, asi prestamos no-mensuales se desembolsaban con cuotas
 // INFLADAS hasta ~90%. Ahora todos los motores (preview, calculadora, BD) usan
 // la misma logica.
-import { generateSchedule as libGenerateSchedule, getInstallmentCount, getNextDate } from '../lib/calculations';
+import { generateSchedule as libGenerateSchedule, getInstallmentCount, getNextDate, calcMoraDetails } from '../lib/calculations';
 
 const router = Router();
 
@@ -92,8 +92,7 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
         code: 'CLIENT_INACTIVE',
       });
     }
-    const count = (db.prepare('SELECT COUNT(*) as c FROM loans WHERE tenant_id=?').get(req.tenant.id) as any).c;
-    const loan_number = `PRE-${new Date().getFullYear()}-${String(count+1).padStart(5,'0')}`;
+    const loan_number = nextDocNumber(db, 'loans', 'loan_number', req.tenant.id, `PRE-${new Date().getFullYear()}-`, 5);
     const product = db.prepare('SELECT * FROM loan_products WHERE id=?').get(d.product_id) as any;
     const status = product?.requires_approval ? 'under_review' : 'approved';
     // Multi-currency: default to tenant base currency if not specified
@@ -158,43 +157,21 @@ router.get('/:id', authenticate, requireTenant, requirePermission('loans.view'),
     // Sync computed totals back to DB so list views stay accurate
     db.prepare(`UPDATE loans SET total_paid=?,total_paid_principal=?,total_paid_interest=?,total_paid_mora=? WHERE id=? AND tenant_id=?`)
       .run(loan.total_paid, loan.total_paid_principal, loan.total_paid_interest, loan.total_paid_mora, loan.id, req.tenant.id);
-    // Real-time mora calc — respects mora_base and mora_fixed_enabled for this loan.
-    // If mora_fixed_enabled: each overdue installment gets a flat fixed charge (replaces %).
-    // If not: percentage-based daily rate is applied.
-    const now2      = new Date();
-    const moraBase  = loan.mora_base || 'cuota_vencida';
-    const useFixed  = !!loan.mora_fixed_enabled;
-    const fixedAmt  = loan.mora_fixed_amount || 0;
+    // Real-time mora calc — usa el motor unificado de lib/calculations.
+    // FIX P0/P1 (Jun 2026): la version inline anterior contaba dias con fechas
+    // locales (variaba segun zona horaria del servidor) e IGNORABA
+    // mora_start_date, mostrando mora retroactiva en prestamos migrados.
+    const moraDetails = calcMoraDetails(loan, loan.installments as any[], new Date());
     let computedMora = 0;
 
     loan.installments = (loan.installments as any[]).map((inst: any) => {
       if (inst.status !== 'paid' && inst.status !== 'waived') {
-        const effectiveDue = inst.deferred_due_date
-          ? new Date(inst.deferred_due_date)
-          : new Date(inst.due_date);
-        const days     = Math.max(0, Math.floor((now2.getTime() - effectiveDue.getTime()) / 86400000));
-        const moraDays = Math.max(0, days - (loan.mora_grace_days || 0));
-
-        let moraAmount = 0;
-        if (moraDays > 0) {
-          if (useFixed) {
-            // Fixed charge per overdue installment — replaces percentage entirely
-            moraAmount = fixedAmt;
-          } else {
-            let baseAmount = 0;
-            if (moraBase === 'cuota_vencida') {
-              baseAmount = r2((inst.principal_amount + inst.interest_amount) - (inst.paid_total || 0));
-            } else {
-              baseAmount = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
-            }
-            moraAmount = r2(Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays);
-          }
-        }
-        computedMora += moraAmount;
+        const det = moraDetails[inst.id] || { days: 0, amount: 0 };
+        computedMora += det.amount;
         return {
           ...inst,
-          mora_days: moraDays,
-          mora_amount: moraAmount,
+          mora_days: det.days,
+          mora_amount: det.amount,
           effective_due_date: inst.deferred_due_date || inst.due_date,
         };
       }
@@ -434,8 +411,7 @@ router.post('/:id/migrate-history', authenticate, requireTenant, requirePermissi
     const loanCurrency = (loan.currency || 'DOP').toUpperCase();
 
     // ── Crear el registro de payment "migration" ──────────────────────────────
-    const count = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE tenant_id=?').get(req.tenant.id) as any).c;
-    const paymentNumber = `PAG-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`;
+    const paymentNumber = nextDocNumber(db, 'payments', 'payment_number', req.tenant.id, `PAG-${new Date().getFullYear()}-`, 6);
     const payId = uuid();
     const migrationNotes = `MIGRACION DE CARTERA: ${installmentsPaid} cuotas previas. ${req.body.notes || ''}`.trim();
 
@@ -686,7 +662,18 @@ router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'),
         const pendingInstallments = db.prepare(
           `SELECT * FROM installments WHERE loan_id=? AND status NOT IN ('paid','partial','interest_paid','waived') ORDER BY installment_number`
         ).all(req.params.id) as any[];
-        const principalBalance = r2(updated.principal_balance || 0);
+
+        // FIX P1 (Jun 2026): las cuotas 'partial'/'interest_paid' se CONSERVAN
+        // con su capital e interes pendientes. Re-amortizar TODO el
+        // principal_balance duplicaba ese capital (quedaba en la cuota
+        // conservada Y en el nuevo plan). Re-amortizamos solo el capital que
+        // vive en las cuotas que vamos a regenerar, y sumamos el interes
+        // impago de las conservadas a interest_balance.
+        const keptUnpaidPrincipal = r2(paidInstallments.reduce((acc, ins) =>
+          acc + Math.max(0, (ins.principal_amount || 0) - (ins.paid_principal || 0)), 0));
+        const keptUnpaidInterest = r2(paidInstallments.reduce((acc, ins) =>
+          acc + Math.max(0, (ins.interest_amount || 0) - (ins.paid_interest || 0)), 0));
+        const principalBalance = r2(Math.max(0, (updated.principal_balance || 0) - keptUnpaidPrincipal));
 
         if (principalBalance > 0.01 && pendingInstallments.length > 0) {
           const refDateStr = pendingInstallments[0].due_date as string;
@@ -722,16 +709,20 @@ router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'),
               const s = newSchedule[i];
               insertInst.run(uuid(), req.params.id, startNum + i + 1, s.due_date, s.principal_amount, s.interest_amount, s.total_amount, 'pending');
             }
-            const paidInterest = paidInstallments.reduce((acc, ins) => acc + (ins.interest_amount || 0), 0);
+            const keptPlanInterest = paidInstallments.reduce((acc, ins) => acc + (ins.interest_amount || 0), 0);
             const newInterest  = newSchedule.reduce((acc, s) => acc + s.interest_amount, 0);
             const maturityDate = newSchedule[newSchedule.length - 1].due_date;
+            // interest_balance / total_balance incluyen el interes y capital
+            // pendientes de las cuotas conservadas (partial / interest_paid).
+            const newInterestBalance = r2(newInterest + keptUnpaidInterest);
+            const newTotalBalance    = r2((updated.principal_balance || 0) + newInterestBalance);
             db.prepare(`UPDATE loans SET total_interest=?, maturity_date=?, interest_balance=?, total_balance=?, updated_at=? WHERE id=? AND tenant_id=?`)
-              .run(r2(paidInterest + newInterest), maturityDate, r2(newInterest), r2(principalBalance + newInterest), now(), req.params.id, req.tenant.id);
+              .run(r2(keptPlanInterest + newInterest), maturityDate, newInterestBalance, newTotalBalance, now(), req.params.id, req.tenant.id);
 
             db.prepare(`INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,new_values) VALUES (?,?,?,?,?,?,?,?,?)`).run(
               uuid(), req.tenant.id, req.user.id, req.user.full_name, 'loan_restructured', 'loan', req.params.id,
               `Reestructuro prestamo activo: ${newSchedule.length} cuotas regeneradas sobre saldo RD$${principalBalance.toLocaleString()}`,
-              JSON.stringify({ restructured: true, new_installments: newSchedule.length, principal_balance: principalBalance })
+              JSON.stringify({ restructured: true, new_installments: newSchedule.length, principal_balance: principalBalance, kept_unpaid_principal: keptUnpaidPrincipal, kept_unpaid_interest: keptUnpaidInterest })
             );
           }
         }
@@ -826,8 +817,7 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
 
       // Create loan
       const loanId = uuid();
-      const loanCount = (db.prepare('SELECT COUNT(*) as c FROM loans WHERE tenant_id=?').get(req.tenant.id) as any).c;
-      const loanNumber = row.loan_number || `PRE-${startDate.getFullYear()}-${String(loanCount+1).padStart(5,'0')}`;
+      const loanNumber = row.loan_number || nextDocNumber(db, 'loans', 'loan_number', req.tenant.id, `PRE-${startDate.getFullYear()}-`, 5);
 
       // Compute first payment date (1 period after start)
       const firstPayDate = new Date(startDate);
@@ -876,7 +866,7 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
           VALUES (?,?,?,?,?,?,?,?,0)`)
           .run(payId, loanId, req.tenant.id, amountPaid, startDate.toISOString(), 'migration', 'MIGRACIÓN', 'Pago previo — migración al sistema');
         // Create receipt for the migration payment
-        const rcptNum = `MIG-${String(loanCount+1).padStart(5,'0')}`;
+        const rcptNum = nextDocNumber(db, 'receipts', 'receipt_number', req.tenant.id, 'MIG-', 5);
         db.prepare(`INSERT INTO receipts (id,tenant_id,payment_id,loan_id,issued_by,receipt_number,amount,client_name,loan_number,concept_detail,notes,issued_at)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
           .run(uuid(), req.tenant.id, payId, loanId, req.user.id, rcptNum, amountPaid,
@@ -903,6 +893,10 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
 router.get('/:id/schedule', authenticate, requireTenant, requirePermission('loans.view'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
+    // FIX P2 (Jun 2026): verificar que el prestamo pertenece al tenant — antes
+    // cualquier usuario autenticado podia leer cuotas de otros tenants con el UUID.
+    const loan = db.prepare('SELECT id FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id);
+    if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
     const installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY installment_number').all(req.params.id);
     res.json(installments);
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
@@ -1078,30 +1072,38 @@ router.delete('/:id', authenticate, requireTenant, requirePermission('loans.void
       })
     }
 
-    // Si fue desembolsado, revertir el banco antes de borrar
     const wasDisbursed = ['active','in_mora','disbursed','restructured'].includes(loan.status)
     const disbAmount   = parseFloat(loan.disbursed_amount) || 0
     let bankReversed = false
-    if (wasDisbursed && disbAmount > 0 && loan.disbursement_bank_account_id) {
-      const bankAcc = db.prepare('SELECT id FROM bank_accounts WHERE id=? AND tenant_id=?').get(loan.disbursement_bank_account_id, req.tenant!.id)
-      if (bankAcc) {
-        db.prepare('UPDATE bank_accounts SET current_balance=current_balance+?, loaned_balance=MAX(0, loaned_balance-?) WHERE id=? AND tenant_id=?')
-          .run(disbAmount, disbAmount, loan.disbursement_bank_account_id, req.tenant!.id)
-        bankReversed = true
-      }
-    }
 
-    // Borrar todas las filas dependientes y luego el prestamo
+    // FIX P0 (Jun 2026): el reverso bancario ahora ocurre DENTRO de la misma
+    // transaccion que el borrado. Antes se ejecutaba fuera: el INSERT al audit
+    // log fallaba (8 placeholders, 5 valores), la transaccion hacia ROLLBACK
+    // del borrado, pero el credito al banco quedaba aplicado — cada intento
+    // inflaba current_balance sin eliminar el prestamo.
     db.exec('BEGIN')
     try {
+      if (wasDisbursed && disbAmount > 0 && loan.disbursement_bank_account_id) {
+        const bankAcc = db.prepare('SELECT id FROM bank_accounts WHERE id=? AND tenant_id=?').get(loan.disbursement_bank_account_id, req.tenant!.id)
+        if (bankAcc) {
+          db.prepare('UPDATE bank_accounts SET current_balance=current_balance+?, loaned_balance=MAX(0, loaned_balance-?) WHERE id=? AND tenant_id=?')
+            .run(disbAmount, disbAmount, loan.disbursement_bank_account_id, req.tenant!.id)
+          bankReversed = true
+        }
+      }
+
+      // Borrar todas las filas dependientes y luego el prestamo
       db.prepare('DELETE FROM installments WHERE loan_id=?').run(req.params.id)
       db.prepare('DELETE FROM payment_promises WHERE loan_id=?').run(req.params.id)
       db.prepare('DELETE FROM collection_notes WHERE loan_id=?').run(req.params.id)
       db.prepare('DELETE FROM contracts WHERE loan_id=? AND tenant_id=?').run(req.params.id, req.tenant!.id)
       db.prepare('DELETE FROM loans WHERE id=? AND tenant_id=?').run(req.params.id, req.tenant!.id)
 
+      // FIX P0 (Jun 2026): faltaban action, entity_type y entity_id — el INSERT
+      // lanzaba "Too few parameter values" y rompia TODOS los borrados.
       db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
         uuid(), req.tenant!.id, (req as any).user.id, (req as any).user.full_name,
+        'deleted', 'loan', req.params.id,
         `Elimino el prestamo ${loan.loan_number||req.params.id}` + (bankReversed ? ` (devuelto RD$${disbAmount.toLocaleString()} a la cuenta)` : ''))
       db.exec('COMMIT')
     } catch (txErr) {

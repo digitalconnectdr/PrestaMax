@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { getDb, uuid, now } from '../db/database';
+import { getDb, uuid, now, nextDocNumber } from '../db/database';
 import { authenticate, requireTenant, AuthRequest, requirePermission } from '../middleware/auth';
 
 const router = Router();
@@ -145,8 +145,7 @@ router.put('/:id/convert', authenticate, requireTenant, requirePermission('reque
 
     // ── 2. Create loan ──────────────────────────────────────────────────────
     const loanId = uuid();
-    const count = (db.prepare('SELECT COUNT(*) as c FROM loans WHERE tenant_id=?').get(req.tenant.id) as any).c;
-    const loanNumber = `PRE-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
+    const loanNumber = nextDocNumber(db, 'loans', 'loan_number', req.tenant.id, `PRE-${new Date().getFullYear()}-`, 5);
     const loanStatus = 'active'; // Requests are pre-approved; go straight to active
 
     db.prepare(`INSERT INTO loans (id,tenant_id,branch_id,client_id,product_id,loan_number,status,requested_amount,approved_amount,disbursed_amount,

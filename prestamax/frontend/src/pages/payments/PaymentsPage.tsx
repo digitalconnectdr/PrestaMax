@@ -253,13 +253,15 @@ const PaymentsPage: React.FC = () => {
     } finally { setIsVoiding(false) }
   }
 
-  const handleRegisterPayment = async (confirmedOverpaymentAction?: string) => {
-    if (!payForm.loanId || !payForm.amount) {
+  const handleRegisterPayment = async (confirmedOverpaymentAction?: string, overrideAmount?: number) => {
+    const amountToPay = overrideAmount ?? parseFloat(payForm.amount)
+    if (!payForm.loanId || !amountToPay || amountToPay <= 0) {
       toast.error('Selecciona el préstamo e ingresa el monto')
       return
     }
-    // Overpayment step needed
-    if (preview?.isOverpayment && !overpaymentStep && !confirmedOverpaymentAction) {
+    // Si el monto excede la deuda, mostrar paso informativo. El backend ahora
+    // RECHAZA montos no asignables — este paso ofrece registrar el maximo aplicable.
+    if (preview?.isOverpayment && !overpaymentStep && !confirmedOverpaymentAction && overrideAmount === undefined) {
       setOverpaymentStep(true)
       return
     }
@@ -267,7 +269,7 @@ const PaymentsPage: React.FC = () => {
       setIsSubmitting(true)
       const payRes = await api.post('/payments', {
         loanId: payForm.loanId,
-        amount: parseFloat(payForm.amount),
+        amount: amountToPay,
         paymentMethod: payForm.paymentMethod,
         bankAccountId: payForm.bankAccountId || undefined,
         reference: payForm.reference || undefined,
@@ -513,36 +515,38 @@ const PaymentsPage: React.FC = () => {
             {/* Overpayment step */}
             {overpaymentStep && preview ? (
               <div className="space-y-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                  <p className="text-amber-800 font-semibold text-sm">Pago excede el saldo adeudado</p>
-                  <p className="text-2xl font-bold text-amber-700 mt-1">
-                    Excedente: {formatCurrency((parseFloat(payForm.amount) || 0) - preview.totalDue)}
-                  </p>
-                  <p className="text-xs text-amber-600 mt-1">¿Cómo deseas aplicar este excedente?</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => handleRegisterPayment('apply_to_capital')}
-                    disabled={isSubmitting}
-                    className="p-4 border-2 border-blue-300 rounded-lg text-center hover:bg-blue-50 transition-colors disabled:opacity-50"
-                  >
-                    <TrendingDown className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                    <p className="font-semibold text-blue-900 text-sm">Abonar al Capital</p>
-                    <p className="text-xs text-slate-500 mt-1">Reduce el saldo pendiente del préstamo</p>
-                  </button>
-                  <button
-                    onClick={() => handleRegisterPayment('apply_to_next_installment')}
-                    disabled={isSubmitting}
-                    className="p-4 border-2 border-emerald-300 rounded-lg text-center hover:bg-emerald-50 transition-colors disabled:opacity-50"
-                  >
-                    <Calendar className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                    <p className="font-semibold text-emerald-900 text-sm">Próxima Cuota</p>
-                    <p className="text-xs text-slate-500 mt-1">Anticipa el pago de la siguiente cuota</p>
-                  </button>
-                </div>
-                <Button variant="outline" className="w-full" onClick={() => setOverpaymentStep(false)} disabled={isSubmitting}>
-                  ← Volver y editar monto
-                </Button>
+                {(() => {
+                  const maxPayable = (preview as any).maxPayable ?? preview.totalDue
+                  const excess = (parseFloat(payForm.amount) || 0) - maxPayable
+                  return (<>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
+                      <p className="text-amber-800 font-semibold text-sm">El monto excede lo adeudado del préstamo</p>
+                      <p className="text-2xl font-bold text-amber-700 mt-1">
+                        Excedente: {formatCurrency(excess)}
+                      </p>
+                      <p className="text-xs text-amber-600 mt-1">
+                        El sistema no acepta dinero por encima de la deuda. Puedes registrar el máximo
+                        aplicable y entregar la diferencia como cambio al cliente.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleRegisterPayment(undefined, maxPayable)}
+                      disabled={isSubmitting || maxPayable <= 0}
+                      className="w-full p-4 border-2 border-emerald-300 rounded-lg text-center hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                    >
+                      <TrendingDown className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+                      <p className="font-semibold text-emerald-900 text-sm">
+                        Registrar {formatCurrency(maxPayable)} (saldo total)
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Liquida el préstamo y devuelve {formatCurrency(excess)} de cambio
+                      </p>
+                    </button>
+                    <Button variant="outline" className="w-full" onClick={() => setOverpaymentStep(false)} disabled={isSubmitting}>
+                      ← Volver y editar monto
+                    </Button>
+                  </>)
+                })()}
               </div>
             ) : (
               <div className="space-y-4">
@@ -764,7 +768,7 @@ const PaymentsPage: React.FC = () => {
                         {preview.isOverpayment && (
                           <div className="flex items-center gap-1 pt-0.5">
                             <Info className="w-3 h-3 text-amber-600" />
-                            <p className="text-xs text-amber-700 font-medium">Hay un excedente — se te pedirá cómo aplicarlo</p>
+                            <p className="text-xs text-amber-700 font-medium">El monto excede la deuda — se te ofrecerá registrar el máximo aplicable</p>
                           </div>
                         )}
                       </div>

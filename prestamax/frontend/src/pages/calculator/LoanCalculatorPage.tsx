@@ -13,6 +13,7 @@ import { usePermission } from '@/hooks/usePermission'
 import { AMORTIZATION_TYPES, AMORT_LABELS, DEFAULT_AMORTIZATION } from '@/lib/amortization'
 import AmortizationHelpModal from '@/components/shared/AmortizationHelpModal'
 import { HelpCircle } from 'lucide-react'
+import { generateSchedule as generateLoanSchedule, getInstallmentCount, installmentsPerYear } from '@/lib/loanMath'
 
 interface Installment {
   num: number
@@ -32,46 +33,30 @@ interface CalcResult {
   computedRate: number   // Tasa mensual (%) usada para el calculo
 }
 
-function addFreqMonths(date: Date, freq: string, n: number): Date {
-  const d = new Date(date)
-  if (freq === 'monthly') d.setMonth(d.getMonth() + n)
-  else if (freq === 'biweekly') d.setDate(d.getDate() + n * 15) // 15 dias = standard
-  else if (freq === 'weekly') d.setDate(d.getDate() + n * 7)
-  else if (freq === 'daily') d.setDate(d.getDate() + n)
-  return d
+// FIX P2 (Jun 2026): la calculadora ahora usa el motor compartido de
+// @/lib/loanMath (port exacto del backend). Antes tenia sus propios factores
+// (semanal ×4 vs 4.33, quincenal ×2 vs 26/12) y avance de fechas sin clamp
+// de fin de mes, por lo que la cotizacion no coincidia con el plan real.
+
+// Factor de conversion de tasa-en-`rateType` a tasa mensual equivalente,
+// derivado de los mismos factores anuales del motor (365/52/26/12).
+function rateFactorToMonthly(rateType: string): number {
+  switch (rateType) {
+    case 'daily':    return 365 / 12
+    case 'weekly':   return 52 / 12
+    case 'biweekly': return 26 / 12
+    case 'annual':   return 1 / 12
+    case 'monthly':
+    default:         return 1
+  }
 }
 
-// Periodos por mes segun la frecuencia (factor k para convertir tasa mensual)
-function periodsPerMonth(freq: string): number {
-  if (freq === 'biweekly') return 2
-  if (freq === 'weekly') return 4
-  if (freq === 'daily') return 30
-  return 1 // monthly
-}
-
-// Convierte una tasa expresada en `rateType` a su equivalente mensual (en %).
-// Util porque calcSchedule espera la tasa mensual.
 function rateToMonthly(rate: number, rateType: string): number {
-  switch (rateType) {
-    case 'daily':    return rate * 30
-    case 'weekly':   return rate * 4.33
-    case 'biweekly': return rate * 2
-    case 'annual':   return rate / 12
-    case 'monthly':
-    default:         return rate
-  }
+  return rate * rateFactorToMonthly(rateType)
 }
 
-// Convierte una tasa mensual (%) a su equivalente expresado en `rateType`.
 function monthlyToRate(monthly: number, rateType: string): number {
-  switch (rateType) {
-    case 'daily':    return monthly / 30
-    case 'weekly':   return monthly / 4.33
-    case 'biweekly': return monthly / 2
-    case 'annual':   return monthly * 12
-    case 'monthly':
-    default:         return monthly
-  }
+  return monthly / rateFactorToMonthly(rateType)
 }
 
 const RATE_TYPE_LABEL: Record<string, string> = {
@@ -79,37 +64,16 @@ const RATE_TYPE_LABEL: Record<string, string> = {
   monthly: 'Mensual', annual: 'Anual',
 }
 
-// Calcula numero total de pagos basado en termino, unidad y frecuencia
+// Numero total de pagos: delega en el motor compartido (mismo redondeo que backend)
 function getNPay(term: number, termUnit: string, freq: string): number {
-  let nPay = term
-  if (termUnit === 'months') {
-    if (freq === 'biweekly') nPay = term * 2
-    else if (freq === 'weekly') nPay = term * 4
-    else if (freq === 'daily') nPay = term * 30
-  } else if (termUnit === 'biweekly') {
-    if (freq === 'monthly') nPay = Math.ceil(term / 2)
-    else if (freq === 'biweekly') nPay = term
-    else if (freq === 'weekly') nPay = Math.ceil(term * 2)
-    else if (freq === 'daily') nPay = term * 15
-  } else if (termUnit === 'weeks') {
-    if (freq === 'monthly') nPay = Math.ceil(term / 4)
-    else if (freq === 'biweekly') nPay = Math.ceil(term / 2)
-    else if (freq === 'weekly') nPay = term
-    else if (freq === 'daily') nPay = term * 7
-  } else if (termUnit === 'days') {
-    if (freq === 'monthly') nPay = Math.ceil(term / 30)
-    else if (freq === 'biweekly') nPay = Math.ceil(term / 15)
-    else if (freq === 'weekly') nPay = Math.ceil(term / 7)
-    else if (freq === 'daily') nPay = term
-  }
-  return Math.max(1, nPay)
+  return getInstallmentCount(term, termUnit, freq)
 }
 
-// Convierte termino a meses (para flat_interest)
+// Convierte termino a meses (para flat_interest) — mismos factores del motor
 function getTermInMonths(term: number, termUnit: string): number {
   if (termUnit === 'months') return term
   if (termUnit === 'biweekly') return term / 2
-  if (termUnit === 'weeks') return term / 4
+  if (termUnit === 'weeks') return term / 4.33
   return term / 30 // days
 }
 
@@ -124,7 +88,9 @@ function findRateFromProfit(
   amortType: string,
 ): number {
   if (amount <= 0 || profit <= 0 || term <= 0) return 0
-  const k = periodsPerMonth(freq)
+  // k: factor tasa-por-periodo → tasa mensual, consistente con el motor
+  // (mRate = mensual×12/instPorAño ⇒ mensual = rPeriodo×instPorAño/12)
+  const k = installmentsPerYear(freq) / 12
   const nPay = getNPay(term, termUnit, freq)
 
   if (amortType === 'flat_interest') {
@@ -161,82 +127,30 @@ function findRateFromProfit(
 
 function calcSchedule(
   amount: number,
-  rate: number,       // monthly % (always entered as monthly)
+  rate: number,
+  rateType: string,   // unidad de la tasa: daily | weekly | biweekly | monthly | annual
   term: number,
   termUnit: string,   // months | biweekly | weeks | days
   freq: string,       // monthly | biweekly | weekly | daily
   amortType: string,  // fixed_installment | interest_only | flat_interest
   firstDate: Date
 ): Installment[] {
-  const r = rate / 100  // monthly rate as decimal
-  const nPay = getNPay(term, termUnit, freq)
-
-  // Convert monthly rate to per-period rate
-  const k = periodsPerMonth(freq)
-  const rPeriod = r / k
-
-  const installments: Installment[] = []
-  let balance = amount
-
-  if (amortType === 'flat_interest') {
-    const termInMonths = getTermInMonths(term, termUnit)
-    const totalInterest = amount * r * termInMonths
-    const totalPayable = amount + totalInterest
-    const payment = totalPayable / nPay
-    const principalPay = amount / nPay
-    const interestPay = totalInterest / nPay
-    for (let i = 1; i <= nPay; i++) {
-      balance -= principalPay
-      installments.push({
-        num: i,
-        dueDate: addFreqMonths(firstDate, freq, i - 1).toLocaleDateString('es-DO'),
-        payment,
-        principal: principalPay,
-        interest: interestPay,
-        balance: Math.max(0, balance),
-      })
+  // Delegacion total al motor compartido (mismas formulas que el backend).
+  return generateLoanSchedule({
+    amount, rate, rateType, term, termUnit, freq, type: amortType, firstDate,
+  }).map(s => {
+    // Formatear fecha desde el componente UTC del ISO (evita que en UTC-4
+    // la medianoche UTC se muestre como el dia anterior)
+    const [y, m, d] = s.due_date.slice(0, 10).split('-')
+    return {
+      num: s.installment_number,
+      dueDate: `${d}/${m}/${y}`,
+      payment: s.total_amount,
+      principal: s.principal_amount,
+      interest: s.interest_amount,
+      balance: s.balance,
     }
-  } else if (amortType === 'interest_only') {
-    const interestPay = Math.round(amount * rPeriod * 100) / 100
-    for (let i = 1; i <= nPay; i++) {
-      const isLast = i === nPay
-      const principalPay = isLast ? amount : 0
-      installments.push({
-        num: i,
-        dueDate: addFreqMonths(firstDate, freq, i - 1).toLocaleDateString('es-DO'),
-        payment: interestPay + principalPay,
-        principal: principalPay,
-        interest: interestPay,
-        balance: isLast ? 0 : amount,
-      })
-    }
-  } else {
-    // fixed_installment (French / reducing-balance amortization)
-    let fixedPayment: number
-    if (rPeriod === 0) {
-      fixedPayment = amount / nPay
-    } else {
-      fixedPayment = amount * (rPeriod * Math.pow(1 + rPeriod, nPay)) / (Math.pow(1 + rPeriod, nPay) - 1)
-    }
-    fixedPayment = Math.round(fixedPayment * 100) / 100
-
-    for (let i = 1; i <= nPay; i++) {
-      const interestPay = Math.round(balance * rPeriod * 100) / 100
-      let principalPay = Math.round((fixedPayment - interestPay) * 100) / 100
-      const isLast = i === nPay
-      if (isLast) principalPay = balance
-      balance = Math.max(0, Math.round((balance - principalPay) * 100) / 100)
-      installments.push({
-        num: i,
-        dueDate: addFreqMonths(firstDate, freq, i - 1).toLocaleDateString('es-DO'),
-        payment: interestPay + principalPay,
-        principal: principalPay,
-        interest: interestPay,
-        balance,
-      })
-    }
-  }
-  return installments
+  })
 }
 
 const FREQ_LABEL: Record<string, string> = { monthly: 'Mensual', biweekly: 'Quincenal', weekly: 'Semanal', daily: 'Diario' }
@@ -268,23 +182,30 @@ const LoanCalculatorPage: React.FC = () => {
     const term = parseInt(form.term)
     if (!amount || !term) return
 
-    // Convertir la tasa ingresada (en su unidad) a equivalente mensual,
-    // porque calcSchedule y findRateFromProfit operan con tasa mensual.
+    // Determinar la tasa a usar. En modo 'rate' pasamos la tasa ORIGINAL con
+    // su unidad al motor (sin doble conversion); en modo 'profit' la biseccion
+    // produce una tasa mensual equivalente.
+    let scheduleRate = 0
+    let scheduleRateType = form.rateType
     let monthlyRate = 0
     if (mode === 'profit') {
       const profit = parseFloat(form.profit)
       if (!profit) return
       // findRateFromProfit retorna la tasa MENSUAL necesaria para esa ganancia
       monthlyRate = findRateFromProfit(amount, profit, term, form.termUnit, form.freq, form.amortType)
+      scheduleRate = monthlyRate
+      scheduleRateType = 'monthly'
     } else {
       const userRate = parseFloat(form.rate)
       if (!userRate) return
+      scheduleRate = userRate
       monthlyRate = rateToMonthly(userRate, form.rateType)
     }
-    if (!monthlyRate) return
+    if (!scheduleRate) return
 
-    const firstDate = new Date(form.firstDate + 'T12:00:00')
-    const installments = calcSchedule(amount, monthlyRate, term, form.termUnit, form.freq, form.amortType, firstDate)
+    // Medianoche UTC para que el motor (calendario UTC) no desplace el dia
+    const firstDate = new Date(form.firstDate + 'T00:00:00Z')
+    const installments = calcSchedule(amount, scheduleRate, scheduleRateType, term, form.termUnit, form.freq, form.amortType, firstDate)
     const totalPayment = installments.reduce((s, i) => s + i.payment, 0)
     const totalInterest = installments.reduce((s, i) => s + i.interest, 0)
 
