@@ -10,6 +10,7 @@ import {
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { formatDate } from '@/lib/utils'
+import { useT, t as tg } from '@/lib/i18n'
 
 // ── Types — camelCase to match API interceptor's automatic conversion ──────────
 interface Collector {
@@ -68,18 +69,18 @@ const EMPTY_FORM: TaskFormData = {
 }
 
 const TASK_TYPES = [
-  { value: 'call',     label: '📞 Llamada' },
-  { value: 'visit',    label: '🚶 Visita' },
-  { value: 'whatsapp', label: '💬 WhatsApp' },
-  { value: 'payment',  label: '💵 Cobro de cuota' },
-  { value: 'document', label: '📄 Documento' },
-  { value: 'other',    label: '📝 Otro' },
+  { value: 'call',     labelKey: 'task.type.call' },
+  { value: 'visit',    labelKey: 'task.type.visit' },
+  { value: 'whatsapp', labelKey: 'task.type.whatsapp' },
+  { value: 'payment',  labelKey: 'task.type.payment' },
+  { value: 'document', labelKey: 'task.type.document' },
+  { value: 'other',    labelKey: 'task.type.other' },
 ]
 
 const PRIORITIES = [
-  { value: 'high',   label: 'Alta',  color: 'text-red-600 bg-red-50 border-red-200' },
-  { value: 'medium', label: 'Media', color: 'text-amber-600 bg-amber-50 border-amber-200' },
-  { value: 'low',    label: 'Baja',  color: 'text-slate-500 bg-slate-50 border-slate-200' },
+  { value: 'high',   labelKey: 'task.prio.high',   color: 'text-red-600 bg-red-50 border-red-200' },
+  { value: 'medium', labelKey: 'task.prio.medium', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  { value: 'low',    labelKey: 'task.prio.low',    color: 'text-slate-500 bg-slate-50 border-slate-200' },
 ]
 
 // ── Date helpers ───────────────────────────────────────────────────────────────
@@ -99,20 +100,23 @@ const isDueDatePast = (due: string | null | undefined): boolean => {
 
 // ── Small display components ──────────────────────────────────────────────────
 const PriorityBadge: React.FC<{ priority: string }> = ({ priority }) => {
+  const t = useT()
   const p = PRIORITIES.find(p => p.value === priority) || PRIORITIES[1]
-  return <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${p.color}`}>{p.label}</span>
+  return <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${p.color}`}>{t(p.labelKey)}</span>
 }
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-  if (status === 'pending')     return <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full"><Clock className="w-3 h-3"/>Pendiente</span>
-  if (status === 'in_progress') return <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full"><Play className="w-3 h-3"/>En progreso</span>
-  if (status === 'completed')   return <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full"><CheckCircle2 className="w-3 h-3"/>Completada</span>
-  return <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full"><X className="w-3 h-3"/>Cancelada</span>
+  const t = useT()
+  if (status === 'pending')     return <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full"><Clock className="w-3 h-3"/>{t('task.st_pending')}</span>
+  if (status === 'in_progress') return <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full"><Play className="w-3 h-3"/>{t('task.st_in_progress')}</span>
+  if (status === 'completed')   return <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full"><CheckCircle2 className="w-3 h-3"/>{t('task.st_completed')}</span>
+  return <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full"><X className="w-3 h-3"/>{t('task.st_cancelled')}</span>
 }
 
 const TypeLabel: React.FC<{ type: string }> = ({ type }) => {
-  const t = TASK_TYPES.find(t => t.value === type)
-  return <span className="text-xs text-slate-500">{t ? t.label : type}</span>
+  const t = useT()
+  const found = TASK_TYPES.find(ty => ty.value === type)
+  return <span className="text-xs text-slate-500">{found ? t(found.labelKey) : type}</span>
 }
 
 // ── CSV export helper ─────────────────────────────────────────────────────────
@@ -125,14 +129,14 @@ function exportTasksCSV(tasks: CollectionTask[], from: string, to: string) {
     if (to   && date > to)   return false
     return true
   })
-  if (filtered.length === 0) return toast.error('No hay tareas en ese rango de fechas.')
+  if (filtered.length === 0) return toast.error(tg('task.export_empty'))
 
-  const headers = ['Título','Estado','Prioridad','Tipo','Cobrador','Cliente','Préstamo','Fecha Límite','Fecha Completada','Resultado']
+  const headers = [tg('task.csv.title'), tg('col.status'), tg('task.priority_label'), tg('task.type_label'), tg('task.csv.collector'), tg('col.client'), tg('col.loan'), tg('task.csv.due'), tg('task.csv.completed'), tg('task.csv.result')]
   const rows = filtered.map(t => [
     `"${t.title}"`,
-    t.status === 'completed' ? 'Completada' : t.status === 'cancelled' ? 'Cancelada' : t.status,
-    PRIORITIES.find(p => p.value === t.priority)?.label || t.priority,
-    TASK_TYPES.find(ty => ty.value === t.taskType)?.label || t.taskType,
+    t.status === 'completed' ? tg('task.st_completed') : t.status === 'cancelled' ? tg('task.st_cancelled') : t.status,
+    tg(PRIORITIES.find(p => p.value === t.priority)?.labelKey || '') || t.priority,
+    tg(TASK_TYPES.find(ty => ty.value === t.taskType)?.labelKey || '') || t.taskType,
     `"${t.assignedToName || ''}"`,
     `"${t.clientName || ''}"`,
     `"${t.loanNumber || ''}"`,
@@ -149,12 +153,13 @@ function exportTasksCSV(tasks: CollectionTask[], from: string, to: string) {
   link.download = `historial-tareas-${from || 'inicio'}-${to || 'hoy'}.csv`
   link.click()
   URL.revokeObjectURL(url)
-  toast.success(`${filtered.length} tareas exportadas`)
+  toast.success(tg('task.exported').replace('{n}', String(filtered.length)))
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 const CollectionTasksTab: React.FC = () => {
   const { can } = usePermission()
+  const t = useT()
   const canManage = can('collections.tasks.manage')
   const canView   = can('collections.tasks') || canManage
 
@@ -211,7 +216,7 @@ const CollectionTasksTab: React.FC = () => {
         setAccessDenied({ reason: code === 'PLAN_FEATURE_REQUIRED' ? 'plan' : 'permission' })
         setTasks([])
       } else {
-        toast.error('Error al cargar la agenda')
+        toast.error(t('task.load_error'))
       }
     }
     finally { setIsLoading(false) }
@@ -304,9 +309,9 @@ const CollectionTasksTab: React.FC = () => {
   }
 
   const handleSave = async () => {
-    if (!form.title.trim())                    return toast.error('El título es requerido')
-    if (canManageState && !form.assigned_to)   return toast.error('Debes asignar la tarea a un cobrador')
-    if (!form.due_date)                        return toast.error('La fecha límite es requerida')
+    if (!form.title.trim())                    return toast.error(t('task.title_required'))
+    if (canManageState && !form.assigned_to)   return toast.error(t('task.assign_required'))
+    if (!form.due_date)                        return toast.error(t('task.due_required'))
 
     setIsSaving(true)
     try {
@@ -323,16 +328,16 @@ const CollectionTasksTab: React.FC = () => {
       }
       if (editingTask) {
         await api.put(`/collection-tasks/${editingTask.id}`, payload)
-        toast.success('Tarea actualizada')
+        toast.success(t('task.updated'))
       } else {
         await api.post('/collection-tasks', payload)
-        toast.success('Tarea creada y cobrador notificado')
+        toast.success(t('task.created'))
       }
       setShowForm(false)
       setEditingTask(null)
       fetchTasks()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al guardar la tarea')
+      toast.error(err?.response?.data?.error || t('task.save_error'))
     } finally { setIsSaving(false) }
   }
 
@@ -341,10 +346,10 @@ const CollectionTasksTab: React.FC = () => {
     setUpdatingId(task.id)
     try {
       await api.patch(`/collection-tasks/${task.id}/status`, { status })
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status } : t))
-      toast.success(status === 'in_progress' ? 'Tarea iniciada' : 'Estado actualizado')
+      setTasks(prev => prev.map(x => x.id === task.id ? { ...x, status } : x))
+      toast.success(status === 'in_progress' ? t('task.started') : t('prom.status_updated'))
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al actualizar estado')
+      toast.error(err?.response?.data?.error || t('prom.status_error'))
     } finally { setUpdatingId(null) }
   }
 
@@ -356,11 +361,11 @@ const CollectionTasksTab: React.FC = () => {
         status: 'completed',
         result_notes: resultNotes.trim() || null,
       })
-      toast.success('Tarea completada')
+      toast.success(t('task.completed_ok'))
       setCompletingTask(null)
       fetchTasks()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error')
+      toast.error(err?.response?.data?.error || t('common.error'))
     } finally { setIsCompleting(false) }
   }
 
@@ -369,10 +374,10 @@ const CollectionTasksTab: React.FC = () => {
     setIsDeleting(true)
     try {
       await api.delete(`/collection-tasks/${deletingId}`)
-      setTasks(prev => prev.filter(t => t.id !== deletingId))
-      toast.success('Tarea eliminada'); setDeletingId(null)
+      setTasks(prev => prev.filter(x => x.id !== deletingId))
+      toast.success(t('task.deleted')); setDeletingId(null)
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error')
+      toast.error(err?.response?.data?.error || t('common.error'))
     } finally { setIsDeleting(false) }
   }
 
@@ -381,8 +386,8 @@ const CollectionTasksTab: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-400">
         <AlertCircle className="w-12 h-12 mb-3 opacity-40" />
-        <p className="font-medium text-slate-600">Sin acceso</p>
-        <p className="text-sm mt-1">No tienes permiso para ver la agenda de cobranza.</p>
+        <p className="font-medium text-slate-600">{t('task.no_access')}</p>
+        <p className="text-sm mt-1">{t('task.no_access_desc')}</p>
       </div>
     )
   }
@@ -401,7 +406,7 @@ const CollectionTasksTab: React.FC = () => {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'pending' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               <ListTodo className="w-4 h-4"/>
-              Pendientes
+              {t('task.pending_tab')}
               {pendingTasks.length > 0 && <span className="ml-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 rounded-full">{pendingTasks.length}</span>}
             </button>
             <button
@@ -409,7 +414,7 @@ const CollectionTasksTab: React.FC = () => {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               <History className="w-4 h-4"/>
-              Historial
+              {t('task.history_tab')}
               {historyTasks.length > 0 && <span className="ml-0.5 bg-slate-200 text-slate-600 text-[10px] font-bold px-1.5 rounded-full">{historyTasks.length}</span>}
             </button>
           </div>
@@ -421,19 +426,19 @@ const CollectionTasksTab: React.FC = () => {
               onChange={e => setFilterCollector(e.target.value)}
               className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
             >
-              <option value="">Todos los cobradores</option>
+              <option value="">{t('task.all_collectors')}</option>
               {collectors.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
             </select>
           )}
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={fetchTasks} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors" title="Actualizar">
+          <button onClick={fetchTasks} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors" title={t('common.refresh')}>
             <RefreshCw className="w-4 h-4"/>
           </button>
           {canManageState && (
             <Button onClick={openCreate} className="flex items-center gap-1.5">
-              <Plus className="w-4 h-4"/>Nueva Tarea
+              <Plus className="w-4 h-4"/>{t('task.new')}
             </Button>
           )}
         </div>
@@ -442,9 +447,9 @@ const CollectionTasksTab: React.FC = () => {
       {/* History export bar */}
       {activeTab === 'history' && historyTasks.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-          <span className="text-xs font-semibold text-slate-500 uppercase">Exportar historial</span>
+          <span className="text-xs font-semibold text-slate-500 uppercase">{t('task.export_history')}</span>
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-600">Desde:</label>
+            <label className="text-xs text-slate-600">{t('common.from')}:</label>
             <input
               type="date"
               value={exportFrom}
@@ -453,7 +458,7 @@ const CollectionTasksTab: React.FC = () => {
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-600">Hasta:</label>
+            <label className="text-xs text-slate-600">{t('common.to')}:</label>
             <input
               type="date"
               value={exportTo}
@@ -465,9 +470,9 @@ const CollectionTasksTab: React.FC = () => {
             onClick={() => exportTasksCSV(historyTasks, exportFrom, exportTo)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-sm font-medium hover:bg-[#16304f] transition-colors"
           >
-            <Download className="w-3.5 h-3.5"/>Descargar CSV
+            <Download className="w-3.5 h-3.5"/>{t('acct.download_csv')}
           </button>
-          <span className="text-[10px] text-slate-400">Deja las fechas en blanco para exportar todo el historial</span>
+          <span className="text-[10px] text-slate-400">{t('task.export_hint')}</span>
         </div>
       )}
 
@@ -475,20 +480,20 @@ const CollectionTasksTab: React.FC = () => {
       {isLoading ? (
         <div className="flex items-center justify-center py-16 text-slate-400">
           <div className="w-6 h-6 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin mr-2"/>
-          Cargando agenda...
+          {t('task.loading')}
         </div>
       ) : accessDenied ? (
         <div className="flex flex-col items-center justify-center py-16 text-slate-400">
           <ClipboardList className="w-12 h-12 mb-3 opacity-30"/>
           {accessDenied.reason === 'plan' ? (
             <>
-              <p className="font-medium text-slate-600">Función no incluida en tu plan</p>
-              <p className="text-sm mt-1 text-center max-w-md">La Agenda de Cobranza requiere un plan superior. Actualiza tu suscripción para asignar y administrar tareas de cobranza.</p>
+              <p className="font-medium text-slate-600">{t('task.plan_title')}</p>
+              <p className="text-sm mt-1 text-center max-w-md">{t('task.plan_desc')}</p>
             </>
           ) : (
             <>
-              <p className="font-medium text-slate-600">Sin acceso a la Agenda</p>
-              <p className="text-sm mt-1 text-center max-w-md">Tu rol no tiene permiso para ver tareas de cobranza. Pídele al administrador del tenant que te asigne el permiso "Ver tareas asignadas".</p>
+              <p className="font-medium text-slate-600">{t('task.perm_title')}</p>
+              <p className="text-sm mt-1 text-center max-w-md">{t('task.perm_desc')}</p>
             </>
           )}
         </div>
@@ -497,14 +502,14 @@ const CollectionTasksTab: React.FC = () => {
           {activeTab === 'pending' ? (
             <>
               <ClipboardList className="w-12 h-12 mb-3 opacity-30"/>
-              <p className="font-medium text-slate-600">Sin tareas pendientes</p>
-              <p className="text-sm mt-1">{canManageState ? 'Crea una nueva tarea para asignarla a un cobrador.' : 'No tienes tareas asignadas por el momento.'}</p>
+              <p className="font-medium text-slate-600">{t('task.empty_pending')}</p>
+              <p className="text-sm mt-1">{canManageState ? t('task.empty_pending_manage') : t('task.empty_pending_collector')}</p>
             </>
           ) : (
             <>
               <History className="w-12 h-12 mb-3 opacity-30"/>
-              <p className="font-medium text-slate-600">Sin historial aún</p>
-              <p className="text-sm mt-1">Las tareas completadas o canceladas aparecerán aquí.</p>
+              <p className="font-medium text-slate-600">{t('task.empty_history')}</p>
+              <p className="text-sm mt-1">{t('task.empty_history_desc')}</p>
             </>
           )}
         </div>
@@ -542,7 +547,7 @@ const CollectionTasksTab: React.FC = () => {
                       <StatusBadge status={task.status}/>
                       {isOverdue && (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 bg-red-100 text-red-600 rounded border border-red-200 uppercase">
-                          <AlertCircle className="w-2.5 h-2.5"/>Vencida
+                          <AlertCircle className="w-2.5 h-2.5"/>{t('task.overdue_badge')}
                         </span>
                       )}
                     </div>
@@ -576,22 +581,22 @@ const CollectionTasksTab: React.FC = () => {
                             onClick={() => handleStatusChange(task, 'in_progress')}
                             disabled={isUpdating}
                             className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 font-medium disabled:opacity-50"
-                          >{isUpdating ? '...' : 'Iniciar'}</button>
+                          >{isUpdating ? '...' : t('task.start')}</button>
                         )}
                         <button
                           onClick={() => handleStatusChange(task, 'completed')}
                           disabled={isUpdating}
                           className="px-2 py-1 text-xs bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 font-medium disabled:opacity-50"
-                        >Completar</button>
+                        >{t('task.complete')}</button>
                       </>
                     )}
 
                     {canManageState && task.status !== 'completed' && task.status !== 'cancelled' && (
                       <>
-                        <button onClick={() => openEdit(task)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700" title="Editar">
+                        <button onClick={() => openEdit(task)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700" title={t('common.edit')}>
                           <Pencil className="w-3.5 h-3.5"/>
                         </button>
-                        <button onClick={() => setDeletingId(task.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title="Eliminar">
+                        <button onClick={() => setDeletingId(task.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600" title={t('common.delete')}>
                           <Trash2 className="w-3.5 h-3.5"/>
                         </button>
                       </>
@@ -612,33 +617,33 @@ const CollectionTasksTab: React.FC = () => {
                   <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-2 bg-slate-50/50">
                     {task.description && (
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Descripción</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('task.description_label')}</p>
                         <p className="text-sm text-slate-700 whitespace-pre-line">{task.description}</p>
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Creada por</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">{t('task.created_by')}</p>
                         <p className="text-slate-700">{task.createdByName || '—'}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Asignada a</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">{t('task.assigned_to_label')}</p>
                         <p className="text-slate-700">{task.assignedToName || '—'}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Fecha creación</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">{t('task.created_date')}</p>
                         <p className="text-slate-700">{formatDate(task.createdAt)}</p>
                       </div>
                       {task.completedAt && (
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Completada</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">{t('task.completed_label')}</p>
                           <p className="text-slate-700">{formatDate(task.completedAt)}</p>
                         </div>
                       )}
                     </div>
                     {task.resultNotes && (
                       <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-                        <p className="text-[10px] font-bold text-emerald-700 uppercase mb-0.5">Resultado</p>
+                        <p className="text-[10px] font-bold text-emerald-700 uppercase mb-0.5">{t('task.result_label')}</p>
                         <p className="text-sm text-emerald-800">{task.resultNotes}</p>
                       </div>
                     )}
@@ -657,7 +662,7 @@ const CollectionTasksTab: React.FC = () => {
             <div className="flex items-center justify-between mb-5">
               <h2 className="section-title flex items-center gap-2">
                 <ClipboardList className="w-5 h-5"/>
-                {editingTask ? 'Editar Tarea' : 'Nueva Tarea'}
+                {editingTask ? t('task.edit') : t('task.new')}
               </h2>
               <button onClick={() => { setShowForm(false); setEditingTask(null) }} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5"/></button>
             </div>
@@ -665,40 +670,40 @@ const CollectionTasksTab: React.FC = () => {
             <div className="space-y-4">
               {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Título *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('task.title_label')}</label>
                 <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="Ej: Llamar para recordar pago de cuota"
+                  placeholder={t('task.title_ph')}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Descripción (opcional)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('task.desc_label')}</label>
                 <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2}
-                  placeholder="Instrucciones adicionales..."
+                  placeholder={t('task.desc_ph')}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('task.type_label')}</label>
                   <select value={form.task_type} onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {TASK_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    {TASK_TYPES.map(ty => <option key={ty.value} value={ty.value}>{t(ty.labelKey)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Prioridad</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('task.priority_label')}</label>
                   <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    {PRIORITIES.map(p => <option key={p.value} value={p.value}>{t(p.labelKey)}</option>)}
                   </select>
                 </div>
               </div>
 
               {/* Due date */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Fecha límite *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('task.due_label')}</label>
                 <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
@@ -706,13 +711,13 @@ const CollectionTasksTab: React.FC = () => {
               {/* Assign to */}
               {canManageState && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Asignar a *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('task.assign_label')}</label>
                   {collectors.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No hay cobradores disponibles.</p>
+                    <p className="text-xs text-slate-400 italic">{t('task.no_collectors')}</p>
                   ) : (
                     <select value={form.assigned_to} onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- Selecciona un cobrador --</option>
+                      <option value="">{t('task.select_collector')}</option>
                       {collectors.map(c => <option key={c.id} value={c.id}>{c.fullName} ({c.email})</option>)}
                     </select>
                   )}
@@ -722,40 +727,40 @@ const CollectionTasksTab: React.FC = () => {
               {/* Loan / Client link */}
               <div className="border border-dashed border-slate-200 rounded-lg p-3 space-y-3 bg-slate-50">
                 <p className="text-xs font-semibold text-slate-400 uppercase flex items-center gap-1.5">
-                  <Link2 className="w-3 h-3"/>Vincular a Préstamo / Cliente (opcional)
+                  <Link2 className="w-3 h-3"/>{t('task.link_label')}
                 </p>
 
                 <div>
-                  <label className="block text-xs text-slate-600 mb-1">Préstamo</label>
+                  <label className="block text-xs text-slate-600 mb-1">{t('col.loan')}</label>
                   <select value={form.loan_id} onChange={e => handleLoanSelect(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">— Sin préstamo asociado —</option>
+                    <option value="">{t('task.no_loan')}</option>
                     {loanOptions.map(l => (
                       <option key={l.id} value={l.id}>#{l.loanNumber} — {l.clientName}</option>
                     ))}
                   </select>
-                  {form.loan_id && <p className="text-[10px] text-slate-400 mt-0.5">Cliente asignado automáticamente al seleccionar el préstamo.</p>}
+                  {form.loan_id && <p className="text-[10px] text-slate-400 mt-0.5">{t('task.auto_client')}</p>}
                 </div>
 
                 {!form.loan_id && (
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Cliente (sin préstamo específico)</label>
+                    <label className="block text-xs text-slate-600 mb-1">{t('task.client_no_loan')}</label>
                     <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">— Sin cliente asociado —</option>
+                      <option value="">{t('task.no_client')}</option>
                       {clientOptions.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
                     </select>
                   </div>
                 )}
 
-                <p className="text-[10px] text-slate-400">Puedes dejar ambos en blanco si la tarea no está vinculada a un préstamo o cliente específico.</p>
+                <p className="text-[10px] text-slate-400">{t('task.both_blank')}</p>
               </div>
             </div>
 
             <div className="flex gap-2 mt-5">
-              <Button variant="outline" className="flex-1" onClick={() => { setShowForm(false); setEditingTask(null) }}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => { setShowForm(false); setEditingTask(null) }}>{t('common.cancel')}</Button>
               <Button className="flex-1" onClick={handleSave} disabled={isSaving || !form.title.trim() || !form.due_date}>
-                {isSaving ? 'Guardando...' : editingTask ? 'Guardar Cambios' : 'Crear Tarea'}
+                {isSaving ? t('pay.saving') : editingTask ? t('common.save_changes') : t('task.create')}
               </Button>
             </div>
           </Card>
@@ -767,7 +772,7 @@ const CollectionTasksTab: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/>Completar Tarea</h2>
+              <h2 className="section-title flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/>{t('task.complete_title')}</h2>
               <button onClick={() => setCompletingTask(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5"/></button>
             </div>
             <div className="bg-slate-50 rounded-lg px-3 py-2 mb-4">
@@ -777,15 +782,15 @@ const CollectionTasksTab: React.FC = () => {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Resultado / Notas (opcional)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('task.result_notes_label')}</label>
               <textarea value={resultNotes} onChange={e => setResultNotes(e.target.value)} rows={3} autoFocus
-                placeholder="Ej: Cliente pagó en efectivo. Quedan 2 cuotas pendientes..."
+                placeholder={t('task.result_ph')}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" className="flex-1" onClick={() => setCompletingTask(null)}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => setCompletingTask(null)}>{t('common.cancel')}</Button>
               <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={handleComplete} disabled={isCompleting}>
-                {isCompleting ? 'Guardando...' : 'Confirmar Completada'}
+                {isCompleting ? t('pay.saving') : t('task.confirm_complete')}
               </Button>
             </div>
           </Card>
@@ -801,14 +806,14 @@ const CollectionTasksTab: React.FC = () => {
                 <Trash2 className="w-5 h-5 text-red-600"/>
               </div>
               <div>
-                <p className="font-semibold text-slate-800">¿Eliminar esta tarea?</p>
-                <p className="text-sm text-slate-500">Esta acción no se puede deshacer.</p>
+                <p className="font-semibold text-slate-800">{t('task.delete_q')}</p>
+                <p className="text-sm text-slate-500">{t('task.delete_desc')}</p>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" className="flex-1" onClick={() => setDeletingId(null)}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => setDeletingId(null)}>{t('common.cancel')}</Button>
               <Button className="flex-1 bg-red-600 hover:bg-red-700" onClick={handleDelete} disabled={isDeleting}>
-                {isDeleting ? 'Eliminando...' : 'Eliminar'}
+                {isDeleting ? t('task.deleting') : t('common.delete')}
               </Button>
             </div>
           </Card>
