@@ -25,6 +25,10 @@ import {
 } from 'lucide-react'
 
 import PlanInquiryModal from '@/components/public/PlanInquiryModal'
+import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
+import { useT } from '@/lib/i18n'
+
+type TFn = (key: string) => string
 interface Plan {
   slug?: string
   name: string
@@ -38,166 +42,75 @@ interface Plan {
   ctaLabel?: string
 }
 
-const plans: Plan[] = [
+const buildPlans = (t: TFn): Plan[] => [
   {
-    name: 'Starter',
-    slug: 'starter',
-    price: 29.99,
-    description: 'Ideal para emprendedores que recién empiezan',
-    collectors: '1 cobrador',
-    clients: 'Hasta 100 clientes',
-    users: 'Hasta 3 usuarios',
+    name: t('lp.plan.starter'), slug: 'starter', price: 29.99,
+    description: t('lp.plan.starter.d'),
+    collectors: t('lp.lim.col1'), clients: t('lp.lim.cli100'), users: t('lp.lim.usr3'),
     features: [
-      'Gestión completa de clientes',
-      'Préstamos con amortización automática',
-      'Pagos y recibos digitales',
-      'Calculadora de préstamos',
-      'Dashboard básico',
-      'Soporte por correo',
+      t('lp.pf.clients_mgmt'), t('lp.pf.amort'), t('lp.pf.digital_pay'),
+      t('lp.pf.calc'), t('lp.pf.dash_basic'), t('lp.pf.email_support'),
     ],
   },
   {
-    name: 'Básico',
-    slug: 'basico',
-    price: 59.99,
-    description: 'Para negocios en crecimiento con varios cobradores',
-    collectors: '3 cobradores',
-    clients: 'Hasta 500 clientes',
-    users: 'Hasta 8 usuarios',
+    name: t('lp.plan.basico'), slug: 'basico', price: 59.99,
+    description: t('lp.plan.basico.d'),
+    collectors: t('lp.lim.col3'), clients: t('lp.lim.cli500'), users: t('lp.lim.usr8'),
     features: [
-      'Todo lo del plan Starter',
-      'Módulo de Cobranzas',
-      'Promesas de pago',
-      'Contratos digitales',
-      'Reportes avanzados',
-      'WhatsApp integrado',
-      'Plantillas de mensajes',
+      t('lp.pf.all_starter'), t('lp.pf.collections'), t('lp.pf.promises'),
+      t('lp.pf.contracts'), t('lp.pf.adv_reports'), t('lp.pf.whatsapp'), t('lp.pf.templates'),
     ],
     highlighted: true,
-    ctaLabel: 'Más popular',
+    ctaLabel: t('lp.pricing.popular'),
   },
   {
-    name: 'Profesional',
-    slug: 'profesional',
-    price: 119.99,
-    description: 'Para empresas con operación consolidada',
-    collectors: '10 cobradores',
-    clients: 'Hasta 2,000 clientes',
-    users: 'Hasta 20 usuarios',
+    name: t('lp.plan.profesional'), slug: 'profesional', price: 119.99,
+    description: t('lp.plan.profesional.d'),
+    collectors: t('lp.lim.col10'), clients: t('lp.lim.cli2000'), users: t('lp.lim.usr20'),
     features: [
-      'Todo lo del plan Básico',
-      'Múltiples sucursales',
-      'Solicitudes públicas de préstamo',
-      'Proyecciones de cartera',
-      'Gestión de ingresos',
-      'Roles y permisos avanzados',
-      'Soporte prioritario',
+      t('lp.pf.all_basico'), t('lp.pf.branches'), t('lp.pf.public_req'),
+      t('lp.pf.projections'), t('lp.pf.income_mgmt'), t('lp.pf.roles'), t('lp.pf.priority'),
     ],
   },
   {
-    name: 'Enterprise',
-    slug: 'enterprise',
-    price: 249.99,
-    description: 'Para grandes instituciones financieras',
-    collectors: 'Cobradores ilimitados',
-    clients: 'Clientes ilimitados',
-    users: 'Usuarios ilimitados',
+    name: t('lp.plan.enterprise'), slug: 'enterprise', price: 249.99,
+    description: t('lp.plan.enterprise.d'),
+    collectors: t('lp.lim.colInf'), clients: t('lp.lim.cliInf'), users: t('lp.lim.usrInf'),
     features: [
-      'Todo lo del plan Profesional',
-      'Sin límites de uso',
-      'Cuentas bancarias múltiples',
-      'API de integración (próximamente)',
-      'Onboarding personalizado',
-      'Soporte 24/7 dedicado',
-      'SLA garantizado',
+      t('lp.pf.all_pro'), t('lp.pf.no_limits'), t('lp.pf.multi_bank'),
+      t('lp.pf.api'), t('lp.pf.onboarding'), t('lp.pf.support_247'), t('lp.pf.sla'),
     ],
   },
 ]
 
-const features = [
-  {
-    icon: Users,
-    title: 'Clientes',
-    description: 'Base de datos completa con historial crediticio, documentos, referencias y score interno.',
-  },
-  {
-    icon: DollarSign,
-    title: 'Préstamos',
-    description: 'Crea préstamos con amortización francesa o cuota fija. Tasas, plazos y frecuencias 100% configurables.',
-  },
-  {
-    icon: CreditCard,
-    title: 'Pagos',
-    description: 'Registra pagos parciales o completos, aplica a capital, interés o mora. Recibos automáticos en PDF.',
-  },
-  {
-    icon: ClipboardList,
-    title: 'Cobranzas',
-    description: 'Asigna carteras a cobradores, gestiona promesas de pago y monitorea la mora en tiempo real.',
-  },
-  {
-    icon: FileText,
-    title: 'Contratos',
-    description: 'Genera contratos legales con tus plantillas. Firma digital y respaldo en la nube.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Reportes',
-    description: 'Dashboard ejecutivo, cartera vencida, proyecciones, rentabilidad y reportes exportables.',
-  },
-  {
-    icon: Calculator,
-    title: 'Calculadora',
-    description: 'Simula préstamos antes de crearlos. Compara escenarios y muestra al cliente cuotas claras.',
-  },
-  {
-    icon: MessageCircle,
-    title: 'WhatsApp',
-    description: 'Envía recordatorios de pago, notificaciones y avisos directamente desde el sistema.',
-  },
-  {
-    icon: Inbox,
-    title: 'Solicitudes online',
-    description: 'Recibe solicitudes de préstamo desde un enlace público. Aprueba o rechaza con un clic.',
-  },
+const buildFeatures = (t: TFn) => [
+  { icon: Users,         title: t('lp.f.clients.t'),     description: t('lp.f.clients.d') },
+  { icon: DollarSign,    title: t('lp.f.loans.t'),       description: t('lp.f.loans.d') },
+  { icon: CreditCard,    title: t('lp.f.payments.t'),    description: t('lp.f.payments.d') },
+  { icon: ClipboardList, title: t('lp.f.collections.t'), description: t('lp.f.collections.d') },
+  { icon: FileText,      title: t('lp.f.contracts.t'),   description: t('lp.f.contracts.d') },
+  { icon: BarChart3,     title: t('lp.f.reports.t'),     description: t('lp.f.reports.d') },
+  { icon: Calculator,    title: t('lp.f.calc.t'),        description: t('lp.f.calc.d') },
+  { icon: MessageCircle, title: t('lp.f.whatsapp.t'),    description: t('lp.f.whatsapp.d') },
+  { icon: Inbox,         title: t('lp.f.requests.t'),    description: t('lp.f.requests.d') },
 ]
 
-const faqs = [
-  {
-    q: '¿Hay prueba gratis?',
-    a: 'Sí. Ofrecemos hasta 14 días de prueba gratis para que evalúes la plataforma. Solicita tu plan desde el formulario y coordinamos contigo el inicio del trial. No requiere tarjeta de crédito.',
-  },
-  {
-    q: '¿Puedo cambiar de plan después?',
-    a: 'Por supuesto. Puedes subir o bajar de plan en cualquier momento desde Configuración → Suscripción. El cambio aplica de inmediato.',
-  },
-  {
-    q: '¿Mis datos están seguros?',
-    a: 'Sí. PrestaMax usa cifrado en tránsito (HTTPS/TLS), almacenamiento aislado por empresa (multi-tenant) y respaldos diarios. Cumplimos con buenas prácticas de seguridad de la información.',
-  },
-  {
-    q: '¿Necesito instalar algo?',
-    a: 'No. PrestaMax es 100% web. Funciona desde cualquier navegador moderno en computadora, tableta o celular. No requiere instalación ni mantenimiento.',
-  },
-  {
-    q: '¿En qué países y monedas funciona PrestaMax?',
-    a: 'PrestaMax es multi-país y multi-moneda. Soporta 12 monedas: Peso Dominicano (DOP), Dólar Estadounidense (USD), Euro (EUR), Gourde Haitiano (HTG), Peso Mexicano (MXN), Peso Colombiano (COP), Sol Peruano (PEN), Peso Chileno (CLP), Boliviano (BOB), Peso Uruguayo (UYU), Real Brasileño (BRL) y Quetzal Guatemalteco (GTQ). Toda la interfaz está en español, inglés y portugués.',
-  },
-  {
-    q: '¿Qué pasa si excedo los límites de mi plan?',
-    a: 'Te notificamos cuando estés cerca del límite. Si lo excedes, simplemente cambias a un plan superior. No bloqueamos tu operación de inmediato.',
-  },
-  {
-    q: '¿Puedo cancelar cuando quiera?',
-    a: 'Sí. No hay contratos a largo plazo. Cancelas con un clic y mantienes acceso hasta que termine tu período pagado.',
-  },
-  {
-    q: '¿Qué método de pago aceptan?',
-    a: 'Por ahora coordinamos contigo el método que mejor te funcione: transferencia bancaria local, depósito o pago en efectivo (Rep. Dominicana). Pronto habilitaremos pago por tarjeta de crédito self-service. Escríbenos al solicitar tu plan y te enviamos los datos de pago.',
-  },
+const buildFaqs = (t: TFn) => [
+  { q: t('lp.faq.q1'), a: t('lp.faq.a1') },
+  { q: t('lp.faq.q2'), a: t('lp.faq.a2') },
+  { q: t('lp.faq.q3'), a: t('lp.faq.a3') },
+  { q: t('lp.faq.q4'), a: t('lp.faq.a4') },
+  { q: t('lp.faq.q5'), a: t('lp.faq.a5') },
+  { q: t('lp.faq.q6'), a: t('lp.faq.a6') },
+  { q: t('lp.faq.q7'), a: t('lp.faq.a7') },
+  { q: t('lp.faq.q8'), a: t('lp.faq.a8') },
 ]
 
 const LandingPage: React.FC = () => {
+  const t = useT()
+  const plans = buildPlans(t)
+  const features = buildFeatures(t)
+  const faqs = buildFaqs(t)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [inquiryOpen, setInquiryOpen]       = useState(false)
   const [inquiryPlan, setInquiryPlan]       = useState<string>('')
@@ -223,42 +136,46 @@ const LandingPage: React.FC = () => {
 
             {/* Desktop nav */}
             <nav className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-sm text-slate-600 hover:text-slate-900">Funciones</a>
-              <a href="#pricing" className="text-sm text-slate-600 hover:text-slate-900">Precios</a>
-              <a href="#faq" className="text-sm text-slate-600 hover:text-slate-900">Preguntas</a>
-              <Link to="/login" className="text-sm text-slate-600 hover:text-slate-900">Iniciar sesión</Link>
+              <a href="#features" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.features')}</a>
+              <a href="#pricing" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.pricing')}</a>
+              <a href="#faq" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.faq')}</a>
+              <Link to="/login" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.login')}</Link>
+              <LanguageSwitcher />
               <button
                 type="button"
                 onClick={() => openInquiry('')}
                 className="px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#152a45] transition"
               >
-                Solicitar plan
+                {t('lp.cta.request')}
               </button>
             </nav>
 
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-md text-slate-600 hover:bg-slate-100"
-              aria-label="Menú"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
+            {/* Mobile: selector de idioma + botón menú */}
+            <div className="md:hidden flex items-center gap-1">
+              <LanguageSwitcher />
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 rounded-md text-slate-600 hover:bg-slate-100"
+                aria-label={t('lp.menu')}
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
           </div>
 
           {/* Mobile nav */}
           {mobileMenuOpen && (
             <div className="md:hidden py-4 border-t border-slate-200 space-y-2">
-              <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">Funciones</a>
-              <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">Precios</a>
-              <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">Preguntas</a>
-              <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">Iniciar sesión</Link>
+              <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.features')}</a>
+              <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.pricing')}</a>
+              <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.faq')}</a>
+              <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.login')}</Link>
               <button
                 type="button"
                 onClick={() => openInquiry('')}
                 className="block w-full px-3 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded text-center"
               >
-                Solicitar plan
+                {t('lp.cta.request')}
               </button>
             </div>
           )}
@@ -271,15 +188,14 @@ const LandingPage: React.FC = () => {
           <div className="text-center max-w-4xl mx-auto">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700 mb-6">
               <Zap className="w-3.5 h-3.5" />
-              Trial de 14 días · Sin tarjeta · Soporte por WhatsApp
+              {t('lp.hero.badge')}
             </div>
             <h1 className="text-4xl md:text-6xl font-bold text-slate-900 leading-tight">
-              Gestiona tu negocio de préstamos
-              <span className="block text-[#f59e0b]">de forma profesional</span>
+              {t('lp.hero.title1')}
+              <span className="block text-[#f59e0b]">{t('lp.hero.title2')}</span>
             </h1>
             <p className="mt-6 text-lg md:text-xl text-slate-600 max-w-2xl mx-auto">
-              PrestaMax es el sistema completo para administrar clientes, préstamos, cobranzas, pagos y contratos.
-              Multi-país y multi-moneda: soporte para 12 monedas de Latinoamérica, USD y EUR.
+              {t('lp.hero.subtitle')}
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <button
@@ -287,28 +203,28 @@ const LandingPage: React.FC = () => {
                 onClick={() => openInquiry('')}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/30"
               >
-                Solicitar plan
+                {t('lp.cta.request')}
                 <ArrowRight className="w-4 h-4" />
               </button>
               <a
                 href="#pricing"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-slate-700 font-medium rounded-lg border border-slate-300 hover:bg-slate-50 transition"
               >
-                Ver planes
+                {t('lp.cta.see_plans')}
               </a>
             </div>
             <div className="mt-8 flex items-center justify-center gap-6 text-sm text-slate-500">
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-[#1e3a5f]" />
-                Sin instalación
+                {t('lp.hero.no_install')}
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-[#1e3a5f]" />
-                Cancela cuando quieras
+                {t('lp.hero.cancel_any')}
               </div>
               <div className="hidden sm:flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-[#1e3a5f]" />
-                Multi-moneda
+                {t('lp.hero.multi')}
               </div>
             </div>
           </div>
@@ -325,10 +241,10 @@ const LandingPage: React.FC = () => {
                 </div>
                 <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { label: 'Cartera activa', value: '$ 2.4M', colorClass: 'text-[#1e3a5f]' },
-                    { label: 'Clientes', value: '347', colorClass: 'text-blue-600' },
-                    { label: 'Préstamos activos', value: '142', colorClass: 'text-purple-600' },
-                    { label: 'Cobrado este mes', value: '$ 412K', colorClass: 'text-[#f59e0b]' },
+                    { label: t('lp.mock.portfolio'), value: '$ 2.4M', colorClass: 'text-[#1e3a5f]' },
+                    { label: t('lp.mock.clients'), value: '347', colorClass: 'text-blue-600' },
+                    { label: t('lp.mock.active_loans'), value: '142', colorClass: 'text-purple-600' },
+                    { label: t('lp.mock.collected'), value: '$ 412K', colorClass: 'text-[#f59e0b]' },
                   ].map((stat, i) => (
                     <div key={i} className="p-4 bg-slate-50 rounded-lg border border-slate-100">
                       <div className="text-xs text-slate-500">{stat.label}</div>
@@ -359,23 +275,23 @@ const LandingPage: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             <div className="flex flex-col items-center gap-1">
               <Smartphone className="w-6 h-6 text-[#1e3a5f]" />
-              <div className="text-sm font-medium text-slate-900">100% Web</div>
-              <div className="text-xs text-slate-500">Desde cualquier dispositivo</div>
+              <div className="text-sm font-medium text-slate-900">{t('lp.trust.web')}</div>
+              <div className="text-xs text-slate-500">{t('lp.trust.web_d')}</div>
             </div>
             <div className="flex flex-col items-center gap-1">
               <Lock className="w-6 h-6 text-[#1e3a5f]" />
-              <div className="text-sm font-medium text-slate-900">Datos cifrados</div>
-              <div className="text-xs text-slate-500">HTTPS y aislamiento por empresa</div>
+              <div className="text-sm font-medium text-slate-900">{t('lp.trust.enc')}</div>
+              <div className="text-xs text-slate-500">{t('lp.trust.enc_d')}</div>
             </div>
             <div className="flex flex-col items-center gap-1">
               <Cloud className="w-6 h-6 text-[#1e3a5f]" />
-              <div className="text-sm font-medium text-slate-900">Respaldos diarios</div>
-              <div className="text-xs text-slate-500">Tu información siempre segura</div>
+              <div className="text-sm font-medium text-slate-900">{t('lp.trust.backup')}</div>
+              <div className="text-xs text-slate-500">{t('lp.trust.backup_d')}</div>
             </div>
             <div className="flex flex-col items-center gap-1">
               <ShieldCheck className="w-6 h-6 text-[#f59e0b]" />
-              <div className="text-sm font-medium text-slate-900">Multi-país y multi-moneda</div>
-              <div className="text-xs text-slate-500">12 monedas · ES / EN / PT</div>
+              <div className="text-sm font-medium text-slate-900">{t('lp.trust.multi')}</div>
+              <div className="text-xs text-slate-500">{t('lp.trust.multi_d')}</div>
             </div>
           </div>
         </div>
@@ -386,10 +302,10 @@ const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
-              Todo lo que necesitas para gestionar tu negocio
+              {t('lp.features.title')}
             </h2>
             <p className="mt-4 text-lg text-slate-600">
-              Una plataforma completa que reemplaza Excel, papel y sistemas dispersos.
+              {t('lp.features.subtitle')}
             </p>
           </div>
 
@@ -418,10 +334,10 @@ const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
-              Precios simples y transparentes
+              {t('lp.pricing.title')}
             </h2>
             <p className="mt-4 text-lg text-slate-600">
-              Sin sorpresas. Cancela cuando quieras. Te contactamos para configurar tu cuenta sin fricción.
+              {t('lp.pricing.subtitle')}
             </p>
           </div>
 
@@ -447,7 +363,7 @@ const LandingPage: React.FC = () => {
                   <p className="mt-1 text-sm text-slate-500 min-h-[40px]">{plan.description}</p>
                   <div className="mt-4 flex items-baseline gap-1">
                     <span className="text-4xl font-bold text-slate-900">${plan.price}</span>
-                    <span className="text-sm text-slate-500">/mes</span>
+                    <span className="text-sm text-slate-500">{t('lp.pricing.per_month')}</span>
                   </div>
                 </div>
 
@@ -484,14 +400,14 @@ const LandingPage: React.FC = () => {
                       : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                   }`}
                 >
-                  Solicitar plan
+                  {t('lp.cta.request')}
                 </button>
               </div>
             ))}
           </div>
 
           <p className="mt-8 text-center text-sm text-slate-500">
-            Todos los precios en USD. Te contactamos para coordinar el pago (transferencia, depósito o tarjeta).
+            {t('lp.pricing.note')}
           </p>
         </div>
       </section>
@@ -500,17 +416,17 @@ const LandingPage: React.FC = () => {
       <section className="py-16 md:py-20 bg-gradient-to-br from-[#1e3a5f] to-[#152a45]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-white">
-            Empieza a profesionalizar tu negocio hoy
+            {t('lp.ctab.title')}
           </h2>
           <p className="mt-4 text-lg text-blue-100">
-            Habla con nuestro equipo. Te ayudamos a elegir el plan correcto y configurar tu cuenta.
+            {t('lp.ctab.subtitle')}
           </p>
           <button
             type="button"
             onClick={() => openInquiry('')}
             className="mt-8 inline-flex items-center gap-2 px-8 py-3 bg-white text-[#1e3a5f] font-semibold rounded-lg hover:bg-slate-50 transition shadow-lg"
           >
-            Solicitar mi plan
+            {t('lp.cta.request_mine')}
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -520,8 +436,8 @@ const LandingPage: React.FC = () => {
       <section id="faq" className="py-16 md:py-24">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">Preguntas frecuentes</h2>
-            <p className="mt-4 text-lg text-slate-600">Resolvemos las dudas más comunes</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.faq.title')}</h2>
+            <p className="mt-4 text-lg text-slate-600">{t('lp.faq.subtitle')}</p>
           </div>
 
           <div className="mt-10 space-y-3">
@@ -561,39 +477,39 @@ const LandingPage: React.FC = () => {
                 <span className="text-lg font-bold text-white">PrestaMax</span>
               </div>
               <p className="mt-3 text-sm text-slate-400">
-                Sistema profesional de gestión de préstamos multi-país y multi-moneda.
+                {t('lp.footer.tagline')}
               </p>
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-white">Producto</h4>
+              <h4 className="text-sm font-semibold text-white">{t('lp.footer.product')}</h4>
               <ul className="mt-3 space-y-2 text-sm">
-                <li><a href="#features" className="hover:text-white">Funciones</a></li>
-                <li><a href="#pricing" className="hover:text-white">Precios</a></li>
-                <li><a href="#faq" className="hover:text-white">Preguntas</a></li>
+                <li><a href="#features" className="hover:text-white">{t('lp.nav.features')}</a></li>
+                <li><a href="#pricing" className="hover:text-white">{t('lp.nav.pricing')}</a></li>
+                <li><a href="#faq" className="hover:text-white">{t('lp.nav.faq')}</a></li>
               </ul>
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-white">Cuenta</h4>
+              <h4 className="text-sm font-semibold text-white">{t('lp.footer.account')}</h4>
               <ul className="mt-3 space-y-2 text-sm">
-                <li><Link to="/login" className="hover:text-white">Iniciar sesión</Link></li>
-                <li><Link to="/register" className="hover:text-white">Crear cuenta</Link></li>
+                <li><Link to="/login" className="hover:text-white">{t('lp.nav.login')}</Link></li>
+                <li><Link to="/register" className="hover:text-white">{t('lp.footer.create')}</Link></li>
               </ul>
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-white">Legal</h4>
+              <h4 className="text-sm font-semibold text-white">{t('lp.footer.legal')}</h4>
               <ul className="mt-3 space-y-2 text-sm">
-                <li><Link to="/terms" className="hover:text-white">Términos y condiciones</Link></li>
-                <li><Link to="/privacy" className="hover:text-white">Política de privacidad</Link></li>
+                <li><Link to="/terms" className="hover:text-white">{t('lp.footer.terms')}</Link></li>
+                <li><Link to="/privacy" className="hover:text-white">{t('lp.footer.privacy')}</Link></li>
               </ul>
             </div>
           </div>
 
           <div className="mt-10 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-slate-400">
-              © {new Date().getFullYear()} PrestaMax. Todos los derechos reservados.
+              © {new Date().getFullYear()} PrestaMax. {t('lp.footer.rights')}
             </p>
             <p className="text-xs text-slate-400">
               PrestaMax — Powered by JPRS Digital Connect
