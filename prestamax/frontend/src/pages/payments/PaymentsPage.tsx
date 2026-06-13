@@ -16,6 +16,7 @@ import { printPaymentReceipt, sendReceiptByWhatsApp } from '@/lib/printReceipt'
 import { AuthContext } from '@/contexts/AuthContext'
 import { TenantContext } from '@/contexts/TenantContext'
 import { usePermission } from '@/hooks/usePermission'
+import { useT, t as tg } from '@/lib/i18n'
 
 interface Payment {
   id: string
@@ -69,32 +70,29 @@ interface PaymentPreview {
   nextInstallment: { number: number; dueDate: string; total: number } | null
 }
 
-const METHOD_LABELS: Record<string, string> = { cash: 'Efectivo', transfer: 'Transferencia', check: 'Cheque', card: 'Tarjeta' }
-
-
+// Etiquetas de método: usan el motor i18n (tg = traductor no-hook).
+const methodLabel = (m: string): string => tg('method.' + m, m)
 
 // ── Send WhatsApp confirmation ─────────────────────────────────────────────────
 const sendWhatsApp = (p: Payment, tenantName: string) => {
   const phone = (p.clientPhone || '').replace(/\D/g, '')
-  if (!phone) { alert('El cliente no tiene número de teléfono registrado'); return }
+  if (!phone) { alert(tg('pay.no_phone')); return }
   const fmtMoney = (n: number) => `RD$${(n || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
   const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  const msg = `✅ *Confirmación de Pago*\n\n🏢 *${tenantName}*\nRecibo: ${p.receiptNumber || p.paymentNumber}\nFecha: ${fmtDate(p.paymentDate)}\nPréstamo: ${p.loanNumber}\nMonto: *${fmtMoney(p.amount)}*\nMétodo: ${METHOD_LABELS[p.paymentMethod] || p.paymentMethod}\n\n_Gracias por su pago._`
+  const msg = `✅ *${tg('pay.wa.title')}*\n\n🏢 *${tenantName}*\n${tg('pay.wa.receipt')}: ${p.receiptNumber || p.paymentNumber}\n${tg('pay.wa.date')}: ${fmtDate(p.paymentDate)}\n${tg('pay.wa.loan')}: ${p.loanNumber}\n${tg('pay.wa.amount')}: *${fmtMoney(p.amount)}*\n${tg('pay.wa.method')}: ${methodLabel(p.paymentMethod)}\n\n_${tg('pay.wa.thanks')}_`
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
   window.open(url, '_blank')
 }
 
-const BASE_PAYMENT_TYPES = [
-  { value: 'regular',       icon: CreditCard,   label: 'Cuota Regular',    desc: 'Interés primero, luego capital' },
-  { value: 'interest_only', icon: Percent,       label: 'Solo Interés',     desc: 'Abona únicamente a intereses' },
-  { value: 'capital_only',  icon: TrendingDown,  label: 'Abono al Capital', desc: 'Interés primero, resto al capital' },
-  { value: 'full_payoff',   icon: Zap,           label: 'Liquidar Total',   desc: 'Paga el saldo completo' },
-]
-
 function getPaymentTypes(loan?: ActiveLoan | null) {
-  const types = [...BASE_PAYMENT_TYPES]
+  const types = [
+    { value: 'regular',       icon: CreditCard,   label: tg('pay.type.regular'),  desc: tg('pay.type.regular_desc') },
+    { value: 'interest_only', icon: Percent,      label: tg('pay.type.interest'), desc: tg('pay.type.interest_desc') },
+    { value: 'capital_only',  icon: TrendingDown, label: tg('pay.type.capital'),  desc: tg('pay.type.capital_desc') },
+    { value: 'full_payoff',   icon: Zap,          label: tg('pay.type.payoff'),   desc: tg('pay.type.payoff_desc') },
+  ]
   if (loan && (loan.prorrogaFee || 0) > 0) {
-    types.push({ value: 'prorroga', icon: RotateCcw, label: 'Cargo de Prórroga', desc: `Extiende el vencimiento un período` })
+    types.push({ value: 'prorroga', icon: RotateCcw, label: tg('pay.type.prorroga'), desc: tg('pay.type.prorroga_desc') })
   }
   return types
 }
@@ -115,6 +113,7 @@ const PaymentsPage: React.FC = () => {
   const { state: authState } = useContext(AuthContext)
   const { state: tenantState } = useContext(TenantContext)
   const { can } = usePermission()
+  const t = useT()
 
   const [payments, setPayments] = useState<Payment[]>([])
   const [lastPayment, setLastPayment] = useState<any>(null)
@@ -154,7 +153,7 @@ const PaymentsPage: React.FC = () => {
       setPayments(res.data.data || [])
       if (res.data.counts) setVoidedCounts(res.data.counts)
     } catch (err) {
-      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar pagos')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(t('pay.load_error'))
     } finally {
       setIsLoading(false)
     }
@@ -227,36 +226,36 @@ const PaymentsPage: React.FC = () => {
         reference: editForm.reference,
         notes: editForm.notes,
       })
-      toast.success('Pago actualizado correctamente')
+      toast.success(t('pay.updated'))
       setEditingPayment(null)
       fetchPayments()
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Error al actualizar pago'
+      const msg = err?.response?.data?.error || t('pay.update_error')
       toast.error(msg)
     } finally { setIsSavingEdit(false) }
   }
 
   const handleVoidPayment = async () => {
     if (!voidingPayment || !voidReason.trim()) {
-      toast.error('Ingresa un motivo para anular el pago')
+      toast.error(t('pay.void_reason_required'))
       return
     }
     setIsVoiding(true)
     try {
       await api.post(`/payments/${voidingPayment.id}/void`, { voidReason })
-      toast.success('Pago anulado correctamente')
+      toast.success(t('pay.voided_ok'))
       setVoidingPayment(null)
       setVoidReason('')
       fetchPayments()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al anular pago')
+      toast.error(err?.response?.data?.error || t('pay.void_error'))
     } finally { setIsVoiding(false) }
   }
 
   const handleRegisterPayment = async (confirmedOverpaymentAction?: string, overrideAmount?: number) => {
     const amountToPay = overrideAmount ?? parseFloat(payForm.amount)
     if (!payForm.loanId || !amountToPay || amountToPay <= 0) {
-      toast.error('Selecciona el préstamo e ingresa el monto')
+      toast.error(t('pay.select_loan_amount'))
       return
     }
     // Si el monto excede la deuda, mostrar paso informativo. El backend ahora
@@ -278,7 +277,7 @@ const PaymentsPage: React.FC = () => {
         paymentType: payForm.paymentType,
         overpaymentAction: confirmedOverpaymentAction || payForm.overpaymentAction,
       })
-      toast.success('Pago registrado exitosamente')
+      toast.success(t('pay.registered_ok'))
       const loanForReceipt = selectedLoan
       closeModal()
       fetchPayments()
@@ -299,7 +298,7 @@ const PaymentsPage: React.FC = () => {
         setShowPostPaymentModal(true)
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al registrar pago')
+      toast.error(err?.response?.data?.error || t('pay.register_error'))
     } finally {
       setIsSubmitting(false)
     }
@@ -323,12 +322,12 @@ const PaymentsPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="page-title">Pagos</h1>
-          <p className="text-slate-600 text-sm mt-1">Registro y seguimiento de pagos</p>
+          <h1 className="page-title">{t('nav.payments')}</h1>
+          <p className="text-slate-600 text-sm mt-1">{t('pay.subtitle')}</p>
         </div>
         {can('payments.create') && (
           <Button onClick={() => setShowModal(true)} className="flex items-center gap-2">
-            <Plus className="w-4 h-4" />Registrar Pago
+            <Plus className="w-4 h-4" />{t('pay.register')}
           </Button>
         )}
       </div>
@@ -336,15 +335,15 @@ const PaymentsPage: React.FC = () => {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Card className="p-4 text-center bg-green-50">
-          <p className="text-xs text-slate-500 uppercase font-medium">Total Filtrado</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('pay.total_filtered')}</p>
           <p className="text-lg font-bold text-green-700 mt-1">{formatCurrency(totalAmount)}</p>
         </Card>
         <Card className="p-4 text-center">
-          <p className="text-xs text-slate-500 uppercase font-medium">Pagos válidos</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('pay.valid_payments')}</p>
           <p className="text-lg font-bold text-slate-800 mt-1">{voidedCounts.valid}</p>
         </Card>
         <Card className="p-4 text-center bg-slate-50">
-          <p className="text-xs text-slate-500 uppercase font-medium">Anulados</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('pay.voided')}</p>
           <p className="text-lg font-bold text-slate-500 mt-1">{voidedCounts.voided}</p>
         </Card>
       </div>
@@ -354,27 +353,27 @@ const PaymentsPage: React.FC = () => {
         <button
           onClick={() => setVoidedFilter('valid')}
           className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${voidedFilter === 'valid' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
-        >Válidos ({voidedCounts.valid})</button>
+        >{t('pay.valid')} ({voidedCounts.valid})</button>
         <button
           onClick={() => setVoidedFilter('voided')}
           className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${voidedFilter === 'voided' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
-        >Anulados ({voidedCounts.voided})</button>
+        >{t('pay.voided')} ({voidedCounts.voided})</button>
         <button
           onClick={() => setVoidedFilter('all')}
           className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${voidedFilter === 'all' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900'}`}
-        >Todos ({voidedCounts.valid + voidedCounts.voided})</button>
+        >{t('common.all')} ({voidedCounts.valid + voidedCounts.voided})</button>
       </div>
 
       {/* Filters */}
       <Card>
         <div className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Input type="text" placeholder="Buscar por número o cliente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <Input type="text" placeholder={t('pay.search_ph')} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             <select value={methodFilter} onChange={e => setMethodFilter(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Todos los métodos</option>
-              <option value="cash">Efectivo</option>
-              <option value="transfer">Transferencia</option>
-              <option value="check">Cheque</option>
+              <option value="">{t('pay.all_methods')}</option>
+              <option value="cash">{t('method.cash')}</option>
+              <option value="transfer">{t('method.transfer')}</option>
+              <option value="check">{t('method.check')}</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -391,15 +390,15 @@ const PaymentsPage: React.FC = () => {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Número</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Fecha</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Cliente</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Préstamo</th>
-                  <th className="text-right py-3 px-4 font-semibold text-slate-700">Monto</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Método</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Cuenta Bancaria</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Registrado por</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Estado</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.number')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.date')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.client')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.loan')}</th>
+                  <th className="text-right py-3 px-4 font-semibold text-slate-700">{t('col.amount')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.method')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.bank')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.registered_by')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.status')}</th>
                   <th className="py-3 px-4"></th>
                 </tr>
               </thead>
@@ -414,7 +413,7 @@ const PaymentsPage: React.FC = () => {
                       {formatCurrency(payment.amount)}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="text-xs">{METHOD_LABELS[payment.paymentMethod] || payment.paymentMethod}</span>
+                      <span className="text-xs">{methodLabel(payment.paymentMethod)}</span>
                     </td>
                     <td className="py-3 px-4">
                       {payment.bankAccountName ? (
@@ -426,7 +425,7 @@ const PaymentsPage: React.FC = () => {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400">Efectivo</span>
+                        <span className="text-xs text-slate-400">{t('method.cash')}</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
@@ -439,9 +438,9 @@ const PaymentsPage: React.FC = () => {
                     </td>
                     <td className="py-3 px-4">
                       {payment.isVoided ? (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-slate-200 text-slate-600">Anulado</span>
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-slate-200 text-slate-600">{t('pay.st_voided')}</span>
                       ) : (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">Registrado</span>
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">{t('pay.st_registered')}</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
@@ -450,7 +449,7 @@ const PaymentsPage: React.FC = () => {
                         <button
                           onClick={() => printPaymentReceipt(payment, (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' })}
                           className="p-1.5 hover:bg-blue-50 rounded text-blue-500 transition-colors"
-                          title="Imprimir recibo"
+                          title={t('pay.print_receipt')}
                         >
                           <Printer className="w-3.5 h-3.5"/>
                         </button>
@@ -459,7 +458,7 @@ const PaymentsPage: React.FC = () => {
                           <button
                             onClick={() => sendWhatsApp(payment, (tenantState as any)?.currentTenant?.tenant?.name || 'Negocio')}
                             className="p-1.5 hover:bg-green-50 rounded text-green-600 transition-colors"
-                            title="Enviar por WhatsApp"
+                            title={t('pay.send_whatsapp')}
                           >
                             <MessageCircle className="w-3.5 h-3.5"/>
                           </button>
@@ -470,14 +469,14 @@ const PaymentsPage: React.FC = () => {
                             <button
                               onClick={() => openEditPayment(payment)}
                               className="p-1.5 hover:bg-blue-50 rounded text-blue-400 transition-colors"
-                              title="Editar pago"
+                              title={t('pay.edit_title')}
                             >
                               <Edit2 className="w-3.5 h-3.5"/>
                             </button>
                             <button
                               onClick={() => { setVoidingPayment(payment); setVoidReason('') }}
                               className="p-1.5 hover:bg-red-50 rounded text-red-400 transition-colors"
-                              title="Anular pago"
+                              title={t('pay.void_title')}
                             >
                               <Trash2 className="w-3.5 h-3.5"/>
                             </button>
@@ -492,7 +491,7 @@ const PaymentsPage: React.FC = () => {
           </div>
         </Card>
       ) : (
-        <EmptyState icon={CreditCard} title="Sin pagos registrados" description="Los pagos aparecerán aquí cuando se registren" action={{label:'Registrar Pago',onClick:()=>setShowModal(true)}} />
+        <EmptyState icon={CreditCard} title={t('pay.empty_title')} description={t('pay.empty_desc')} action={{label:t('pay.register'),onClick:()=>setShowModal(true)}} />
       )}
 
       {/* Payment Modal */}
@@ -502,7 +501,7 @@ const PaymentsPage: React.FC = () => {
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="section-title">Registrar Pago</h2>
+                <h2 className="section-title">{t('pay.register')}</h2>
                 {selectedLoan && (
                   <p className="text-xs text-slate-500">{selectedLoan.loanNumber} · {selectedLoan.clientName}</p>
                 )}
@@ -520,13 +519,12 @@ const PaymentsPage: React.FC = () => {
                   const excess = (parseFloat(payForm.amount) || 0) - maxPayable
                   return (<>
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                      <p className="text-amber-800 font-semibold text-sm">El monto excede lo adeudado del préstamo</p>
+                      <p className="text-amber-800 font-semibold text-sm">{t('pay.over_title')}</p>
                       <p className="text-2xl font-bold text-amber-700 mt-1">
-                        Excedente: {formatCurrency(excess)}
+                        {t('pay.excess')}: {formatCurrency(excess)}
                       </p>
                       <p className="text-xs text-amber-600 mt-1">
-                        El sistema no acepta dinero por encima de la deuda. Puedes registrar el máximo
-                        aplicable y entregar la diferencia como cambio al cliente.
+                        {t('pay.over_desc')}
                       </p>
                     </div>
                     <button
@@ -536,14 +534,14 @@ const PaymentsPage: React.FC = () => {
                     >
                       <TrendingDown className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
                       <p className="font-semibold text-emerald-900 text-sm">
-                        Registrar {formatCurrency(maxPayable)} (saldo total)
+                        {t('pay.register_full').replace('{amt}', formatCurrency(maxPayable))}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        Liquida el préstamo y devuelve {formatCurrency(excess)} de cambio
+                        {t('pay.payoff_change').replace('{amt}', formatCurrency(excess))}
                       </p>
                     </button>
                     <Button variant="outline" className="w-full" onClick={() => setOverpaymentStep(false)} disabled={isSubmitting}>
-                      ← Volver y editar monto
+                      {t('pay.back_edit')}
                     </Button>
                   </>)
                 })()}
@@ -552,7 +550,7 @@ const PaymentsPage: React.FC = () => {
               <div className="space-y-4">
                 {/* Loan selector */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Préstamo *</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">{t('pay.loan_label')}</label>
                   <select
                     value={payForm.loanId}
                     onChange={e => {
@@ -562,7 +560,7 @@ const PaymentsPage: React.FC = () => {
                     }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">— Selecciona el préstamo —</option>
+                    <option value="">{t('pay.select_loan_opt')}</option>
                     {activeLoans.map(l => (
                       <option key={l.id} value={l.id}>
                         {l.loanNumber} – {l.clientName} ({formatCurrency(l.totalBalance)})
@@ -575,18 +573,18 @@ const PaymentsPage: React.FC = () => {
                 {selectedLoan && (
                   <div className="flex gap-2 flex-wrap text-xs">
                     <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded-full font-medium">
-                      Capital: {formatCurrency(selectedLoan.principalBalance || 0)}
+                      {t('pay.cap_label')}: {formatCurrency(selectedLoan.principalBalance || 0)}
                     </span>
                     <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
-                      Interés: {formatCurrency(selectedLoan.interestBalance || 0)}
+                      {t('pay.int_label')}: {formatCurrency(selectedLoan.interestBalance || 0)}
                     </span>
                     {(selectedLoan.moraBalance || 0) > 0 && (
                       <span className="bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
-                        Mora: {formatCurrency(selectedLoan.moraBalance)}
+                        {t('pay.mora_label')}: {formatCurrency(selectedLoan.moraBalance)}
                       </span>
                     )}
                     <span className="bg-slate-800 text-white px-2 py-1 rounded-full font-semibold ml-auto">
-                      Total: {formatCurrency(selectedLoan.totalBalance)}
+                      {t('pay.total_label')}: {formatCurrency(selectedLoan.totalBalance)}
                     </span>
                   </div>
                 )}
@@ -595,20 +593,20 @@ const PaymentsPage: React.FC = () => {
                 {selectedLoan && loanDetail?.installments && loanDetail.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived').length > 0 && (
                   <div className="border border-slate-200 rounded-lg overflow-hidden">
                     <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
-                      <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Estado de cuotas</span>
+                      <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{t('pay.installments_status')}</span>
                       <div className="flex gap-1.5 flex-wrap text-[10px]">
                         {(() => {
                           const overdueCount = loanDetail.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived' && (i.moraDays || 0) > 0).length
                           const totalMoraInst = loanDetail.installments.reduce((s: number, i: any) => s + (i.status !== 'paid' && i.status !== 'waived' ? (i.moraAmount || 0) : 0), 0)
                           return (<>
                             {overdueCount > 0 && (
-                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{overdueCount} vencida{overdueCount > 1 ? 's' : ''}</span>
+                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{t('pay.overdue_badge').replace('{n}', String(overdueCount))}</span>
                             )}
                             {totalMoraInst > 0 && (
-                              <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">Mora: {formatCurrency(totalMoraInst)}</span>
+                              <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">{t('pay.mora_label')}: {formatCurrency(totalMoraInst)}</span>
                             )}
                             {(loanDetail.prorrogaFee || 0) > 0 && (
-                              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Prorroga: {formatCurrency(loanDetail.prorrogaFee)}</span>
+                              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">{t('pay.prorroga_label')}: {formatCurrency(loanDetail.prorrogaFee)}</span>
                             )}
                           </>)
                         })()}
@@ -619,11 +617,11 @@ const PaymentsPage: React.FC = () => {
                         <thead className="bg-slate-50 sticky top-0">
                           <tr>
                             <th className="text-left px-3 py-1.5 font-semibold text-slate-600">#</th>
-                            <th className="text-left px-3 py-1.5 font-semibold text-slate-600">Vence</th>
-                            <th className="text-center px-3 py-1.5 font-semibold text-slate-600">Días</th>
-                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Cuota</th>
-                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Mora</th>
-                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Pendiente</th>
+                            <th className="text-left px-3 py-1.5 font-semibold text-slate-600">{t('pay.due')}</th>
+                            <th className="text-center px-3 py-1.5 font-semibold text-slate-600">{t('col.days')}</th>
+                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">{t('pay.cuota')}</th>
+                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">{t('pay.mora_label')}</th>
+                            <th className="text-right px-3 py-1.5 font-semibold text-slate-600">{t('pay.pending')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -639,9 +637,9 @@ const PaymentsPage: React.FC = () => {
                                 <td className="px-3 py-1.5 text-slate-700">{inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('es-DO') : '—'}</td>
                                 <td className="px-3 py-1.5 text-center">
                                   {isOverdue
-                                    ? <span className="text-red-700 font-semibold">{moraDays}d atraso</span>
+                                    ? <span className="text-red-700 font-semibold">{t('pay.days_overdue').replace('{n}', String(moraDays))}</span>
                                     : isPartial
-                                      ? <span className="text-amber-700">parcial</span>
+                                      ? <span className="text-amber-700">{t('pay.partial')}</span>
                                       : <span className="text-slate-400">—</span>}
                                 </td>
                                 <td className="px-3 py-1.5 text-right text-slate-700">{formatCurrency(cuota)}</td>
@@ -663,7 +661,7 @@ const PaymentsPage: React.FC = () => {
                 {/* Payment type selector */}
                 {payForm.loanId && (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Tipo de Pago</label>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">{t('pay.payment_type')}</label>
                     <div className="grid grid-cols-2 gap-2">
                       {getPaymentTypes(selectedLoan).map((pt) => {
                         const Icon = pt.icon
@@ -691,7 +689,7 @@ const PaymentsPage: React.FC = () => {
                 {/* Amount */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium text-slate-700">Monto a Pagar</label>
+                    <label className="block text-sm font-medium text-slate-700">{t('pay.amount_to_pay')}</label>
                     {selectedLoan && (
                       <div className="flex items-center gap-3 flex-wrap">
                         <button
@@ -701,20 +699,20 @@ const PaymentsPage: React.FC = () => {
                           }}
                           disabled={(selectedLoan.overdueBalance || 0) <= 0}
                           className={`text-xs font-medium flex items-center gap-1 ${(selectedLoan.overdueBalance || 0) > 0 ? 'text-amber-700 hover:underline' : 'text-slate-400 cursor-not-allowed'}`}
-                          title={(selectedLoan.overdueBalance || 0) > 0 ? 'Suma de cuotas vencidas + mora a la fecha' : 'No hay cuotas vencidas en este momento'}
+                          title={(selectedLoan.overdueBalance || 0) > 0 ? t('pay.pay_overdue_title') : t('pay.no_overdue_title')}
                         >
                           <Zap className="w-3 h-3" />
                           {(selectedLoan.overdueBalance || 0) > 0
-                            ? `Pagar vencido (${formatCurrency(selectedLoan.overdueBalance || 0)})`
-                            : 'Sin saldo vencido'}
+                            ? t('pay.pay_overdue').replace('{amt}', formatCurrency(selectedLoan.overdueBalance || 0))
+                            : t('pay.no_overdue')}
                         </button>
                         <button
                           onClick={() => setPayForm(f => ({ ...f, amount: String(selectedLoan.totalBalance.toFixed(2)) }))}
                           className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1"
-                          title="Liquidar el prestamo completo"
+                          title={t('pay.pay_full_title')}
                         >
                           <Zap className="w-3 h-3" />
-                          Pagar saldo total
+                          {t('pay.pay_full')}
                         </button>
                       </div>
                     )}
@@ -736,39 +734,39 @@ const PaymentsPage: React.FC = () => {
                     isPreviewLoading ? 'opacity-50' : ''
                   } ${preview?.isOverpayment ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
                     {isPreviewLoading ? (
-                      <p className="text-xs text-slate-500 text-center py-1">Calculando...</p>
+                      <p className="text-xs text-slate-500 text-center py-1">{t('pay.calculating')}</p>
                     ) : preview ? (
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-xs">
-                          <span className="text-slate-600 flex items-center gap-1"><Percent className="w-3 h-3" /> Interés aplicado</span>
+                          <span className="text-slate-600 flex items-center gap-1"><Percent className="w-3 h-3" /> {t('pay.applied_interest')}</span>
                           <span className="font-semibold text-blue-700">{formatCurrency(preview.breakdown.interest)}</span>
                         </div>
                         <div className="flex justify-between text-xs">
-                          <span className="text-slate-600 flex items-center gap-1"><TrendingDown className="w-3 h-3" /> Capital abonado</span>
+                          <span className="text-slate-600 flex items-center gap-1"><TrendingDown className="w-3 h-3" /> {t('pay.applied_capital')}</span>
                           <span className="font-semibold text-slate-900">{formatCurrency(preview.breakdown.capital)}</span>
                         </div>
                         {preview.breakdown.mora > 0 && (
                           <div className="flex justify-between text-xs">
-                            <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Mora cubierta</span>
+                            <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {t('pay.mora_covered')}</span>
                             <span className="font-semibold text-red-600">{formatCurrency(preview.breakdown.mora)}</span>
                           </div>
                         )}
                         {preview.breakdown.excessToCapital > 0 && (
                           <div className="flex justify-between text-xs">
-                            <span className="text-emerald-600 flex items-center gap-1"><Coins className="w-3 h-3" /> Excedente</span>
+                            <span className="text-emerald-600 flex items-center gap-1"><Coins className="w-3 h-3" /> {t('pay.excess_label')}</span>
                             <span className="font-semibold text-emerald-700">{formatCurrency(preview.breakdown.excessToCapital)}</span>
                           </div>
                         )}
                         <div className="border-t border-slate-200 pt-1.5 flex justify-between text-xs">
-                          <span className="text-slate-600 font-medium">Saldo restante</span>
+                          <span className="text-slate-600 font-medium">{t('pay.remaining')}</span>
                           <span className={`font-bold ${preview.remaining <= 0 ? 'text-emerald-700' : 'text-slate-900'}`}>
-                            {preview.remaining <= 0 ? '✓ Saldado' : formatCurrency(preview.remaining)}
+                            {preview.remaining <= 0 ? t('pay.settled') : formatCurrency(preview.remaining)}
                           </span>
                         </div>
                         {preview.isOverpayment && (
                           <div className="flex items-center gap-1 pt-0.5">
                             <Info className="w-3 h-3 text-amber-600" />
-                            <p className="text-xs text-amber-700 font-medium">El monto excede la deuda — se te ofrecerá registrar el máximo aplicable</p>
+                            <p className="text-xs text-amber-700 font-medium">{t('pay.over_info')}</p>
                           </div>
                         )}
                       </div>
@@ -779,20 +777,20 @@ const PaymentsPage: React.FC = () => {
                 {/* Method + Date */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Método</label>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">{t('col.method')}</label>
                     <select
                       value={payForm.paymentMethod}
                       onChange={e => setPayForm(f => ({ ...f, paymentMethod: e.target.value, bankAccountId: e.target.value === 'cash' ? '' : f.bankAccountId }))}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="cash">Efectivo</option>
-                      <option value="transfer">Transferencia</option>
-                      <option value="check">Cheque</option>
-                      <option value="card">Tarjeta</option>
+                      <option value="cash">{t('method.cash')}</option>
+                      <option value="transfer">{t('method.transfer')}</option>
+                      <option value="check">{t('method.check')}</option>
+                      <option value="card">{t('method.card')}</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Fecha de Pago</label>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">{t('pay.payment_date')}</label>
                     <input
                       type="date"
                       value={payForm.paymentDate}
@@ -807,14 +805,14 @@ const PaymentsPage: React.FC = () => {
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1 flex items-center gap-1">
                       <Landmark className="w-3.5 h-3.5" />
-                      Cuenta Bancaria{payForm.paymentMethod !== 'cash' ? ' Receptora *' : ' (opcional)'}
+                      {t('col.bank')}{payForm.paymentMethod !== 'cash' ? ` ${t('pay.receiver')} *` : ` (${t('common.optional')})`}
                     </label>
                     <select
                       value={payForm.bankAccountId}
                       onChange={e => setPayForm(f => ({ ...f, bankAccountId: e.target.value }))}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="">{payForm.paymentMethod === 'cash' ? '— Sin cuenta (efectivo) —' : '— Selecciona la cuenta —'}</option>
+                      <option value="">{payForm.paymentMethod === 'cash' ? t('pay.no_account') : t('pay.select_account')}</option>
                       {bankAccounts.map(acc => (
                         <option key={acc.id} value={acc.id}>
                           {acc.bankName}{acc.accountNumber ? ` – ${acc.accountNumber}` : ''} ({acc.currency})
@@ -822,31 +820,31 @@ const PaymentsPage: React.FC = () => {
                       ))}
                     </select>
                     {payForm.paymentMethod !== 'cash' && !payForm.bankAccountId && (
-                      <p className="text-xs text-amber-600 mt-1">Requerido para pagos que no son en efectivo</p>
+                      <p className="text-xs text-amber-600 mt-1">{t('pay.bank_required')}</p>
                     )}
                   </div>
                 )}
                 {bankAccounts.length === 0 && payForm.paymentMethod !== 'cash' && (
                   <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-                    No hay cuentas bancarias configuradas. Ve a <strong>Configuración → Cuentas Bancarias</strong>.
+                    {t('pay.no_banks')}
                   </div>
                 )}
 
                 {/* Reference */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Referencia <span className="font-normal text-slate-400">(opcional)</span></label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">{t('pay.reference')} <span className="font-normal text-slate-400">({t('common.optional')})</span></label>
                   <input
                     type="text"
                     value={payForm.reference}
                     onChange={e => setPayForm(f => ({ ...f, reference: e.target.value }))}
-                    placeholder="Núm. de transferencia o cheque..."
+                    placeholder={t('pay.reference_ph')}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Notas <span className="font-normal text-slate-400">(opcional)</span></label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">{t('pay.notes')} <span className="font-normal text-slate-400">({t('common.optional')})</span></label>
                   <textarea
                     value={payForm.notes}
                     onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))}
@@ -857,13 +855,13 @@ const PaymentsPage: React.FC = () => {
 
                 {/* Action buttons */}
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" className="flex-1" onClick={closeModal} disabled={isSubmitting}>Cancelar</Button>
+                  <Button variant="outline" className="flex-1" onClick={closeModal} disabled={isSubmitting}>{t('common.cancel')}</Button>
                   <Button
                     className="flex-1 bg-green-600 hover:bg-green-700"
                     onClick={() => handleRegisterPayment()}
                     disabled={isSubmitting || !payForm.loanId || !payForm.amount || parseFloat(payForm.amount) <= 0}
                   >
-                    {isSubmitting ? 'Registrando...' : preview?.isOverpayment ? 'Continuar →' : 'Registrar Pago'}
+                    {isSubmitting ? t('pay.registering') : preview?.isOverpayment ? t('pay.continue') : t('pay.register')}
                   </Button>
                 </div>
               </div>
@@ -878,7 +876,7 @@ const PaymentsPage: React.FC = () => {
           <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="section-title">Editar Pago</h2>
+                <h2 className="section-title">{t('pay.edit_payment')}</h2>
                 <p className="text-xs text-slate-500">{editingPayment.paymentNumber} · {editingPayment.clientName}</p>
               </div>
               <button onClick={() => setEditingPayment(null)} className="p-1 hover:bg-slate-100 rounded">
@@ -888,14 +886,14 @@ const PaymentsPage: React.FC = () => {
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"/>
-              <p className="text-xs text-amber-800">Solo se pueden corregir datos como fecha, método de pago, referencia y notas. El monto del pago no puede modificarse para mantener la integridad contable.</p>
+              <p className="text-xs text-amber-800">{t('pay.edit_warning')}</p>
             </div>
 
             {/* Edit form fields */}
             <div className="space-y-3">
               {/* Payment date */}
               <div>
-                <label className="form-label">Fecha de Pago *</label>
+                <label className="form-label">{t('pay.payment_date')} *</label>
                 <input
                   type="date"
                   className="input-field"
@@ -906,30 +904,30 @@ const PaymentsPage: React.FC = () => {
 
               {/* Payment method */}
               <div>
-                <label className="form-label">Metodo de Pago *</label>
+                <label className="form-label">{t('pay.method_label')}</label>
                 <select
                   className="input-field"
                   value={editForm.paymentMethod}
                   onChange={e => setEditForm(f => ({ ...f, paymentMethod: e.target.value, bankAccountId: e.target.value === 'cash' ? '' : f.bankAccountId }))}
                 >
-                  <option value="cash">Efectivo</option>
-                  <option value="transfer">Transferencia</option>
-                  <option value="check">Cheque</option>
-                  <option value="card">Tarjeta</option>
+                  <option value="cash">{t('method.cash')}</option>
+                  <option value="transfer">{t('method.transfer')}</option>
+                  <option value="check">{t('method.check')}</option>
+                  <option value="card">{t('method.card')}</option>
                 </select>
               </div>
 
               {/* Bank account */}
               <div>
                 <label className="form-label">
-                  Cuenta Bancaria{editForm.paymentMethod !== 'cash' ? ' Receptora' : ' (opcional)'}
+                  {t('col.bank')}{editForm.paymentMethod !== 'cash' ? ` ${t('pay.receiver')}` : ` (${t('common.optional')})`}
                 </label>
                 <select
                   className="input-field"
                   value={editForm.bankAccountId}
                   onChange={e => setEditForm(f => ({ ...f, bankAccountId: e.target.value }))}
                 >
-                  <option value="">{editForm.paymentMethod === 'cash' ? '— Sin cuenta (efectivo) —' : '— Selecciona la cuenta —'}</option>
+                  <option value="">{editForm.paymentMethod === 'cash' ? t('pay.no_account') : t('pay.select_account')}</option>
                   {bankAccounts.map(ba => (
                     <option key={ba.id} value={ba.id}>{ba.bankName} – {ba.accountNumber}</option>
                   ))}
@@ -938,11 +936,11 @@ const PaymentsPage: React.FC = () => {
 
               {/* Reference */}
               <div>
-                <label className="form-label">Referencia / Núm. Comprobante</label>
+                <label className="form-label">{t('pay.reference_voucher')}</label>
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="Núm. de transferencia o cheque..."
+                  placeholder={t('pay.reference_ph')}
                   value={editForm.reference}
                   onChange={e => setEditForm(f => ({ ...f, reference: e.target.value }))}
                 />
@@ -950,11 +948,11 @@ const PaymentsPage: React.FC = () => {
 
               {/* Notes */}
               <div>
-                <label className="form-label">Notas</label>
+                <label className="form-label">{t('pay.notes')}</label>
                 <textarea
                   className="input-field resize-none"
                   rows={2}
-                  placeholder="Observaciones adicionales..."
+                  placeholder={t('pay.notes_ph')}
                   value={editForm.notes}
                   onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
                 />
@@ -963,14 +961,14 @@ const PaymentsPage: React.FC = () => {
               {/* Action buttons */}
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1" onClick={() => setEditingPayment(null)} disabled={isSubmitting}>
-                  Cancelar
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   className="flex-1 bg-blue-600 hover:bg-blue-700"
                   onClick={handleSaveEdit}
                   disabled={isSubmitting || !editForm.paymentDate}
                 >
-                  {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                  {isSubmitting ? t('pay.saving') : t('common.save_changes')}
                 </Button>
               </div>
             </div>
@@ -987,25 +985,25 @@ const PaymentsPage: React.FC = () => {
                 <AlertTriangle className="w-5 h-5 text-red-600"/>
               </div>
               <div>
-                <h2 className="section-title text-red-700">Anular Pago</h2>
+                <h2 className="section-title text-red-700">{t('pay.void_payment')}</h2>
                 <p className="text-xs text-slate-500">{voidingPayment.paymentNumber} · {voidingPayment.clientName}</p>
               </div>
             </div>
 
             <p className="text-sm text-slate-600 mb-4">
-              Esta acción anulará el pago de{' '}
+              {t('pay.void_desc_pre')}{' '}
               <span className="font-semibold text-slate-800">
                 ${parseFloat(voidingPayment.amount as any || '0').toLocaleString('es-DO', { minimumFractionDigits: 2 })}
               </span>{' '}
-              y revertirá su efecto en el préstamo. Esta operación no se puede deshacer.
+              {t('pay.void_desc_post')}
             </p>
 
             <div className="mb-4">
-              <label className="form-label">Motivo de Anulación *</label>
+              <label className="form-label">{t('pay.void_reason_label')}</label>
               <textarea
                 className="input-field resize-none"
                 rows={3}
-                placeholder="Describe el motivo de la anulación..."
+                placeholder={t('pay.void_reason_ph')}
                 value={voidReason}
                 onChange={e => setVoidReason(e.target.value)}
               />
@@ -1018,14 +1016,14 @@ const PaymentsPage: React.FC = () => {
                 onClick={() => { setVoidingPayment(null); setVoidReason('') }}
                 disabled={isSubmitting}
               >
-                Cancelar
+                {t('common.cancel')}
               </Button>
               <Button
                 className="flex-1 bg-red-600 hover:bg-red-700"
                 onClick={handleVoidPayment}
                 disabled={isSubmitting || !voidReason.trim()}
               >
-                {isSubmitting ? 'Anulando...' : 'Confirmar Anulación'}
+                {isSubmitting ? t('pay.voiding') : t('pay.confirm_void')}
               </Button>
             </div>
           </Card>
@@ -1042,20 +1040,20 @@ const PaymentsPage: React.FC = () => {
                   <CreditCard className="w-6 h-6 text-emerald-600" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900">Pago registrado</h3>
-                  <p className="text-xs text-slate-500">Recibo {lastPayment.receiptNumber || lastPayment.paymentNumber} · {formatCurrency(lastPayment.amount || 0)}</p>
+                  <h3 className="font-bold text-slate-900">{t('pay.post_title')}</h3>
+                  <p className="text-xs text-slate-500">{t('pay.receipt_word')} {lastPayment.receiptNumber || lastPayment.paymentNumber} · {formatCurrency(lastPayment.amount || 0)}</p>
                 </div>
               </div>
             </div>
             <div className="p-5 space-y-3">
-              <p className="text-sm text-slate-600">¿Qué quieres hacer con el recibo?</p>
-              <button type="button" onClick={async () => { const t = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; await printPaymentReceipt(lastPayment, t); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition">
-                <Printer className="w-4 h-4" /> Imprimir recibo
+              <p className="text-sm text-slate-600">{t('pay.post_question')}</p>
+              <button type="button" onClick={async () => { const tn = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; await printPaymentReceipt(lastPayment, tn); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition">
+                <Printer className="w-4 h-4" /> {t('pay.print_receipt')}
               </button>
-              <button type="button" onClick={() => { const t = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; const phone = lastPayment.clientWhatsapp || ''; if (!phone) toast('El cliente no tiene WhatsApp/telefono', { icon: '⚠️' }); sendReceiptByWhatsApp(phone, lastPayment, t, { principalBalance: lastPayment.principalBalance, interestBalance: lastPayment.interestBalance, moraBalance: lastPayment.moraBalance }); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition">
-                <MessageCircle className="w-4 h-4" /> Enviar por WhatsApp
+              <button type="button" onClick={() => { const tn = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; const phone = lastPayment.clientWhatsapp || ''; if (!phone) toast(t('pay.no_whatsapp'), { icon: '⚠️' }); sendReceiptByWhatsApp(phone, lastPayment, tn, { principalBalance: lastPayment.principalBalance, interestBalance: lastPayment.interestBalance, moraBalance: lastPayment.moraBalance }); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition">
+                <MessageCircle className="w-4 h-4" /> {t('pay.send_whatsapp')}
               </button>
-              <button type="button" onClick={() => setShowPostPaymentModal(false)} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cerrar</button>
+              <button type="button" onClick={() => setShowPostPaymentModal(false)} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-900">{t('common.close')}</button>
             </div>
           </div>
         </div>
