@@ -11,6 +11,7 @@ import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import WhatsAppOutboxTab from './WhatsAppOutboxTab'
 import WhatsAppEventSettingsTab from './WhatsAppEventSettingsTab'
+import { useT } from '@/lib/i18n'
 
 interface WhatsAppMessage {
   id: string
@@ -39,13 +40,14 @@ interface Client {
   whatsapp: string
 }
 
-const EVENT_LABELS: Record<string, string> = {
-  payment_reminder: 'Recordatorio de Pago',
-  payment_received: 'Pago Recibido',
-  loan_approved: 'Préstamo Aprobado',
-  loan_disbursed: 'Préstamo Desembolsado',
-  overdue_notice: 'Aviso de Mora',
-  manual: 'Mensaje Manual',
+// event → i18n key; resolved with t() at call sites
+const EVENT_KEYS: Record<string, string> = {
+  payment_reminder: 'wa.ev.payment_reminder',
+  payment_received: 'wa.ev.payment_received',
+  loan_approved: 'wa.ev.loan_approved',
+  loan_disbursed: 'wa.ev.loan_disbursed',
+  overdue_notice: 'wa.ev.overdue_notice',
+  manual: 'wa.ev.manual',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -55,6 +57,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 const WhatsAppPage: React.FC = () => {
+  const t = useT()
   const { can } = usePermission()
   const { confirm, ConfirmHost } = useConfirm()
   const [messages, setMessages] = useState<WhatsAppMessage[]>([])
@@ -81,6 +84,8 @@ const WhatsAppPage: React.FC = () => {
   const [templateForm, setTemplateForm] = useState({ name: '', event: 'payment_reminder', body: '' })
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
 
+  const eventLabel = (ev: string) => EVENT_KEYS[ev] ? t(EVENT_KEYS[ev]) : ev
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -95,7 +100,7 @@ const WhatsAppPage: React.FC = () => {
         setClients(clientsRes.data.data || [])
         setTenantData(settingsRes.data?.tenant || settingsRes.data || {})
       } catch (err) {
-        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar mensajes de WhatsApp')
+        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(t('wa.load_error'))
       } finally {
         setIsLoading(false)
       }
@@ -171,7 +176,7 @@ const WhatsAppPage: React.FC = () => {
   }
 
   const handleTemplateSelect = (templateId: string) => {
-    const tmpl = templates.find((t) => t.id === templateId)
+    const tmpl = templates.find((x) => x.id === templateId)
     if (!tmpl) return
     // Replace placeholders with actual data
     const interpolated = interpolateTemplate(tmpl.body, selectedClientData, clientLoans)
@@ -180,7 +185,7 @@ const WhatsAppPage: React.FC = () => {
 
   const handleSend = async () => {
     if (!sendForm.phone || !sendForm.body) {
-      toast.error('Ingresa el teléfono y el mensaje')
+      toast.error(t('wa.phone_body_required'))
       return
     }
     try {
@@ -190,49 +195,49 @@ const WhatsAppPage: React.FC = () => {
         body: sendForm.body,
         event: sendForm.event,
       })
-      toast.success('Mensaje registrado')
+      toast.success(t('wa.msg_recorded'))
       setMessages((prev) => [res.data, ...prev])
       setSendForm({ clientId: '', phone: '', body: '', event: 'manual' })
       setActiveTab('messages')
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al enviar mensaje')
+      toast.error(err?.response?.data?.error || t('wa.send_error'))
     } finally {
       setIsSending(false)
     }
   }
 
   const handleSaveTemplate = async () => {
-    if (!templateForm.name || !templateForm.body) return toast.error('Nombre y mensaje son requeridos')
+    if (!templateForm.name || !templateForm.body) return toast.error(t('wa.name_body_required'))
     setIsSavingTemplate(true)
     try {
       if (editingTemplate) {
         const res = await api.put(`/whatsapp/templates/${editingTemplate.id}`, templateForm)
-        setTemplates(prev => prev.map(t => t.id === editingTemplate.id ? res.data : t))
-        toast.success('Plantilla actualizada')
+        setTemplates(prev => prev.map(x => x.id === editingTemplate.id ? res.data : x))
+        toast.success(t('wa.template_updated'))
       } else {
         const res = await api.post('/whatsapp/templates', templateForm)
         setTemplates(prev => [...prev, res.data])
-        toast.success('Plantilla creada')
+        toast.success(t('wa.template_created'))
       }
       setShowTemplateForm(false)
       setEditingTemplate(null)
       setTemplateForm({ name: '', event: 'payment_reminder', body: '' })
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al guardar plantilla')
+      toast.error(err?.response?.data?.error || t('wa.template_save_error'))
     } finally {
       setIsSavingTemplate(false)
     }
   }
 
   const handleDeleteTemplate = async (id: string) => {
-    const ok_ = await confirm({ title: 'Confirmar', message: '¿Eliminar esta plantilla?', variant: 'warning' })
+    const ok_ = await confirm({ title: t('common.confirm'), message: t('wa.template_del_confirm'), variant: 'warning' })
     if (!ok_) return
     try {
       await api.delete(`/whatsapp/templates/${id}`)
-      setTemplates(prev => prev.filter(t => t.id !== id))
-      toast.success('Plantilla eliminada')
+      setTemplates(prev => prev.filter(x => x.id !== id))
+      toast.success(t('wa.template_deleted'))
     } catch (err: any) {
-      toast.error('Error al eliminar plantilla')
+      toast.error(t('wa.template_del_error'))
     }
   }
 
@@ -249,7 +254,7 @@ const WhatsAppPage: React.FC = () => {
   const filteredMessages = messages.filter((m) =>
     (m.clientPhone || '').includes(searchTerm) ||
     (m.body || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    EVENT_LABELS[m.event]?.toLowerCase().includes(searchTerm.toLowerCase())
+    eventLabel(m.event)?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   if (isLoading) return <PageLoadingState />
@@ -261,12 +266,12 @@ const WhatsAppPage: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title">WhatsApp</h1>
-          <p className="text-slate-600 text-sm mt-1">Mensajes y comunicaciones con clientes</p>
+          <p className="text-slate-600 text-sm mt-1">{t('wa.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full">
             <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-xs font-medium text-green-700">Integración activa</span>
+            <span className="text-xs font-medium text-green-700">{t('wa.integration_active')}</span>
           </div>
         </div>
       </div>
@@ -274,19 +279,19 @@ const WhatsAppPage: React.FC = () => {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="text-center p-4">
-          <p className="text-xs text-slate-500 uppercase font-medium">Total Mensajes</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('wa.stat_total')}</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{messages.length}</p>
         </Card>
         <Card className="text-center p-4 bg-green-50">
-          <p className="text-xs text-slate-500 uppercase font-medium">Enviados</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('wa.stat_sent')}</p>
           <p className="text-2xl font-bold text-green-700 mt-1">{messages.filter((m) => m.status === 'sent').length}</p>
         </Card>
         <Card className="text-center p-4">
-          <p className="text-xs text-slate-500 uppercase font-medium">Plantillas</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('wa.stat_templates')}</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{templates.length}</p>
         </Card>
         <Card className="text-center p-4 bg-blue-50">
-          <p className="text-xs text-slate-500 uppercase font-medium">Automatizados</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('wa.stat_automated')}</p>
           <p className="text-2xl font-bold text-blue-700 mt-1">{messages.filter((m) => m.event !== 'manual').length}</p>
         </Card>
       </div>
@@ -294,12 +299,12 @@ const WhatsAppPage: React.FC = () => {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-slate-200">
         {([
-          { id: 'outbox', label: 'Bandeja', show: true },
-          { id: 'messages', label: 'Historial', show: true },
-          { id: 'send', label: 'Enviar Mensaje', show: can('whatsapp.send') },
-          { id: 'templates', label: 'Plantillas', show: can('whatsapp.templates') },
-          { id: 'settings', label: 'Configuración', show: can('whatsapp.templates') },
-        ] as const).filter(t => t.show).map((tab) => (
+          { id: 'outbox', label: t('wa.tab_outbox'), show: true },
+          { id: 'messages', label: t('wa.tab_history'), show: true },
+          { id: 'send', label: t('wa.tab_send'), show: can('whatsapp.send') },
+          { id: 'templates', label: t('wa.tab_templates'), show: can('whatsapp.templates') },
+          { id: 'settings', label: t('wa.tab_settings'), show: can('whatsapp.templates') },
+        ] as const).filter(x => x.show).map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -326,7 +331,7 @@ const WhatsAppPage: React.FC = () => {
           <Card>
             <Input
               type="text"
-              placeholder="Buscar por teléfono, mensaje o tipo..."
+              placeholder={t('wa.search_ph')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -347,14 +352,14 @@ const WhatsAppPage: React.FC = () => {
                           {msg.clientPhone}
                         </span>
                         <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                          {EVENT_LABELS[msg.event] || msg.event}
+                          {eventLabel(msg.event)}
                         </span>
                       </div>
                       <p className="text-sm text-slate-600 truncate">{msg.body}</p>
                       <div className="flex items-center gap-3 mt-1">
                         <span className={`text-xs flex items-center gap-1 ${STATUS_COLORS[msg.status] || 'text-slate-500'}`}>
                           {msg.status === 'sent' ? <CheckCheck className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                          {msg.status === 'sent' ? 'Enviado' : msg.status === 'failed' ? 'Fallido' : 'Pendiente'}
+                          {msg.status === 'sent' ? t('wa.st_sent') : msg.status === 'failed' ? t('wa.st_failed') : t('wa.st_pending')}
                         </span>
                         <span className="text-xs text-slate-400">{formatDate(msg.sentAt || msg.createdAt)}</span>
                       </div>
@@ -366,14 +371,14 @@ const WhatsAppPage: React.FC = () => {
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <MessageCircle className="w-12 h-12 mb-3 opacity-50" />
-              <p className="font-medium">Sin mensajes registrados</p>
-              <p className="text-sm mt-1">Los mensajes enviados a clientes aparecerán aquí</p>
+              <p className="font-medium">{t('wa.empty_history')}</p>
+              <p className="text-sm mt-1">{t('wa.empty_history_desc')}</p>
               {can('whatsapp.send') && (
                 <button
                   onClick={() => setActiveTab('send')}
                   className="mt-4 text-sm text-blue-600 hover:underline"
                 >
-                  Enviar primer mensaje →
+                  {t('wa.send_first')}
                 </button>
               )}
             </div>
@@ -384,16 +389,16 @@ const WhatsAppPage: React.FC = () => {
       {/* Send Message Tab */}
       {activeTab === 'send' && can('whatsapp.send') && (
         <Card>
-          <h2 className="section-title mb-4">Enviar Mensaje Manual</h2>
+          <h2 className="section-title mb-4">{t('wa.send_title')}</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Cliente (opcional)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('wa.client_opt')}</label>
               <select
                 value={sendForm.clientId}
                 onChange={(e) => handleClientSelect(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">-- Selecciona un cliente para autocompletar --</option>
+                <option value="">{t('wa.select_client')}</option>
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.fullName || `${c.firstName} ${c.lastName}`} – {c.phonePersonal}
@@ -403,7 +408,7 @@ const WhatsAppPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Número de WhatsApp *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('wa.wa_number')}</label>
               <div className="flex gap-2">
                 <span className="flex items-center px-3 py-2 bg-slate-50 border border-slate-300 rounded-l-lg text-sm text-slate-500 border-r-0">
                   +1
@@ -419,60 +424,60 @@ const WhatsAppPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Plantilla (opcional)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('wa.template_opt')}</label>
               <select
                 onChange={(e) => handleTemplateSelect(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">-- Selecciona una plantilla --</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                <option value="">{t('wa.select_template')}</option>
+                {templates.map((tmpl) => (
+                  <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Evento</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('wa.event_type')}</label>
               <select
                 value={sendForm.event}
                 onChange={(e) => setSendForm((f) => ({ ...f, event: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {Object.entries(EVENT_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
+                {Object.keys(EVENT_KEYS).map((val) => (
+                  <option key={val} value={val}>{eventLabel(val)}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Mensaje *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('wa.message')}</label>
               <textarea
                 value={sendForm.body}
                 onChange={(e) => setSendForm((f) => ({ ...f, body: e.target.value }))}
-                placeholder="Escribe tu mensaje aquí..."
+                placeholder={t('wa.message_ph')}
                 rows={5}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-slate-400 mt-1">{sendForm.body.length} caracteres</p>
+              <p className="text-xs text-slate-400 mt-1">{t('wa.chars').replace('{n}', String(sendForm.body.length))}</p>
             </div>
 
             {sendForm.phone && sendForm.body && (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-xs font-medium text-green-800 mb-1">Vista previa del enlace:</p>
+                <p className="text-xs font-medium text-green-800 mb-1">{t('wa.link_preview')}</p>
                 <a
                   href={`https://wa.me/${sendForm.phone.replace(/\D/g, '')}?text=${encodeURIComponent(sendForm.body)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-green-700 hover:underline break-all"
                 >
-                  Abrir en WhatsApp Web →
+                  {t('wa.open_wa_web')}
                 </a>
               </div>
             )}
 
             <div className="flex gap-2 pt-2">
               <Button variant="outline" className="flex-1" onClick={() => setSendForm({ clientId: '', phone: '', body: '', event: 'manual' })}>
-                Limpiar
+                {t('wa.clear')}
               </Button>
               <Button
                 className="flex-1 bg-green-600 hover:bg-green-700 flex items-center justify-center gap-2"
@@ -480,11 +485,11 @@ const WhatsAppPage: React.FC = () => {
                 disabled={isSending || !sendForm.phone || !sendForm.body}
               >
                 <Send className="w-4 h-4" />
-                {isSending ? 'Registrando...' : 'Registrar Envío'}
+                {isSending ? t('wa.registering') : t('wa.register_send')}
               </Button>
             </div>
             <p className="text-xs text-slate-400 text-center">
-              El mensaje se registra en el sistema. Usa el enlace de vista previa para abrir WhatsApp Web.
+              {t('wa.send_note')}
             </p>
           </div>
         </Card>
@@ -496,12 +501,12 @@ const WhatsAppPage: React.FC = () => {
           {/* Header + New button */}
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="font-semibold text-slate-800">Plantillas de Mensajes</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Crea y edita plantillas reutilizables con variables dinámicas</p>
+              <h3 className="font-semibold text-slate-800">{t('wa.templates_title')}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{t('wa.templates_desc')}</p>
             </div>
             <Button size="sm" className="flex items-center gap-2"
               onClick={() => { setEditingTemplate(null); setTemplateForm({ name: '', event: 'payment_reminder', body: '' }); setShowTemplateForm(true) }}>
-              <Plus className="w-4 h-4"/>Nueva Plantilla
+              <Plus className="w-4 h-4"/>{t('wa.new_template')}
             </Button>
           </div>
 
@@ -509,21 +514,21 @@ const WhatsAppPage: React.FC = () => {
           {showTemplateForm && (
             <Card className="bg-slate-50 border-blue-200">
               <div className="flex justify-between items-center mb-4">
-                <h4 className="font-semibold text-slate-800">{editingTemplate ? `Editando: ${editingTemplate.name}` : 'Nueva Plantilla'}</h4>
+                <h4 className="font-semibold text-slate-800">{editingTemplate ? t('wa.editing').replace('{name}', editingTemplate.name) : t('wa.new_template')}</h4>
                 <button onClick={() => { setShowTemplateForm(false); setEditingTemplate(null) }} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Nombre *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('wa.t_name')}</label>
                   <input value={templateForm.name} onChange={e => setTemplateForm(p=>({...p,name:e.target.value}))}
-                    placeholder="Ej: Recordatorio de pago mensual"
+                    placeholder={t('wa.t_name_ph')}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Evento</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('wa.t_event')}</label>
                   <select value={templateForm.event} onChange={e => setTemplateForm(p=>({...p,event:e.target.value}))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {Object.entries(EVENT_LABELS).map(([val,label]) => <option key={val} value={val}>{label}</option>)}
+                    {Object.keys(EVENT_KEYS).map((val) => <option key={val} value={val}>{eventLabel(val)}</option>)}
                   </select>
                 </div>
               </div>
@@ -532,12 +537,12 @@ const WhatsAppPage: React.FC = () => {
               <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Info className="w-3.5 h-3.5 text-blue-600"/>
-                  <span className="text-xs font-semibold text-blue-700">Variables disponibles — clic para insertar:</span>
+                  <span className="text-xs font-semibold text-blue-700">{t('wa.vars_available')}</span>
                 </div>
                 {[
-                  { label: 'Deudor', vars: ['{{client_name}}','{{client_id}}','{{client_address}}','{{client_city}}','{{client_email}}','{{client_phone}}'] },
-                  { label: 'Empresa', vars: ['{{company_name}}','{{company_address}}','{{company_phone}}','{{company_email}}'] },
-                  { label: 'Préstamo', vars: ['{{loan_number}}','{{amount}}','{{balance}}','{{capital}}','{{interest}}','{{mora}}','{{mora_amount}}','{{total}}','{{days}}','{{due_date}}','{{next_payment_date}}','{{date}}'] },
+                  { label: t('wa.var_debtor'), vars: ['{{client_name}}','{{client_id}}','{{client_address}}','{{client_city}}','{{client_email}}','{{client_phone}}'] },
+                  { label: t('wa.var_company'), vars: ['{{company_name}}','{{company_address}}','{{company_phone}}','{{company_email}}'] },
+                  { label: t('wa.var_loan'), vars: ['{{loan_number}}','{{amount}}','{{balance}}','{{capital}}','{{interest}}','{{mora}}','{{mora_amount}}','{{total}}','{{days}}','{{due_date}}','{{next_payment_date}}','{{date}}'] },
                 ].map(group => (
                   <div key={group.label} className="mb-1.5">
                     <p className="text-xs text-blue-500 font-medium mb-1">{group.label}</p>
@@ -554,18 +559,18 @@ const WhatsAppPage: React.FC = () => {
               </div>
 
               <div className="mb-3">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Mensaje * <span className="text-slate-400 font-normal">({templateForm.body.length} chars)</span></label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('wa.t_message_chars')} <span className="text-slate-400 font-normal">{t('wa.chars_short').replace('{n}', String(templateForm.body.length))}</span></label>
                 <textarea value={templateForm.body}
                   onChange={e => setTemplateForm(p=>({...p,body:e.target.value}))}
                   rows={8}
-                  placeholder={`Hola {{client_name}},\n\nTe recordamos que tu pago del préstamo #{{loan_number}} de {{amount}} está pendiente.\n\nFecha de vencimiento: {{due_date}}\n\nGracias.`}
+                  placeholder={t('wa.t_body_ph')}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
 
               {/* Preview */}
               {templateForm.body && (
                 <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-xs font-medium text-green-800 mb-1">Vista previa (con datos de ejemplo):</p>
+                  <p className="text-xs font-medium text-green-800 mb-1">{t('wa.preview_sample')}</p>
                   <p className="text-sm text-green-900 whitespace-pre-wrap">
                     {templateForm.body
                       .replace(/\{\{client_name\}\}/g, 'Juan Pérez')
@@ -597,9 +602,9 @@ const WhatsAppPage: React.FC = () => {
 
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleSaveTemplate} isLoading={isSavingTemplate} disabled={isSavingTemplate}>
-                  {editingTemplate ? 'Actualizar Plantilla' : 'Crear Plantilla'}
+                  {editingTemplate ? t('wa.update_template') : t('wa.create_template')}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setShowTemplateForm(false); setEditingTemplate(null) }}>Cancelar</Button>
+                <Button size="sm" variant="ghost" onClick={() => { setShowTemplateForm(false); setEditingTemplate(null) }}>{t('common.cancel')}</Button>
               </div>
             </Card>
           )}
@@ -613,23 +618,23 @@ const WhatsAppPage: React.FC = () => {
                     <div>
                       <p className="font-semibold text-slate-900">{tmpl.name}</p>
                       <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                        {EVENT_LABELS[tmpl.event] || tmpl.event}
+                        {eventLabel(tmpl.event)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
                       <button onClick={() => { setSendForm(f => ({ ...f, body: tmpl.body, event: tmpl.event })); setActiveTab('send') }}
                         className="px-2 py-1 text-xs border border-slate-300 rounded text-slate-600 hover:bg-slate-50 transition-colors">
-                        Usar
+                        {t('wa.use')}
                       </button>
                       {can('whatsapp.templates') && (
                         <button onClick={() => startEditTemplate(tmpl)}
-                          className="p-1.5 hover:bg-blue-50 rounded text-blue-600 transition-colors" title="Editar">
+                          className="p-1.5 hover:bg-blue-50 rounded text-blue-600 transition-colors" title={t('wa.edit')}>
                           <Edit2 className="w-4 h-4"/>
                         </button>
                       )}
                       {can('whatsapp.templates') && (
                         <button onClick={() => handleDeleteTemplate(tmpl.id)}
-                          className="p-1.5 hover:bg-red-50 rounded text-red-500 transition-colors" title="Eliminar">
+                          className="p-1.5 hover:bg-red-50 rounded text-red-500 transition-colors" title={t('common.delete')}>
                           <Trash2 className="w-4 h-4"/>
                         </button>
                       )}
@@ -651,11 +656,11 @@ const WhatsAppPage: React.FC = () => {
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <AlertCircle className="w-12 h-12 mb-3 opacity-50" />
-              <p className="font-medium">Sin plantillas configuradas</p>
-              <p className="text-sm mt-1">Crea tu primera plantilla de mensaje</p>
+              <p className="font-medium">{t('wa.empty_templates')}</p>
+              <p className="text-sm mt-1">{t('wa.empty_templates_desc')}</p>
               <button onClick={() => { setEditingTemplate(null); setTemplateForm({ name: '', event: 'payment_reminder', body: '' }); setShowTemplateForm(true) }}
                 className="mt-4 text-sm text-blue-600 hover:underline">
-                + Crear primera plantilla →
+                {t('wa.create_first')}
               </button>
             </div>
           )}
