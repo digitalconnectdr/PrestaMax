@@ -341,11 +341,14 @@ router.post('/users/invite', authenticate, requireTenant, requirePermission('set
       });
     }
 
-    const isCollector = roles.includes('cobrador');
+    // FIX P2 (Jun 2026): 'cobrador' y 'collector' son alias del MISMO rol
+    // (ambos en ROLE_DEFAULTS con permisos de cobrador). Antes el conteo solo
+    // miraba 'cobrador', así que invitar con rol 'collector' evadía max_collectors.
+    const isCollector = roles.includes('cobrador') || roles.includes('collector');
     if (isCollector) {
       const currentCollectors = (db.prepare(`
         SELECT COUNT(*) as c FROM tenant_memberships
-        WHERE tenant_id=? AND is_active=1 AND roles LIKE '%cobrador%'
+        WHERE tenant_id=? AND is_active=1 AND (roles LIKE '%cobrador%' OR roles LIKE '%collector%')
       `).get(req.tenant.id) as any).c;
 
       if (plan?.max_collectors !== -1 && plan?.max_collectors != null && currentCollectors >= plan.max_collectors) {

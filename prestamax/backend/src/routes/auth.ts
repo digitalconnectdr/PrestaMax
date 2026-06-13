@@ -218,14 +218,24 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     if (!JWT_SECRET_REG) throw new Error('JWT_SECRET environment variable is required');
     const token = jwt.sign({ userId }, JWT_SECRET_REG, { expiresIn: '7d' });
     const membership = db.prepare(`
-      SELECT tm.*, t.name as t_name, t.slug as t_slug, t.logo_url as t_logo, t.currency as t_currency
+      SELECT tm.*, t.name as t_name, t.slug as t_slug, t.logo_url as t_logo, t.currency as t_currency, p.features as plan_features
       FROM tenant_memberships tm JOIN tenants t ON t.id=tm.tenant_id
+      LEFT JOIN plans p ON p.id = t.plan_id
       WHERE tm.user_id=? AND tm.is_active=1
     `).all(userId) as any[];
-    const tenants = membership.map((m: any) => ({
-      ...m, roles: JSON.parse(m.roles || '[]'), permissions: JSON.parse(m.permissions || '{}'),
-      tenant: { id: m.tenant_id, name: m.t_name, slug: m.t_slug, logo_url: m.t_logo, currency: m.t_currency }
-    }));
+    // FIX P2 (Jun 2026): incluir effectivePermissions (igual que /login y /me)
+    // para que el frontend respete el techo del plan desde el primer login.
+    const tenants = membership.map((m: any) => {
+      const roles = JSON.parse(m.roles || '[]');
+      const explicit = JSON.parse(m.permissions || '{}');
+      let planFeatures: string[] | null = null;
+      try { planFeatures = m.plan_features ? JSON.parse(m.plan_features) : null; } catch(_) {}
+      const effectivePermissions = Array.from(computePermissions(roles, explicit, planFeatures));
+      return {
+        ...m, roles, permissions: explicit, effectivePermissions,
+        tenant: { id: m.tenant_id, name: m.t_name, slug: m.t_slug, logo_url: m.t_logo, currency: m.t_currency }
+      };
+    });
     const { password_hash, ...userSafe } = user;
     res.status(201).json({ user: userSafe, token, tenants, message: 'Cuenta creada exitosamente! Bienvenido a PrestaMax.' });
   } catch (e: any) {

@@ -6,6 +6,23 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import path from 'path';
 import fs from 'fs';
 import { seedDemo } from '../db/seed_demo';
+import { validatePlanFeatures } from '../lib/permissions';
+
+// Helper: valida el campo `features` de un plan (string JSON o array) contra
+// PERM_DEFS. Devuelve un error legible si hay claves inválidas, o null si OK.
+// FIX P2 (Jun 2026): evita que el Admin guarde claves inexistentes (origen del
+// bug "settings.templates" que dejó editar/eliminar plantillas roto para todos).
+function checkPlanFeatures(raw: any): string | null {
+  if (raw === undefined || raw === null) return null;
+  let arr: any = raw;
+  if (typeof raw === 'string') {
+    try { arr = JSON.parse(raw); } catch { return 'features debe ser un JSON válido'; }
+  }
+  if (!Array.isArray(arr)) return 'features debe ser una lista de permisos';
+  const { invalid } = validatePlanFeatures(arr);
+  if (invalid.length > 0) return `Permisos inválidos en features: ${invalid.join(', ')}`;
+  return null;
+}
 
 const router = Router();
 
@@ -338,6 +355,8 @@ router.post('/plans', authenticate, requirePlatformAdmin, (req: AuthRequest, res
   try {
     const db = getDb(); const id = uuid(); const d = req.body;
     if (!d.name || !d.slug) return res.status(400).json({ error: 'Nombre y slug son requeridos' });
+    const featErr = checkPlanFeatures(d.features);
+    if (featErr) return res.status(400).json({ error: featErr });
     // If marking as trial default, first clear any existing trial default
     if (d.is_trial_default) {
       db.prepare('UPDATE plans SET is_trial_default=0 WHERE is_trial_default=1').run();
@@ -355,6 +374,8 @@ router.post('/plans', authenticate, requirePlatformAdmin, (req: AuthRequest, res
 router.put('/plans/:id', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb(); const d = req.body;
+    const featErr = checkPlanFeatures(d.features);
+    if (featErr) return res.status(400).json({ error: featErr });
     // If marking as trial default, first clear any existing trial default (except this plan)
     if (d.is_trial_default) {
       db.prepare('UPDATE plans SET is_trial_default=0 WHERE is_trial_default=1 AND id!=?').run(req.params.id);

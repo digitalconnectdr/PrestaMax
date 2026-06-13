@@ -130,60 +130,7 @@ export const PERM_BY_MODULE = PERM_DEFS.reduce<Record<string, { label: string; p
 export const hasPerm = (effectivePermissions: string[], key: PermKey): boolean =>
   effectivePermissions.includes(key)
 
-// Plan Feature Gates
-export const PERM_REQUIRES_FEATURE: Partial<Record<PermKey, string[]>> = {
-  'clients.view': ['clients'],
-  'clients.create': ['clients'],
-  'clients.edit': ['clients'],
-  'clients.delete': ['clients'],
-  'loans.view': ['loans'],
-  'loans.create': ['loans'],
-  'loans.edit': ['loans'],
-  'loans.approve': ['loans'],
-  'loans.reject': ['loans'],
-  'loans.disburse': ['loans'],
-  'loans.write_off': ['loans'],
-  'loans.void': ['loans'],
-  'loans.import': ['export_data'],
-  'payments.view': ['payments'],
-  'payments.create': ['payments'],
-  'payments.void': ['payments'],
-  'payments.edit': ['payments'],
-  'receipts.view': ['receipts'],
-  'receipts.reprint': ['receipts'],
-  'contracts.view': ['contracts'],
-  'contracts.create': ['contracts'],
-  'contracts.sign': ['contracts', 'digital_signature'],
-  'contracts.delete': ['contracts'],
-  'reports.dashboard': ['reports_basic', 'reports_advanced'],
-  'reports.portfolio': ['reports_basic', 'reports_advanced'],
-  'reports.mora': ['reports_basic', 'reports_advanced'],
-  'reports.collections': ['reports_basic', 'reports_advanced'],
-  'reports.advanced': ['reports_advanced'],
-  'reports.income': ['reports_advanced'],
-  'reports.projection': ['reports_advanced'],
-  'reports.datacredito': ['reports_advanced'],
-  'whatsapp.view': ['whatsapp'],
-  'whatsapp.send': ['whatsapp'],
-  'whatsapp.templates': ['whatsapp'],
-  'settings.branches': ['branches'],
-  'investors.view':    ['investors'],
-  'investors.create':  ['investors'],
-  'investors.edit':    ['investors'],
-  'investors.delete':  ['investors'],
-  'investors.assign':  ['investors'],
-  'investors.payouts': ['investors'],
-  'investors.portal':  ['investors'],
-}
-
-export function planAllowsPermission(planFeatures: string[], permKey: PermKey): boolean {
-  // Plans now store PermKeys directly instead of generic features.
-  // If plan has no restrictions (empty array), allow all. Otherwise check for exact PermKey match.
-  // Legacy format detection: if features are old-style (no dots), allow all (backward compatibility)
-  if (!planFeatures || planFeatures.length === 0) return true;
-
-  const isLegacyFormat = planFeatures.every(f => !f.includes('.'));
-  if (isLegacyFormat) return true; // Old format: no restrictions
-
-  return planFeatures.includes(permKey);
-}
+// NOTA (Jun 2026): PERM_REQUIRES_FEATURE y planAllowsPermission se eliminaron.
+// Mapeaban a "features genéricas" (clients/loans/whatsapp) que ya no existen —
+// los planes almacenan PermKeys directamente. El editor de permisos ahora
+// comprueba el techo del plan con `planFeatures.includes(permKey)` directo.

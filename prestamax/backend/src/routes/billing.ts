@@ -52,6 +52,24 @@ export function applyPlanChange(db: any, tenantId: string, newPlanId: string | n
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Periodo de gracia tras un pago fallido. Stripe reintenta el cobro durante
+// ~2 semanas (smart retries) antes de cancelar. NO suspendemos al primer fallo:
+// damos GRACE_DAYS de margen para que el cliente arregle la tarjeta. Pasado ese
+// plazo, requireTenant bloquea por fecha (subscription_end < hoy).
+// FIX P2 (Jun 2026): antes invoice.payment_failed marcaba 'expired' al instante.
+const PAST_DUE_GRACE_DAYS = 7;
+function applyPastDueGrace(db: any, tenantId: string) {
+  const t = db.prepare('SELECT subscription_end FROM tenants WHERE id=?').get(tenantId) as any;
+  const graceEnd = new Date(Date.now() + PAST_DUE_GRACE_DAYS * 86400000).toISOString();
+  // Conservar la fecha más lejana: si el cliente aún tiene periodo pagado vigente,
+  // no la acortamos; si ya venció (o es null), aplicamos la gracia desde hoy.
+  const existing = t?.subscription_end || null;
+  const newEnd = existing && existing > graceEnd ? existing : graceEnd;
+  db.prepare(`UPDATE tenants SET subscription_status='past_due', subscription_end=?, updated_at=datetime('now') WHERE id=?`)
+    .run(newEnd, tenantId);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/billing/plans — listado publico de planes con sus Price IDs de Stripe
 // (Solo retorna planes que tienen Price ID configurado en env vars)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,10 +291,16 @@ const webhookHandler = async (req: Request, res: Response) => {
           newPlanId = planRow?.id || null;
         }
         if (tenantId) {
+          // FIX P2 (Jun 2026): past_due NO suspende de inmediato — periodo de
+          // gracia (Stripe reintenta ~2 semanas). El plan no cambia en este caso.
+          if (status === 'past_due') {
+            applyPastDueGrace(db, tenantId);
+            console.log(`[Stripe] Tenant ${tenantId} pago atrasado (past_due) -> periodo de gracia ${PAST_DUE_GRACE_DAYS}d`);
+            break;
+          }
           const localStatus = ['active', 'trialing'].includes(status) ? 'active'
-            : status === 'past_due' ? 'expired'
             : status === 'canceled' ? 'cancelled'
-            : 'expired';
+            : 'expired'; // unpaid / incomplete_expired / etc — Stripe ya agotó reintentos
           if (newPlanId) {
             // Verificar si es un cambio real de plan (upgrade o downgrade)
             const current = db.prepare('SELECT plan_id FROM tenants WHERE id=?').get(tenantId) as any;
@@ -321,14 +345,17 @@ const webhookHandler = async (req: Request, res: Response) => {
       }
 
       // ── Pago fallido (tarjeta declinada) ──────────────────────────────────
+      // FIX P2 (Jun 2026): NO suspender al primer fallo. Damos un periodo de
+      // gracia (Stripe reintenta el cobro durante ~2 semanas). El bloqueo real
+      // ocurre cuando vence la gracia (requireTenant) o cuando Stripe cancela
+      // definitivamente (customer.subscription.deleted/updated -> unpaid/canceled).
       case 'invoice.payment_failed': {
         const invoice = event.data.object as any;
         const customerId = invoice.customer as string;
         const tenant = db.prepare('SELECT id FROM tenants WHERE stripe_customer_id=?').get(customerId) as any;
         if (tenant) {
-          db.prepare(`UPDATE tenants SET subscription_status='expired', updated_at=datetime('now') WHERE id=?`)
-            .run(tenant.id);
-          console.log(`[Stripe] Tenant ${tenant.id} pago fallido, suscripcion suspendida`);
+          applyPastDueGrace(db, tenant.id);
+          console.log(`[Stripe] Tenant ${tenant.id} pago fallido -> periodo de gracia ${PAST_DUE_GRACE_DAYS}d (no suspendido aún)`);
         }
         break;
       }

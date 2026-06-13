@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { TenantContext } from '@/contexts/TenantContext'
-import { PERM_BY_MODULE, PERM_DEFS, PermKey, PERM_REQUIRES_FEATURE, planAllowsPermission } from '@/lib/permissions'
+import { PERM_BY_MODULE, PERM_DEFS, PermKey } from '@/lib/permissions'
 import { usePermission } from '@/hooks/usePermission'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
@@ -2004,11 +2004,13 @@ const SettingsPage: React.FC = () => {
                       const isExplicit = p.key in permExplicit
                       const explicitVal = permExplicit[p.key]
                       
-                      // Verificar si está bloqueado por el plan
-                      const requiredFeatures = PERM_REQUIRES_FEATURE[p.key]
-                      const isBlockedByPlan = requiredFeatures
-                        ? !requiredFeatures.some(f => planFeatures.includes(f))
-                        : false
+                      // FIX P2 (Jun 2026): los planes guardan PermKeys directamente.
+                      // El check anterior usaba PERM_REQUIRES_FEATURE (features
+                      // genéricas tipo 'clients') que ya no existen en planFeatures,
+                      // marcando permisos centrales como bloqueados por error.
+                      // Ahora: bloqueado si el plan tiene restricciones y NO incluye
+                      // esta clave (planFeatures vacío = sin techo, igual que backend).
+                      const isBlockedByPlan = planFeatures.length > 0 && !planFeatures.includes(p.key)
 
                       // Determine badge style
                       let bgClass = 'bg-slate-50 border-slate-200'

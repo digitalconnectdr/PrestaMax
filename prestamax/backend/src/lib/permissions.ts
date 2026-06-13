@@ -263,48 +263,25 @@ export function hasPermission(
   return computePermissions(roles, explicit, planFeatures).has(key)
 }
 
-// Plan Feature Gates
-export const PERM_REQUIRES_FEATURE: Partial<Record<PermKey, string[]>> = {
-  'clients.view': ['clients'],
-  'clients.create': ['clients'],
-  'clients.edit': ['clients'],
-  'clients.delete': ['clients'],
-  'loans.view': ['loans'],
-  'loans.create': ['loans'],
-  'loans.edit': ['loans'],
-  'loans.approve': ['loans'],
-  'loans.reject': ['loans'],
-  'loans.disburse': ['loans'],
-  'loans.write_off': ['loans'],
-  'loans.void': ['loans'],
-  'loans.import': ['export_data'],
-  'payments.view': ['payments'],
-  'payments.create': ['payments'],
-  'payments.void': ['payments'],
-  'payments.edit': ['payments'],
-  'receipts.view': ['receipts'],
-  'receipts.reprint': ['receipts'],
-  'contracts.view': ['contracts'],
-  'contracts.create': ['contracts'],
-  'contracts.sign': ['contracts', 'digital_signature'],
-  'contracts.delete': ['contracts'],
-  'reports.dashboard': ['reports_basic', 'reports_advanced'],
-  'reports.portfolio': ['reports_basic', 'reports_advanced'],
-  'reports.mora': ['reports_basic', 'reports_advanced'],
-  'reports.collections': ['reports_basic', 'reports_advanced'],
-  'reports.advanced': ['reports_advanced'],
-  'reports.income': ['reports_advanced'],
-  'reports.projection': ['reports_advanced'],
-  'reports.datacredito': ['reports_advanced'],
-  'whatsapp.view': ['whatsapp'],
-  'whatsapp.send': ['whatsapp'],
-  'whatsapp.templates': ['whatsapp'],
-  'settings.branches': ['branches'],
-}
+// ─── Validación de features de plan ──────────────────────────────────────────
+// Los planes almacenan PermKeys directamente (p.ej. "clients.view"). Esta es la
+// única fuente de verdad de qué claves son válidas. Sirve para que el Admin no
+// pueda guardar features inexistentes en un plan (así nació el bug de
+// "settings.templates" que dejó templates.edit/delete bloqueado para todos).
+//
+// NOTA (Jun 2026): el viejo PERM_REQUIRES_FEATURE (mapa a features genéricas
+// tipo 'clients'/'loans') y planAllowsPermission se eliminaron — eran código
+// muerto/incoherente con el modelo actual de PermKeys.
+export const VALID_PERM_KEYS: ReadonlySet<string> = new Set(ALL_KEYS)
 
-export function planAllowsPermission(planFeatures: string[], permKey: PermKey): boolean {
-  // Plans now store PermKeys directly instead of generic features.
-  // If plan has no restrictions (empty array), allow all. Otherwise check for exact PermKey match.
-  if (!planFeatures || planFeatures.length === 0) return true;
-  return planFeatures.includes(permKey);
+/** Separa una lista de features de plan en válidas/ inválidas según PERM_DEFS. */
+export function validatePlanFeatures(features: unknown): { valid: string[]; invalid: string[] } {
+  const valid: string[] = []
+  const invalid: string[] = []
+  if (!Array.isArray(features)) return { valid, invalid }
+  for (const f of features) {
+    if (typeof f === 'string' && VALID_PERM_KEYS.has(f)) valid.push(f)
+    else invalid.push(String(f))
+  }
+  return { valid, invalid }
 }

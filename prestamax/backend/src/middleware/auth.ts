@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { getDb } from "../db/database";
-import { PermKey, computePermissions, planAllowsPermission } from "../lib/permissions";
+import { PermKey, computePermissions } from "../lib/permissions";
 
 export interface AuthRequest extends Request {
   user?: any;
