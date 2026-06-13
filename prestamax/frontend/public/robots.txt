@@ -1,0 +1,27 @@
+# PrestaMax — robots.txt
+# El landing público es indexable; las rutas privadas de la app no.
+User-agent: *
+Allow: /$
+Allow: /terms
+Allow: /privacy
+Disallow: /dashboard
+Disallow: /clients
+Disallow: /loans
+Disallow: /payments
+Disallow: /receipts
+Disallow: /contracts
+Disallow: /collections
+Disallow: /reports
+Disallow: /settings
+Disallow: /templates
+Disallow: /billing
+Disallow: /whatsapp
+Disallow: /income
+Disallow: /requests
+Disallow: /calculator
+Disallow: /investors
+Disallow: /portal
+Disallow: /admin
+Disallow: /apply
+
+Sitemap: https://prestamax-umber.vercel.app/sitemap.xml

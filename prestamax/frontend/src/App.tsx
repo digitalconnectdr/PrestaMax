@@ -1,10 +1,23 @@
-import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { TenantProvider } from '@/contexts/TenantContext'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
 import type { PermKey } from '@/lib/permissions'
+import { initAnalytics, trackPageView } from '@/lib/analytics'
+import { applyRouteSeo } from '@/lib/seo'
+import { setLocale, type Locale } from '@/lib/i18n'
+
+// ── Efectos por ruta: SEO (index/noindex) + Google Analytics pageview ─────────
+const RouteEffects: React.FC = () => {
+  const location = useLocation()
+  useEffect(() => {
+    applyRouteSeo(location.pathname)
+    trackPageView(location.pathname + location.search)
+  }, [location.pathname, location.search])
+  return null
+}
 
 import LoginPage from '@/pages/auth/LoginPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
@@ -130,10 +143,19 @@ const AppRoutes: React.FC = () => {
 }
 
 const App: React.FC = () => {
+  useEffect(() => {
+    // ?lang=es|en|pt en la URL fija el idioma (para hreflang/SEO y enlaces compartidos)
+    try {
+      const p = new URLSearchParams(window.location.search).get('lang')
+      if (p && ['es', 'en', 'pt'].includes(p)) setLocale(p as Locale)
+    } catch (_) { /* noop */ }
+    initAnalytics()
+  }, [])
   return (
     <BrowserRouter>
       <AuthProvider>
         <TenantProvider>
+          <RouteEffects />
           <AppRoutes />
         </TenantProvider>
       </AuthProvider>

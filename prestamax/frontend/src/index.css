@@ -53,3 +53,36 @@
     @apply text-lg font-semibold text-slate-700;
   }
 }
+
+/* ── Landing: animaciones y transiciones (Jun 2026) ────────────────────────── */
+html { scroll-behavior: smooth; }
+
+@keyframes lp-fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lp-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Reveal al hacer scroll: estado inicial oculto, .is-visible dispara la animación */
+.reveal { opacity: 0; }
+.reveal.is-visible { animation: lp-fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* Entrada escalonada del hero al cargar */
+.lp-hero-item { opacity: 0; animation: lp-fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.lp-delay-1 { animation-delay: 0.05s; }
+.lp-delay-2 { animation-delay: 0.15s; }
+.lp-delay-3 { animation-delay: 0.25s; }
+.lp-delay-4 { animation-delay: 0.35s; }
+
+/* Tarjetas con elevación al pasar el mouse */
+.lp-card-hover { transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease; }
+.lp-card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 28px -8px rgba(30, 58, 95, 0.18); }
+
+/* Accesibilidad: si el usuario pide menos movimiento, desactivar animaciones */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal, .reveal.is-visible, .lp-hero-item, .lp-card-hover { animation: none !important; opacity: 1 !important; transform: none !important; transition: none !important; }
+}

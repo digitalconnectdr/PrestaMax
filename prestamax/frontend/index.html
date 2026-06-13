@@ -6,7 +6,37 @@
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta name="theme-color" content="#1e3a5f" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PrestaMax - Gestión Profesional de Préstamos</title>
+
+    <!-- ── SEO (landing público). Las rutas privadas de la app fijan noindex
+         dinámicamente en runtime (ver src/lib/seo.ts) y robots.txt las bloquea. ── -->
+    <title>PrestaMax — Software de gestión de préstamos | Multi-moneda y multi-país</title>
+    <meta name="description" content="Sistema profesional para prestamistas: administra clientes, préstamos, cobranzas, pagos y contratos. Multi-moneda (12 monedas), multiusuario, en español, inglés y portugués. Prueba gratis 14 días." />
+    <meta name="keywords" content="software de préstamos, gestión de préstamos, sistema para prestamistas, cobranzas, microcréditos, préstamos personales, fintech, loan management software" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://prestamax-umber.vercel.app/" />
+
+    <!-- hreflang (los idiomas se seleccionan con ?lang=) -->
+    <link rel="alternate" hreflang="es" href="https://prestamax-umber.vercel.app/?lang=es" />
+    <link rel="alternate" hreflang="en" href="https://prestamax-umber.vercel.app/?lang=en" />
+    <link rel="alternate" hreflang="pt" href="https://prestamax-umber.vercel.app/?lang=pt" />
+    <link rel="alternate" hreflang="x-default" href="https://prestamax-umber.vercel.app/" />
+
+    <!-- Open Graph (Facebook, WhatsApp, LinkedIn) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PrestaMax" />
+    <meta property="og:title" content="PrestaMax — Software de gestión de préstamos" />
+    <meta property="og:description" content="Administra clientes, préstamos, cobranzas, pagos y contratos. Multi-moneda y multi-país. Prueba gratis 14 días." />
+    <meta property="og:url" content="https://prestamax-umber.vercel.app/" />
+    <meta property="og:image" content="https://prestamax-umber.vercel.app/og-image.png" />
+    <meta property="og:locale" content="es_DO" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:locale:alternate" content="pt_BR" />
+
+    <!-- Twitter / X Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PrestaMax — Software de gestión de préstamos" />
+    <meta name="twitter:description" content="Administra clientes, préstamos, cobranzas, pagos y contratos. Multi-moneda y multi-país." />
+    <meta name="twitter:image" content="https://prestamax-umber.vercel.app/og-image.png" />
 
     <!-- Security meta tags -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
@@ -14,8 +44,27 @@
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
 
-    <!-- Prevent search engines from indexing the app (private SaaS) -->
-    <meta name="robots" content="noindex, nofollow" />
+    <!-- Datos estructurados (rich results de Google) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "PrestaMax",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "description": "Sistema profesional de gestión de préstamos para prestamistas: clientes, préstamos, cobranzas, pagos y contratos. Multi-moneda y multi-país.",
+      "url": "https://prestamax-umber.vercel.app/",
+      "offers": {
+        "@type": "Offer",
+        "price": "29.99",
+        "priceCurrency": "USD"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "JPRS Digital Connect"
+      }
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
