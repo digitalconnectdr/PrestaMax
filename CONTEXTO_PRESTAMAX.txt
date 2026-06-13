@@ -1054,6 +1054,37 @@ Nuevas funciones:
 
 
 
+1- Create un agente para que revise que todos los permisos granulares realmente funcionen, si un plan tiene algun permiso agregado, estos deben salir y funcionar bien, pero quiero que lo revise en cada rol que maneja el sistema, que se asegure de que todo funcione correctamente, tomando en cuenta que los permisos se manejan desde: 
+
+a- Admin panel > Planes > "Nuevo plan" y "Editar plan"
+b- Admin panel > Usuarios > Gestionar permisos
+c- Configuracion > Usuarios > Gestionar permisos
+
+
+2- Create uno o varios agentes  para que revise los calculos que el sistema hace y todas las funcionalidades, necesito tener la seguridad que todos los calculos y reglas que el negocio tiene que funcionen bien.
+
+3- Create uno o varios agentes para que revise todo lo que tiene que ver con ciberseguridad de la herramienta, que se asegure que todo este correcto en el sistema
+
+
+jcpenalo@gmail.com
+Jc081203**//
+
+
+
+1- Cuando entro a "Cobranzas" > "Agenda de Cobranza" > "Nueva tarea" en la opcion "Vincular a Préstamo / Cliente (opcional)" > "Préstamo" no me estan apareciendo la lista de los clientes que tengo. 
+
+
+
+
+
+
+-------------------------------
+
+
+
+
+3- 
+
 
 
 

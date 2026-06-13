@@ -1,0 +1,659 @@
+================================================================================
+  PRESTAMAX - CONTEXTO COMPLETO POST-DEPLOY
+  Documento de referencia para futuras sesiones de IA
+  Ultima actualizacion: 1 Mayo 2026
+  Estado: 100% EN PRODUCCION (Stripe en TEST MODE)
+================================================================================
+
+
+================================================================================
+SECCION 1 - RESUMEN EJECUTIVO
+================================================================================
+
+PrestaMax es un sistema SaaS multi-tenant de gestion de prestamos personales
+para prestamistas en Republica Dominicana y el Caribe.
+
+Hoy (1 Mayo 2026) se completo el despliegue end-to-end:
+  - Codigo en GitHub
+  - Backend en Render (con disco persistente para SQLite)
+  - Frontend en Vercel
+  - Stripe Checkout funcional en TEST MODE
+  - Webhook de Stripe firmado y procesando eventos
+  - Keepalive ping cada 10 min via GitHub Actions
+  - Auto-deploy en cada push a main
+
+
+================================================================================
+SECCION 2 - URLS DE PRODUCCION
+================================================================================
+
+Frontend (Vercel):    https://prestamax-umber.vercel.app
+Backend  (Render):    https://prestamax-api.onrender.com
+Health endpoint:      https://prestamax-api.onrender.com/health
+Repositorio Git:      https://github.com/digitalconnectdr/PrestaMax
+Branch principal:     main
+
+Login del propietario: jcpenalo@gmail.com
+Rol: platform_owner (acceso total)
+Plan actual de su tenant: Enterprise (test, suscripcion activa via Stripe)
+
+Panel admin de plataforma: https://prestamax-umber.vercel.app/admin
+Pagina de suscripcion:     https://prestamax-umber.vercel.app/billing
+                           https://prestamax-umber.vercel.app/settings/subscription
+
+
+================================================================================
+SECCION 3 - CUENTAS Y ACCESOS DEL PROPIETARIO
+================================================================================
+
+GitHub:    digitalconnectdr (organizacion / cuenta)
+Vercel:    digitalconnectdr's projects (Hobby plan, gratis)
+Render:    Digital Connect Dr (Starter plan, $7.25/mes)
+Stripe:    Digital Connect sandbox (modo Test activo)
+
+Email del propietario:    jcpenalo@gmail.com
+Email Stripe registrado:  digitalconnectdr@gmail.com (cuenta Stripe)
+
+
+================================================================================
+SECCION 4 - STACK TECNOLOGICO
+================================================================================
+
+Backend:
+  - Node.js 25.9.0 (Render lo selecciono porque package.json dice >=22.0.0)
+  - TypeScript 5.3
+  - Express 4.18
+  - SQLite via node:sqlite (BUILT-IN de Node, NO mejor-sqlite3 ni Prisma)
+  - JWT (HS256, 7 dias expiracion)
+  - bcrypt cost 12
+  - stripe 17.5.0
+  - Helmet, CORS, express-rate-limit
+  - morgan para HTTP logs
+
+Frontend:
+  - React 18 + TypeScript 5.2
+  - Vite 5 (build con terser para minificacion)
+  - Tailwind CSS 3.4
+  - React Router 6
+  - Radix UI (Dialog, Dropdown, Tabs, etc.)
+  - Recharts para graficas
+  - axios + react-hook-form + zod
+  - lucide-react para iconos
+  - react-hot-toast para notificaciones
+
+Infra:
+  - Render Web Service "prestamax-api" (Starter $7/mes + disco 1GB $0.25/mes)
+  - Render Persistent Disk montado en /var/data (SQLite vive ahi)
+  - Vercel Static Site (Hobby plan gratis)
+  - GitHub Actions para keepalive ping cada 10 min
+
+
+================================================================================
+SECCION 5 - ESTRUCTURA DEL PROYECTO
+================================================================================
+
+Repo: github.com/digitalconnectdr/PrestaMax
+
+prestamax/
+  backend/
+    src/
+      index.ts                 -- Entry point, configura Express + middlewares
+      db/
+        database.ts            -- Schema SQLite, migraciones, getDb(), uuid(), now()
+        seed.ts                -- Datos demo (solo en development)
+      middleware/
+        auth.ts                -- authenticate, requireTenant, requirePermission
+        errorHandler.ts
+        securityMiddleware.ts  -- sanitize, blockBots, detectMalicious, audit
+      lib/
+        permissions.ts         -- PermKey types, ROLE_DEFAULTS, computePermissions
+      services/
+        stripeService.ts       -- Wrapper de Stripe SDK (NUEVO - 1 May 2026)
+      routes/
+        index.ts               -- Router principal
+        auth.ts                -- login, /me, register-tenant (con trial 10 dias)
+        admin.ts               -- Panel de plataforma
+        loans.ts               -- CRUD prestamos, aprobacion, desembolso, import
+        payments.ts            -- Pagos, anulacion, edicion
+        clients.ts             -- CRUD clientes, documentos, referencias
+        contracts.ts           -- Plantillas y contratos
+        receipts.ts            -- Recibos
+        reports.ts             -- KPIs, cartera, mora, cobros, datacredito
+                                  income-expenses (FIXED - 1 May 2026)
+        settings.ts            -- Config tenant, usuarios, sucursales, productos
+        whatsapp.ts            -- Mensajes y plantillas (sin envio real)
+        collections.ts         -- Cartera de cobros
+        collection_tasks.ts    -- Tareas de cobranza
+        loanProducts.ts        -- Productos configurables
+        loanRequests.ts        -- Solicitudes del portal publico
+        income.ts              -- Ingresos y gastos
+        notifications.ts       -- Notificaciones internas
+        platform.ts            -- Stripe basico, planes, tenants
+        public.ts              -- Portal publico de solicitud sin login
+        billing.ts             -- (NUEVO 1 May 2026) Stripe Checkout/Portal/Webhook
+    package.json
+    package-lock.json
+    render.yaml                -- Config de deploy en Render
+    .env.example
+    tsconfig.json              -- Excluye db/db-postgres.ts (codigo no usado)
+    prisma/                    -- Existe pero NO se usa (codigo legacy)
+    supabase/                  -- Solo guia de migracion, NO implementado
+
+  frontend/
+    src/
+      App.tsx                  -- Routes con permisos
+      main.tsx
+      contexts/
+        AuthContext.tsx
+        TenantContext.tsx
+      hooks/
+        useAuth.ts, useTenant.ts, usePermission.ts
+      lib/
+        api.ts                 -- axios con camelize/snakify automatico
+        permissions.ts         -- Copia exacta del backend (debe sincronizarse)
+        utils.ts               -- formatCurrency (usa moneda del tenant)
+      components/
+        layout/AppLayout.tsx
+        ui/                    -- Card, Button, Input, etc.
+      pages/
+        auth/, dashboard/, loans/, clients/, payments/, receipts/,
+        contracts/, reports/, collections/, whatsapp/, settings/,
+        income/, requests/, calculator/, admin/, public/
+        billing/BillingPage.tsx  -- (NUEVO 1 May 2026)
+    package.json               -- Incluye terser
+    vite.config.ts             -- Build con minificacion terser
+    vercel.json                -- Rewrites para SPA
+    tailwind.config.js
+    tsconfig.json
+
+  prestamax.db                 -- SQLite local (no se commitea)
+
+.github/
+  workflows/
+    keepalive.yml              -- Ping a /health cada 10 min (NUEVO 1 May 2026)
+
+.gitignore                     -- Excluye .env, *.db, node_modules, etc.
+
+
+================================================================================
+SECCION 6 - BASE DE DATOS
+================================================================================
+
+Motor: SQLite (node:sqlite built-in de Node 22+)
+Ubicacion en produccion: /var/data/prestamax.db (disco persistente Render)
+Ubicacion en desarrollo: ./prestamax.db (junto al backend)
+
+NO se usa Supabase, PostgreSQL, Prisma ni MySQL.
+
+Tablas principales (29):
+  plans, users, tenants, tenant_settings, tenant_memberships, branches,
+  clients, client_references, guarantors, client_documents,
+  loan_products, loans, installments, loan_guarantors, loan_guarantees,
+  guarantee_categories,
+  payments, payment_items, receipts, receipt_series,
+  contracts, contract_templates,
+  whatsapp_templates, whatsapp_messages,
+  bank_accounts, account_transfers, income_expenses,
+  payment_promises, collection_notes, collection_tasks,
+  notifications, audit_logs, loan_requests
+
+Migraciones: NO existe sistema formal. Se usa CREATE TABLE IF NOT EXISTS y
+ALTER TABLE ADD COLUMN con try/catch silencioso en initializeDatabase().
+
+Permisos: dot-namespaced ("clients.view", "loans.create", etc.)
+ver backend/src/lib/permissions.ts y frontend/src/lib/permissions.ts
+Estos dos archivos DEBEN mantenerse sincronizados manualmente.
+
+
+================================================================================
+SECCION 7 - SISTEMA DE ROLES
+================================================================================
+
+Roles de plataforma (column users.platform_role):
+  - platform_owner   (Juan, acceso total a panel /admin)
+  - platform_admin
+  - platform_support
+  - none             (default para usuarios normales)
+
+Roles dentro del tenant (en tenant_memberships.roles JSON array):
+  - tenant_owner     (acceso total dentro de su empresa)
+  - admin
+  - prestamista / oficial / loan_officer
+  - cashier
+  - cobrador
+
+Un usuario puede pertenecer a multiples tenants con roles distintos en cada uno.
+
+Header HTTP requerido para rutas tenant-scoped:
+  Authorization: Bearer <JWT_TOKEN>
+  x-tenant-id: <UUID del tenant>
+
+
+================================================================================
+SECCION 8 - PLANES DE SUSCRIPCION (STRIPE)
+================================================================================
+
+Configurados en Stripe Dashboard (sandbox/test):
+
+  Plan          Precio USD   Cobradores  Clientes   Usuarios   Stripe Price ID
+  ----------    ----------   ----------  --------   --------   --------------------------------
+  Starter       $29.99/mes   1           100        3          price_1TS5cX1mEYlZ24EhpFfFP2sN
+  Basico        $59.99/mes   3           500        8          price_1TS5eV1mEYlZ24EhwiDlAeUQ
+  Profesional   $119.99/mes  10          2000       20         price_1TS5fI1mEYlZ24Eh4PDpN0s9
+  Enterprise    $249.99/mes  Sin limite  Sin limite Sin limite price_1TS5fk1mEYlZ24EhcubdEUIp
+
+Plan Trial (interno, no en Stripe):
+  $0/mes, 10 dias de prueba, 1 cobrador, 50 clientes, 2 usuarios.
+  Asignado automaticamente al registrar nuevo prestamista.
+
+Trial period: 10 dias (configurado en backend/src/routes/auth.ts linea 109).
+Al registrarse, tenants.subscription_end = NOW + 10 dias.
+
+Cuando expira el trial (subscription_end < ahora):
+  El middleware requireTenant devuelve HTTP 402 con
+  { error: "Tu suscripcion ha expirado...", code: "SUBSCRIPTION_EXPIRED" }
+  El frontend redirige al usuario a /billing para que pague.
+
+
+================================================================================
+SECCION 9 - INTEGRACION STRIPE (TEST MODE)
+================================================================================
+
+Cuenta Stripe: Digital Connect sandbox (digitalconnectdr@gmail.com)
+
+Endpoints implementados:
+  GET  /api/billing/plans           Lista planes con Price IDs
+  GET  /api/billing/subscription    Estado actual del tenant
+  POST /api/billing/checkout        Crea Checkout Session, devuelve URL
+  POST /api/billing/portal          Abre Customer Portal, devuelve URL
+  POST /api/billing/webhook         Procesa eventos de Stripe (raw body)
+
+Eventos de Stripe procesados:
+  checkout.session.completed       -> activa suscripcion, guarda customer_id
+  customer.subscription.created    -> actualiza estado y plan
+  customer.subscription.updated    -> actualiza estado y plan
+  customer.subscription.deleted    -> marca como cancelada
+  invoice.payment_failed           -> marca como expired
+
+Webhook configurado en Stripe:
+  URL: https://prestamax-api.onrender.com/api/billing/webhook
+  API version: 2026-04-22.dahlia
+  Listen to: Your account (no Connect)
+
+Tarjetas de prueba:
+  Exitosa:               4242 4242 4242 4242
+  Declinada:             4000 0000 0000 0002
+  Requiere 3DS:          4000 0025 0000 3155
+  Expiry: cualquier fecha futura. CVC: cualquier 3 digitos.
+
+
+================================================================================
+SECCION 10 - VARIABLES DE ENTORNO (RENDER BACKEND)
+================================================================================
+
+Configuradas en Render dashboard (Environment tab del servicio prestamax-api):
+
+  NODE_ENV                = production
+  DATABASE_PATH           = /var/data/prestamax.db
+  JWT_SECRET              = (generado por Render con generateValue: true)
+  JWT_EXPIRES_IN          = 7d
+  FRONTEND_URL            = https://prestamax-umber.vercel.app
+  STRIPE_SECRET_KEY       = sk_test_51TS5TM1mEYlZ24Eh... (TEST MODE)
+  STRIPE_WEBHOOK_SECRET   = whsec_iRWOQ4ln6aAnBUT3y2pOQmofLOcxBHA5
+  STRIPE_PRICE_STARTER    = price_1TS5cX1mEYlZ24EhpFfFP2sN
+  STRIPE_PRICE_BASICO     = price_1TS5eV1mEYlZ24EhwiDlAeUQ
+  STRIPE_PRICE_PROFESIONAL = price_1TS5fI1mEYlZ24Eh4PDpN0s9
+  STRIPE_PRICE_ENTERPRISE = price_1TS5fk1mEYlZ24EhcubdEUIp
+
+
+================================================================================
+SECCION 11 - VARIABLES DE ENTORNO (VERCEL FRONTEND)
+================================================================================
+
+Configuradas en Vercel dashboard (Project Settings > Environment Variables):
+
+  VITE_API_URL            = https://prestamax-api.onrender.com/api
+
+
+================================================================================
+SECCION 12 - DESPLIEGUE Y AUTO-DEPLOY
+================================================================================
+
+Cualquier push a la rama main dispara auto-deploy automatico en ambos
+servicios:
+
+Backend (Render):
+  - Build command:   npm install --include=dev && npm run build
+    (--include=dev es CRITICO porque NODE_ENV=production omite devDependencies
+     por defecto y necesitamos typescript + @types/node para compilar)
+  - Start command:   npm start (ejecuta node dist/index.js)
+  - Health check:    GET /health debe devolver 200
+  - Disco persistente: /var/data (1 GB, $0.25/mes)
+  - Tiempo build:    ~5-10 min
+
+Frontend (Vercel):
+  - Framework:       Vite (auto-detectado)
+  - Root directory:  prestamax/frontend
+  - Build:           npm run build (tsc && vite build)
+  - Output:          dist/
+  - Tiempo build:    ~2-3 min
+
+
+================================================================================
+SECCION 13 - KEEPALIVE PING (GITHUB ACTIONS)
+================================================================================
+
+Workflow: .github/workflows/keepalive.yml
+Frecuencia: cada 10 minutos (cron */10 * * * *)
+Hace: GET https://prestamax-api.onrender.com/health
+Proposito: evitar el "cold start" del plan Starter de Render
+           (el servicio se duerme despues de 15 min sin trafico)
+
+Tambien permite ejecucion manual desde la UI de GitHub Actions.
+
+Limites:
+  - GitHub Actions cron puede tener delays de 5-30 min en horas pico
+  - Workflows scheduled se desactivan tras 60 dias sin commits
+
+
+================================================================================
+SECCION 14 - COSTOS MENSUALES
+================================================================================
+
+Render Web Service Starter:        $7.00 / mes
+Render Persistent Disk 1 GB:       $0.25 / mes
+Vercel Hobby plan:                 $0.00 / mes
+GitHub:                            $0.00 / mes (repo privado en plan Free)
+GitHub Actions:                    $0.00 / mes (lejos de los limites)
+Stripe (TEST mode):                $0.00 / mes
+Stripe (LIVE mode):                2.9% + $0.30 por transaccion exitosa
+                                   (sin costo fijo mensual)
+
+TOTAL FIJO ACTUAL: $7.25 / mes
+Cuando empiecen a entrar pagos reales, Stripe descuenta su comision
+de cada transaccion automaticamente.
+
+
+================================================================================
+SECCION 15 - OPERACIONES COMUNES
+================================================================================
+
+Desplegar un cambio de codigo:
+  1. Editar archivos localmente en C:\Users\JCPENALO\.gemini\antigravity\scratch\Sistema Prestamos\Proyecto Sistema de Prestamos
+  2. Necesitas tener clonado el repo localmente (si no, hacer git clone primero)
+  3. cd al repo, git add ., git commit -m "...", git push
+  4. Render y Vercel detectan el push y despliegan en 2-10 min
+
+Acceder al Shell del backend en produccion:
+  - Dashboard de Render -> servicio prestamax-api -> "Shell" en sidebar
+  - Pegar comandos con Ctrl+Shift+V (no Ctrl+V normal)
+
+Ejecutar SQL manual en la DB de produccion:
+  En el Shell de Render:
+    node -e "const{DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/var/data/prestamax.db');console.log(db.prepare('SELECT * FROM users').all());"
+
+Hacer backup de la DB:
+  - Desde el Panel Admin /admin -> tab Backups -> "Crear backup"
+  - O por Shell: cp /var/data/prestamax.db /var/data/backups/prestamax_$(date +%Y%m%d).db
+
+Cambiar env vars en Render:
+  Dashboard -> servicio -> Environment -> editar -> "Save, rebuild, and deploy"
+  Toma ~3-5 min en aplicarse (reinicio del servicio)
+
+
+================================================================================
+SECCION 16 - BUGS CONOCIDOS Y LIMITACIONES
+================================================================================
+
+WhatsApp:
+  - No hay integracion real. Los mensajes se marcan como 'sent' pero no se
+    envian. Falta integrar Twilio, Meta WhatsApp Business API u otra solucion.
+  - No se valida clients.consent_whatsapp antes de enviar (riesgo legal).
+
+Datos sensibles:
+  - Las imagenes de cedula del portal publico se guardan en Base64 en la DB
+    sin validar MIME type ni tamano (puede inflar la DB).
+
+JWT:
+  - No hay token blacklist. Los JWT siguen validos hasta expirar (7 dias)
+    aunque el usuario haga logout. Para revocar tokens en tiempo real
+    se necesitaria Redis o tabla de tokens revocados.
+
+Rate limiting:
+  - Es solo por IP, no por usuario autenticado.
+
+Cold starts:
+  - Plan Starter de Render duerme tras 15 min de inactividad.
+  - Mitigado por GitHub Actions ping cada 10 min, pero puede haber
+    delays ocasionales de 30-60s en la primera request.
+
+Display de monedas:
+  - Los planes de Stripe estan en USD pero el sistema muestra precios
+    de prestamos en RD$ (moneda default del tenant). En el panel admin
+    los precios de planes ya muestran $ correctamente desde 1 May 2026.
+
+SQLite vs PostgreSQL:
+  - SQLite es single-writer. Si crece a 100+ tenants concurrentes con
+    muchos pagos simultaneos, podria haber contencion. Migracion a Supabase/
+    PostgreSQL ya tiene base preparada en backend/supabase/MIGRATION_GUIDE.md
+    pero esta excluida del build (no implementada).
+
+Variables que NO se commitean (estan en .gitignore):
+  - .env (con JWT_SECRET, STRIPE_SECRET_KEY, etc.)
+  - prestamax.db
+  - backups/
+
+
+================================================================================
+SECCION 17 - TAREAS PENDIENTES
+================================================================================
+
+[A] MIGRAR STRIPE DE TEST MODE A LIVE MODE (cuando este listo para cobrar real)
+================================================================================
+    Pasos detallados:
+
+    1. ACTIVAR LA CUENTA DE STRIPE PARA LIVE MODE
+       - Ir a https://dashboard.stripe.com/account/onboarding
+       - Completar todos los datos del negocio:
+         * Business name (razon social)
+         * Business type (sociedad, persona fisica, etc.)
+         * RNC / Tax ID
+         * Direccion fisica del negocio
+         * Sitio web (opcional pero recomendado)
+         * Descripcion de productos/servicios
+         * Datos del representante legal (cedula, fecha nacimiento)
+         * Cuenta bancaria DR para recibir los pagos
+         * Verificacion de identidad (subir foto de cedula del titular)
+       - Stripe revisa los datos en 1-3 dias habiles
+       - Cuando este aprobada, el toggle Sandbox/Live arriba a la derecha
+         del dashboard estara disponible
+
+    2. CAMBIAR AL MODO LIVE
+       - En el dashboard de Stripe, click en el toggle arriba a la derecha
+         que dice "Sandbox" -> cambiarlo a "Live"
+       - Verificar que la URL de Stripe ahora dice "/dashboard" sin "/test/"
+
+    3. CREAR LOS 4 PRODUCTOS EN LIVE MODE
+       - Ir a https://dashboard.stripe.com/products (sin /test/)
+       - Click en "+ Add product"
+       - Crear UNO POR UNO los mismos 4 productos:
+
+         Producto 1: PrestaMax Starter
+           Precio: 29.99 USD, Recurring monthly
+         Producto 2: PrestaMax Basico
+           Precio: 59.99 USD, Recurring monthly
+         Producto 3: PrestaMax Profesional
+           Precio: 119.99 USD, Recurring monthly
+         Producto 4: PrestaMax Enterprise
+           Precio: 249.99 USD, Recurring monthly
+
+       - Para cada producto despues de crearlo, copiar el Price ID
+         (empieza con price_... pero ahora SIN el prefijo "test")
+       - Anotar los 4 Price IDs Live
+
+    4. ACTIVAR EL CUSTOMER PORTAL EN LIVE MODE
+       - Ir a https://dashboard.stripe.com/settings/billing/portal
+       - Activar las mismas funciones que en test mode:
+         * Customers can update payment method
+         * Customers can cancel subscriptions
+         * Customers can switch plans (seleccionar los 4 productos Live)
+         * Customers can update billing address
+       - Headline: "Gestiona tu suscripcion de PrestaMax"
+       - Save
+
+    5. OBTENER LAS API KEYS LIVE
+       - Ir a https://dashboard.stripe.com/apikeys (sin /test/)
+       - Copiar:
+         * Publishable key (empieza con pk_live_...)
+         * Secret key (empieza con sk_live_...) - click "Reveal" primero
+       - GUARDAR ESTAS KEYS DE FORMA SEGURA - NO las commits a Git
+
+    6. CREAR EL WEBHOOK EN LIVE MODE
+       - Ir a https://dashboard.stripe.com/workbench/webhooks (sin /test/)
+       - Click "+ Add destination"
+       - Step 1 Select events:
+         * Events from: Your account
+         * Marcar exactamente los 5 eventos:
+           - checkout.session.completed
+           - customer.subscription.created
+           - customer.subscription.updated
+           - customer.subscription.deleted
+           - invoice.payment_failed
+         * Continue
+       - Step 2 Choose destination type:
+         * Webhook endpoint -> Continue
+       - Step 3 Configure your destination:
+         * Endpoint URL: https://prestamax-api.onrender.com/api/billing/webhook
+         * Description: PrestaMax production live webhook
+         * Create destination
+       - Despues de crear, ir a la pagina del webhook y copiar el
+         "Signing secret" (empieza con whsec_...)
+
+    7. ACTUALIZAR LAS 6 ENV VARS EN RENDER
+       - Ir a https://dashboard.render.com -> servicio prestamax-api ->
+         Environment
+       - Editar (no agregar nuevas, EDITAR las existentes):
+
+         STRIPE_SECRET_KEY        = sk_live_... (nueva del paso 5)
+         STRIPE_WEBHOOK_SECRET    = whsec_... (nueva del paso 6)
+         STRIPE_PRICE_STARTER     = price_... (nuevo Live, paso 3)
+         STRIPE_PRICE_BASICO      = price_... (nuevo Live, paso 3)
+         STRIPE_PRICE_PROFESIONAL = price_... (nuevo Live, paso 3)
+         STRIPE_PRICE_ENTERPRISE  = price_... (nuevo Live, paso 3)
+
+       - Click "Save, rebuild, and deploy" abajo
+       - Esperar ~3-5 min al redeploy
+
+    8. PROBAR CON UNA TARJETA REAL
+       - Refresh el frontend en https://prestamax-umber.vercel.app
+       - Crear una cuenta de prueba con un email diferente al tuyo
+         (porque tu cuenta jcpenalo@gmail.com ya esta como Enterprise test)
+       - Ir a /billing -> Suscribirse a Starter ($29.99/mes)
+       - Usar una tarjeta REAL personal (NO 4242...)
+       - Verificar que se cobra realmente
+       - En Stripe dashboard veras el pago en https://dashboard.stripe.com/payments
+       - Despues puedes reembolsar la transaccion desde Stripe si era solo
+         para pruebas
+
+    9. CONSIDERACIONES IMPORTANTES
+       - En Live mode, las transacciones SI cobran dinero real
+       - Stripe cobra 2.9% + $0.30 USD por transaccion exitosa
+       - Stripe transfiere el dinero a tu cuenta bancaria DR cada 2-7 dias
+         (el cronograma se configura en https://dashboard.stripe.com/settings/payouts)
+       - Mantener actualizado el documento de Privacy Policy y Terms en el
+         frontend con tu informacion legal real (RNC, direccion, etc.)
+       - Los productos en TEST mode quedan separados, puedes seguir usando
+         test mode para desarrollo
+
+
+[B] OTRAS TAREAS PENDIENTES MENORES
+================================================================================
+
+  - Conectar dominio personalizado prestamax.com (cuando lo compres):
+    - En Vercel: Settings > Domains -> Add prestamax.com
+    - En Render: Settings > Custom Domains -> Add api.prestamax.com
+    - Actualizar VITE_API_URL a https://api.prestamax.com/api
+    - Actualizar FRONTEND_URL a https://prestamax.com en Render
+    - El backend ya tiene en CORS los origins prestamax.com/www/app
+
+  - Implementar envio real de WhatsApp (Twilio o Meta API)
+  - Validar consentimiento WhatsApp del cliente antes de enviar
+  - Implementar token blacklist para JWT (logout real)
+  - Validar MIME type de imagenes Base64 del portal publico
+
+  - Considerar migracion a Supabase/PostgreSQL cuando crezca el negocio
+    (la guia ya esta en backend/supabase/MIGRATION_GUIDE.md)
+
+
+================================================================================
+SECCION 18 - HISTORIAL DE CAMBIOS DE LA SESION DE DEPLOY (1 MAYO 2026)
+================================================================================
+
+Commits realizados (de mas reciente a mas antiguo):
+
+  4e8a9f2  Fix: shape de /api/reports/income-expenses para matchear frontend
+  6259991  Fix: /api/reports/income-expenses devolvia 500
+  37d5439  Fix: mostrar precios de planes Stripe en USD (no RD$)
+  9e3986a  Fix: quitar customer_creation de checkout (solo aplica a mode=payment)
+  c4f98f1  Add: integracion Stripe completa (suscripciones SaaS)
+  c7594e8  Add: GitHub Actions keepalive ping cada 10 min para Render
+  42b9de8  Fix: reescribir package.json del frontend y render.yaml (truncados por FS)
+  a02c323  Fix: incluir devDependencies en build de Render
+  1b38582  Fix: complete index.ts (was truncated by FS issue)
+  3868abe  Initial commit: PrestaMax SaaS multi-tenant
+
+
+================================================================================
+SECCION 19 - NOTAS PARA FUTURAS SESIONES DE IA
+================================================================================
+
+1. PERMISSIONS.TS DEBE ESTAR SINCRONIZADO entre backend y frontend.
+   Cualquier cambio en backend/src/lib/permissions.ts requiere replicar
+   manualmente en frontend/src/lib/permissions.ts.
+
+2. WEBHOOK DE STRIPE NECESITA RAW BODY. En backend/src/index.ts el route
+   /api/billing/webhook se monta con express.raw() ANTES de express.json().
+   Si esto se rompe, el webhook fallara con "signature verification failed".
+
+3. NO USAR PRISMA NI POSTGRESQL. El proyecto tiene archivos de Prisma y
+   Supabase pero NO se usan. El sistema corre con node:sqlite (built-in
+   de Node 22+). Cualquier referencia a Prisma o pg es codigo legacy.
+
+4. EL FILESYSTEM DE DESARROLLO TIENE UN BUG: cuando se editan archivos largos
+   con el tool Edit, a veces se truncan. Si pasa, hay que reescribir el archivo
+   completo via bash heredoc, o usar Python para edits quirurgicos. El archivo
+   queda corrupto en disco aunque el Read tool muestre contenido cacheado.
+
+5. EL ENDPOINT /api/billing/* TIENE FALLBACK SEGURO. Si Stripe no esta
+   configurado (faltan env vars), los endpoints devuelven 503 pero el
+   resto del sistema sigue funcionando. NO se cae el backend completo.
+
+6. EL TENANT DE JUAN ES "PrestaMax Admin" (no "PrestaMax Demo").
+   ID de Juan en users: 5192eb37-df24-4bf2-b093-aa4d5bb0b191
+   Plan actual: Enterprise (test mode)
+   Estado suscripcion: active
+
+7. EL FRONTEND USA camelize/snakify AUTOMATICAMENTE en api.ts.
+   El backend devuelve snake_case, el frontend lo recibe en camelCase.
+   Cuando crees endpoints nuevos, ten en cuenta este transform.
+
+8. LOS PRECIOS DE STRIPE ESTAN EN USD pero formatCurrency() del frontend
+   usa la moneda del tenant (DOP por default = RD$). Para mostrar correctamente
+   precios de planes Stripe, usar inline ${value.toFixed(2)} en lugar de
+   formatCurrency().
+
+9. EL .env DEL BACKEND NO SE COMMITEA. Esta en .gitignore.
+   Para regenerar el JWT_SECRET local:
+   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+
+10. KEEPALIVE WORKFLOW SE DESACTIVA TRAS 60 DIAS SIN COMMITS.
+    Si pasa eso, ir a https://github.com/digitalconnectdr/PrestaMax/actions
+    y reactivarlo manualmente.
+
+
+================================================================================
+FIN DEL DOCUMENTO
+PrestaMax SaaS - Sistema de Gestion de Prestamos
+Propietario: Juan C. Penalo - jcpenalo@gmail.com
+Estado: Deployado y operativo desde 1 Mayo 2026
+================================================================================

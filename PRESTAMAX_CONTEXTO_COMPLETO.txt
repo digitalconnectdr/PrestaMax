@@ -1,8 +1,16 @@
 ================================================================================
   PRESTAMAX — CONTEXTO COMPLETO DEL SISTEMA
   Documento de referencia para agentes de IA y nuevas sesiones de trabajo
-  Última actualización: 29 Abril 2026 (rev. 2)
+  Última actualización: 1 Mayo 2026 (rev. 3 — POST-DEPLOY EN PRODUCCIÓN)
 ================================================================================
+
+ESTADO ACTUAL: Sistema 100% desplegado en producción.
+  - Backend en Render (https://prestamax-api.onrender.com)
+  - Frontend en Vercel (https://prestamax-umber.vercel.app)
+  - Stripe Checkout funcional en TEST MODE
+  - Webhook de Stripe firmado y procesando eventos
+  - Auto-deploy en cada push a main
+  - Keepalive ping cada 10 min via GitHub Actions
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. RESUMEN EJECUTIVO
@@ -16,26 +24,28 @@ PROPIETARIO DEL SISTEMA:
   - Nombre: Juan C. Peñalo
   - Email: jcpenalo@gmail.com
   - Rol: platform_owner (acceso total sin restricciones)
-  - Contraseña actual: jc081203 (no cumple complejidad, fue seteada directamente en DB)
-  - Tenant personal: "PrestaMax Demo" (ID: 1284ba1d-b6cd-429c-89b7-86fa72535541)
-    Plan: Enterprise | Roles: tenant_owner, admin, prestamista, cajero
-    Suscripción: active hasta 2099-12-31
-    59 permisos explícitos habilitados (acceso total a todas las funciones del tenant)
+  - User ID en producción: 5192eb37-df24-4bf2-b093-aa4d5bb0b191
+  - Tenant personal en producción: "PrestaMax Admin" (creado al registrarse)
+    Plan: Enterprise (test mode, suscripción activa via Stripe)
+    Suscripción: active
 
 STACK TECNOLÓGICO:
-  - Backend:  Node.js (v22) + TypeScript + Express.js
-  - Base de datos: SQLite via node:sqlite (built-in Node 22)
+  - Backend:  Node.js (v25.9 en Render) + TypeScript + Express.js
+  - Base de datos: SQLite via node:sqlite (built-in Node 22+)
   - Frontend: React 18 + TypeScript + Vite + Tailwind CSS
-  - Despliegue: Render (backend) + Render Static Sites (frontend)
-  - Pagos SaaS: Stripe (para cobrar suscripciones a prestamistas)
+  - Despliegue: Render (backend) + Vercel (frontend)
+  - Pagos SaaS: Stripe (Checkout + Customer Portal + Webhook)
   - Autenticación: JWT (HS256, 7 días de expiración)
 
 NOMBRE DEL SISTEMA: PrestaMax
-RUTA DEL PROYECTO: /Proyecto Sistema de Prestamos/prestamax/
+RUTA DEL PROYECTO LOCAL: C:\Users\JCPENALO\.gemini\antigravity\scratch\Sistema Prestamos\Proyecto Sistema de Prestamos\
+RUTA DEL PROYECTO RELATIVA AL REPO: prestamax/
   - Backend:  prestamax/backend/
   - Frontend: prestamax/frontend/
-  - Base de datos: prestamax/prestamax.db (SQLite)
-  - Backups: prestamax/backups/
+  - Base de datos local: prestamax/prestamax.db (SQLite, no se commitea)
+  - Base de datos producción: /var/data/prestamax.db (disco persistente Render)
+
+REPOSITORIO GIT: https://github.com/digitalconnectdr/PrestaMax (branch: main)
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -72,6 +82,7 @@ VERIFICACIÓN DE SUSCRIPCIÓN:
   El middleware requireTenant verifica automáticamente que la suscripción del
   tenant no haya expirado. Si expiró, responde HTTP 402 con:
   { error: "Tu suscripción ha expirado...", code: "SUBSCRIPTION_EXPIRED" }
+  El frontend debe redirigir a /billing para que el usuario pague.
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -80,10 +91,11 @@ VERIFICACIÓN DE SUSCRIPCIÓN:
 
 backend/
 ├── src/
-│   ├── index.ts                    — Entry point Express, middlewares globales
+│   ├── index.ts                    — Entry point Express, middlewares globales,
+│   │                                  webhook de Stripe con raw body ANTES de json
 │   ├── db/
 │   │   ├── database.ts             — Inicialización DB, schema completo, migraciones
-│   │   └── seed.ts                 — Datos de demo (no activos en producción)
+│   │   └── seed.ts                 — Datos de demo (solo en NODE_ENV=development)
 │   ├── middleware/
 │   │   ├── auth.ts                 — authenticate, requireTenant, requirePermission,
 │   │   │                             requirePlatformAdmin
@@ -94,13 +106,19 @@ backend/
 │   │   └── permissions.ts          — PermKey types, PERM_DEFS, ROLE_DEFAULTS,
 │   │                                 computePermissions, PERM_REQUIRES_FEATURE
 │   ├── services/
-│   │   └── loanCalculator.ts       — Generación de tablas de amortización,
-│   │                                 cálculo de rebates, cálculo de mora
+│   │   ├── loanCalculator.ts       — Generación de tablas de amortización,
+│   │   │                             cálculo de rebates, cálculo de mora
+│   │   └── stripeService.ts        — [NUEVO 1 May 2026] Wrapper de Stripe SDK
+│   │                                 (Checkout, Portal, Webhook signature verify)
 │   └── routes/
 │       ├── index.ts                — Router principal, registra todas las subrutas
-│       ├── auth.ts                 — Login, /me, register-tenant, change-password
+│       ├── auth.ts                 — Login, /me, register-tenant (con trial 10 días),
+│       │                             change-password
 │       ├── admin.ts                — Panel de plataforma: tenants, planes, usuarios,
 │       │                             backups, stats, audit logs, purge-data
+│       ├── billing.ts              — [NUEVO 1 May 2026] Stripe endpoints:
+│       │                             /plans, /subscription, /checkout, /portal,
+│       │                             /webhook (handler exportado para raw body)
 │       ├── loans.ts                — CRUD de préstamos, aprobación, desembolso,
 │       │                             generación de cuotas, importación CSV
 │       ├── payments.ts             — Registro de pagos, anulación, edición,
@@ -110,20 +128,23 @@ backend/
 │       │                             firma física/digital, eliminación
 │       ├── receipts.ts             — Emisión y reimpresión de recibos
 │       ├── reports.ts              — Dashboard KPIs, cartera, mora, cobros,
-│       │                             proyección, DataCrédito
+│       │                             proyección, DataCrédito,
+│       │                             income-expenses (FIXED 1 May 2026)
 │       ├── settings.ts             — Configuración del tenant, usuarios, sucursales,
 │       │                             cuentas bancarias, productos, plantillas
-│       ├── whatsapp.ts             — Mensajes y plantillas de WhatsApp
+│       ├── whatsapp.ts             — Mensajes y plantillas de WhatsApp (sin envío real)
 │       ├── collections.ts          — Cartera de cobros, notas, promesas de pago
 │       ├── collection_tasks.ts     — Tareas de cobranza asignables a cobradores
 │       ├── loanProducts.ts         — Productos de préstamo configurables
 │       ├── loanRequests.ts         — Solicitudes de préstamo del portal público
 │       ├── income.ts               — Ingresos y gastos del negocio
 │       ├── notifications.ts        — Notificaciones internas de usuario
-│       ├── platform.ts             — Rutas de plataforma (Stripe, suscripciones)
+│       ├── platform.ts             — Rutas básicas de plataforma (planes, tenants)
 │       └── public.ts               — Portal público de solicitud de préstamo
-├── prestamax.db                    — Base de datos SQLite
-└── package.json
+├── prestamax.db                    — Base de datos SQLite (local, no commiteada)
+├── render.yaml                     — Config de deploy en Render
+├── .env / .env.example
+└── package.json (incluye stripe@17.5.0 desde 1 May 2026)
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -134,6 +155,7 @@ frontend/
 ├── src/
 │   ├── main.tsx                    — Entry point React
 │   ├── App.tsx                     — Rutas React Router, layout principal
+│   │                                 [Actualizado 1 May 2026: route /billing]
 │   ├── contexts/
 │   │   ├── AuthContext.tsx         — Estado de autenticación global (user, token)
 │   │   └── TenantContext.tsx       — Tenant activo seleccionado
@@ -142,12 +164,17 @@ frontend/
 │   │   ├── useTenant.ts            — Hook para acceder al TenantContext
 │   │   └── usePermissions.ts       — Hook can(permKey) para verificar permisos
 │   ├── lib/
-│   │   ├── api.ts                  — Axios instance con interceptores JWT/tenant
+│   │   ├── api.ts                  — Axios instance con interceptores JWT/tenant.
+│   │   │                             Convierte snake_case (backend) a camelCase
+│   │   │                             (frontend) automáticamente vía camelize/snakify.
 │   │   ├── permissions.ts          — Copia exacta del backend permissions.ts
-│   │   ├── utils.ts                — formatCurrency, formatDate, SUPPORTED_CURRENCIES
+│   │   │                             (DEBE mantenerse SINCRONIZADO manualmente)
+│   │   ├── utils.ts                — formatCurrency (usa moneda del tenant),
+│   │   │                             formatDate, SUPPORTED_CURRENCIES
 │   │   ├── constants.ts            — Constantes globales de la app
 │   │   └── exportUtils.ts          — Utilidades para exportar datos (CSV, Excel)
 │   ├── components/
+│   │   ├── layout/AppLayout.tsx
 │   │   └── ui/                     — Card, Button, Input, Loading, EmptyState, etc.
 │   ├── types/
 │   │   └── index.ts                — Interfaces TypeScript (User, Tenant, Loan, etc.)
@@ -157,65 +184,64 @@ frontend/
 │       │   └── RegisterPage.tsx    — Registro de nuevo prestamista
 │       ├── dashboard/
 │       │   └── DashboardPage.tsx   — KPIs, resumen cartera, alertas negocio
+│       ├── billing/                — [NUEVO 1 May 2026]
+│       │   └── BillingPage.tsx     — Estado suscripción, lista de planes,
+│       │                             checkout y customer portal
 │       ├── loans/
-│       │   ├── LoansPage.tsx       — Listado de préstamos con filtros
-│       │   ├── LoanCreatePage.tsx  — Creación de préstamos paso a paso
-│       │   ├── LoanDetailPage.tsx  — Detalle completo: cuotas, pagos, documentos
-│       │   └── EditLoanModal.tsx   — Edición de condiciones del préstamo
+│       │   ├── LoansPage.tsx
+│       │   ├── LoanCreatePage.tsx
+│       │   ├── LoanDetailPage.tsx
+│       │   └── EditLoanModal.tsx
 │       ├── clients/
-│       │   ├── ClientsPage.tsx     — Listado de clientes
-│       │   ├── ClientFormPage.tsx  — Crear/editar cliente (datos completos)
-│       │   └── ClientDetailPage.tsx — Detalle de cliente con historial
-│       ├── payments/
-│       │   └── PaymentsPage.tsx    — Registro y listado de pagos
-│       ├── receipts/
-│       │   └── ReceiptsPage.tsx    — Emisión y reimpresión de recibos
-│       ├── contracts/
-│       │   └── ContractsPage.tsx   — Generación y firma de contratos
+│       │   ├── ClientsPage.tsx
+│       │   ├── ClientFormPage.tsx
+│       │   └── ClientDetailPage.tsx
+│       ├── payments/PaymentsPage.tsx
+│       ├── receipts/ReceiptsPage.tsx
+│       ├── contracts/ContractsPage.tsx
 │       ├── reports/
-│       │   ├── ReportsPage.tsx     — Cartera, mora, cobros, DataCrédito, ingresos
-│       │   └── ProjectionPage.tsx  — Proyección de cobros por rango de fechas
+│       │   ├── ReportsPage.tsx
+│       │   └── ProjectionPage.tsx
 │       ├── collections/
-│       │   ├── CollectionsPage.tsx — Cartera de cobros (préstamos vencidos)
-│       │   ├── CollectionTasksTab.tsx — Agenda de tareas de cobranza
-│       │   └── PaymentPromisesPage.tsx — Promesas de pago y visitas
-│       ├── whatsapp/
-│       │   └── WhatsAppPage.tsx    — Historial y envío de mensajes WhatsApp
-│       ├── settings/
-│       │   └── SettingsPage.tsx    — Config empresa, mora, usuarios, sucursales,
-│       │                             cuentas bancarias, productos, suscripción
-│       ├── calculator/
-│       │   └── LoanCalculatorPage.tsx — Calculadora de préstamos interactiva
-│       ├── income/
-│       │   └── IncomePage.tsx      — Registro de ingresos y gastos
-│       ├── requests/
-│       │   └── LoanRequestsPage.tsx — Solicitudes del portal público
+│       │   ├── CollectionsPage.tsx
+│       │   ├── CollectionTasksTab.tsx
+│       │   └── PaymentPromisesPage.tsx
+│       ├── whatsapp/WhatsAppPage.tsx
+│       ├── settings/SettingsPage.tsx
+│       ├── calculator/LoanCalculatorPage.tsx
+│       ├── income/IncomePage.tsx
+│       ├── requests/LoanRequestsPage.tsx
 │       ├── admin/
 │       │   └── PlatformAdminPage.tsx — Panel exclusivo del platform_owner
+│       │                               [Actualizado 1 May 2026: precios en USD]
 │       └── public/
-│           ├── LoanRequestPublicPage.tsx — Portal público de solicitud sin login
-│           ├── PrivacyPage.tsx     — Política de privacidad
-│           └── TermsPage.tsx       — Términos y condiciones
+│           ├── LoanRequestPublicPage.tsx
+│           ├── PrivacyPage.tsx
+│           └── TermsPage.tsx
+├── package.json (incluye terser desde 1 May 2026 para Vite minificación)
+├── vite.config.ts (build con minify: terser)
+└── vercel.json (rewrites para SPA)
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 5. BASE DE DATOS — TABLAS PRINCIPALES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TABLAS Y SU PROPÓSITO:
+TABLAS Y SU PROPÓSITO (29 tablas):
 
-  plans                   — Planes de suscripción disponibles (Starter, Básico,
-                            Profesional, Enterprise, Trial). Incluyen precio,
-                            límites (cobradores, clientes, usuarios) y features
-                            en formato JSON array de PermKeys.
+  plans                   — Planes de suscripción (Trial, Starter, Básico,
+                            Profesional, Enterprise). Precio, límites, features
+                            como JSON array de PermKeys, trial_days (default 10).
 
   users                   — Usuarios globales del sistema. platform_role define
                             si son dueño/admin/soporte de la plataforma o "none".
 
   tenants                 — Empresas prestamistas. Cada una tiene su plan,
                             estado de suscripción, configuración de moneda,
-                            token público para el portal de solicitudes, y datos
-                            notariales para contratos legales.
+                            token público para el portal de solicitudes,
+                            stripe_customer_id, stripe_subscription_id,
+                            subscription_start, subscription_end,
+                            datos notariales para contratos legales.
 
   tenant_settings         — Configuración avanzada por tenant: tasa de mora diaria,
                             días de gracia, base de mora, tipo de rebate, pesos
@@ -229,88 +255,58 @@ TABLAS Y SU PROPÓSITO:
 
   branches                — Sucursales de cada empresa prestamista.
 
-  clients                 — Clientes de préstamos. Incluye datos personales,
-                            laborales, referencias, score crediticio (1-5),
-                            consentimientos (datos y WhatsApp).
+  clients                 — Clientes de préstamos. Datos personales, laborales,
+                            referencias, score crediticio (1-5), consentimientos.
 
   client_references       — Referencias personales/laborales del cliente.
-
   guarantors              — Fiadores (personas que garantizan préstamos).
-
   client_documents        — Documentos adjuntos del cliente (cédula, comprobantes).
 
   loan_products           — Productos de préstamo configurables: tipo, tasas,
                             plazos, frecuencias, amortización, comisiones,
                             si requiere garantía, política de rebate.
 
-  loans                   — Préstamos. Almacena todo el ciclo de vida:
+  loans                   — Préstamos. Ciclo de vida completo:
                             draft → pending_approval → approved → disbursed →
                             active → liquidated / in_mora / write_off / voided.
-                            Incluye saldos (principal, intereses, mora, cargos),
-                            días vencidos, cobrador asignado, moneda, tasa de
-                            cambio, cargos por tiempo excedido (overtime).
 
-  installments            — Cuotas del préstamo. Generadas al momento de
-                            desembolso. Cada cuota tiene fecha de vencimiento,
-                            monto capital, interés, mora acumulada, estado
-                            (pending/partial/paid/overdue/waived).
+  installments            — Cuotas del préstamo. Generadas al desembolsar.
+                            Estado: pending/partial/paid/overdue/waived.
 
   loan_guarantors         — Relación préstamo-fiador (M:M).
+  loan_guarantees         — Garantías en especie del préstamo.
+  guarantee_categories    — Categorías de garantías por tenant.
 
-  loan_guarantees         — Garantías en especie del préstamo (vehículos,
-                            propiedades, equipos, etc.).
-
-  guarantee_categories    — Categorías de garantías en especie por tenant.
-
-  payments                — Pagos registrados contra préstamos. Incluye
-                            distribución del pago (mora, cargos, interés, capital),
-                            método de pago, cuenta bancaria destino, tipo
-                            (regular/interest_only/prorroga/prepago),
-                            si fue anulado y por quién.
+  payments                — Pagos registrados. Distribución (mora, cargos,
+                            interés, capital), método, cuenta bancaria destino,
+                            tipo (regular/interest_only/prorroga/prepago), void.
 
   payment_items           — Detalle por cuota de cómo se distribuyó cada pago.
 
-  receipts                — Recibos emitidos por cada pago. Solo validez operativa.
-                            Incluye número de serie, datos del cliente, resumen.
-
+  receipts                — Recibos emitidos por cada pago.
   receipt_series          — Series numéricas de recibos por tenant.
 
-  contracts               — Contratos generados para préstamos. Modo de firma:
-                            físico o digital. Estado: generated/signed/cancelled.
+  contracts               — Contratos generados. Firma: physical/digital.
+  contract_templates      — Plantillas con variables {{client_name}}, etc.
 
-  contract_templates      — Plantillas de contratos por tenant. Incluyen variables
-                            {{cliente}}, {{monto}}, {{cuotas}}, etc. Se pre-seeden
-                            dos plantillas estándar: Pagaré Estándar y Pagaré Notarial.
+  whatsapp_templates      — Plantillas de mensajes WhatsApp por evento.
+  whatsapp_messages       — Historial de mensajes (sin envío real implementado).
 
-  whatsapp_templates      — Plantillas de mensajes WhatsApp reutilizables por evento.
+  bank_accounts           — Cuentas bancarias del prestamista.
+  account_transfers       — Transferencias entre cuentas propias.
 
-  whatsapp_messages       — Historial de mensajes enviados por WhatsApp.
+  income_expenses         — Ingresos y gastos del negocio. Columna fecha:
+                            transaction_date (NO "date").
 
-  bank_accounts           — Cuentas bancarias del prestamista. Rastrean saldo
-                            inicial, saldo actual, monto prestado.
-
-  account_transfers       — Transferencias entre cuentas bancarias propias.
-
-  income_expenses         — Registro de ingresos y gastos del negocio
-                            (distintos a pagos de préstamos).
-
-  payment_promises        — Promesas de pago registradas por cobradores,
-                            con seguimiento de visitas.
-
+  payment_promises        — Promesas de pago, con seguimiento de visitas.
   collection_notes        — Notas de gestión de cobranza por préstamo.
+  collection_tasks        — Tareas asignadas a cobradores.
 
-  collection_tasks        — Tareas asignadas a cobradores con prioridad, tipo,
-                            fecha límite y resultado.
-
-  notifications           — Notificaciones internas del sistema para usuarios.
+  notifications           — Notificaciones internas del sistema.
 
   audit_logs              — Log de auditoría de todas las acciones importantes.
-                            Incluye tenant, usuario, acción, entidad, valores
-                            anteriores/nuevos.
 
-  loan_requests           — Solicitudes enviadas desde el portal público.
-                            Incluye datos personales del solicitante, documentos
-                            de identidad en Base64, estado de revisión.
+  loan_requests           — Solicitudes del portal público (datos en Base64).
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -339,7 +335,6 @@ MÓDULOS Y PERMISOS:
 PERMISOS POR DEFECTO POR ROL:
   tenant_owner / admin → TODOS los permisos
   prestamista / oficial / loan_officer → Permisos completos operativos
-                                          (sin gestión de settings avanzada)
   cashier      → Solo pagos, recibos, ver clientes/préstamos, cobros básicos
   cobrador     → Ver clientes/préstamos asignados, registrar pagos, cobros
 
@@ -348,7 +343,7 @@ CAPAS DE VERIFICACIÓN (requirePermission middleware):
   2. Plan feature gate — verifica si el plan del tenant incluye el permKey
   3. Role-based — computePermissions(roles, explicit, planFeatures)
 
-IMPORTANTE: permissions.ts debe mantenerse SINCRONIZADO entre
+⚠️ IMPORTANTE: permissions.ts debe mantenerse SINCRONIZADO entre
   backend/src/lib/permissions.ts  y  frontend/src/lib/permissions.ts
 
 
@@ -356,33 +351,37 @@ IMPORTANTE: permissions.ts debe mantenerse SINCRONIZADO entre
 7. PLANES DE SUSCRIPCIÓN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-5 planes disponibles (configurables desde el Panel Admin):
+5 planes disponibles (configurables desde el Panel Admin y mapeados a Stripe):
 
-  Plan Trial        — $0/mes, 14 días prueba. 1 cobrador, 50 clientes, 2 usuarios.
-                      Funciones básicas. Es el plan por defecto para nuevos registros.
+  Plan Trial        $0/mes, 10 días prueba. 1 cobrador, 50 clientes, 2 usuarios.
+                    [ACTUALIZADO 1 May 2026: era 14, ahora 10 días]
+                    Es el plan por defecto para nuevos registros.
 
-  Starter           — $29.99/mes. 1 cobrador, 100 clientes, 3 usuarios.
-                      Funciones básicas de préstamos.
+  Starter           $29.99/mes USD. 1 cobrador, 100 clientes, 3 usuarios.
+                    Stripe Price ID: price_1TS5cX1mEYlZ24EhpFfFP2sN
 
-  Básico            — $59.99/mes. 3 cobradores, 500 clientes, 8 usuarios.
-                      + WhatsApp, sucursales, contratos, ingresos/gastos,
-                        solicitudes públicas.
+  Básico            $59.99/mes USD. 3 cobradores, 500 clientes, 8 usuarios.
+                    + WhatsApp, sucursales, contratos, ingresos/gastos.
+                    Stripe Price ID: price_1TS5eV1mEYlZ24EhwiDlAeUQ
 
-  Profesional       — $119.99/mes. 10 cobradores, 2000 clientes, 20 usuarios.
-                      + Reportes avanzados, proyección, firma digital,
-                        importar CSV, write-off, editar pagos.
+  Profesional       $119.99/mes USD. 10 cobradores, 2000 clientes, 20 usuarios.
+                    + Reportes avanzados, proyección, firma digital, etc.
+                    Stripe Price ID: price_1TS5fI1mEYlZ24Eh4PDpN0s9
 
-  Enterprise        — $249.99/mes. Sin límites.
-                      Todas las funciones disponibles.
-
-CONFIGURACIÓN DE PLANES:
-  - Las features son arrays de PermKeys que el plan permite.
-  - max_collectors, max_clients, max_users = -1 significa sin límite.
-  - trial_days: período de prueba gratuita al registrarse.
-  - is_trial_default: solo un plan puede ser el plan trial por defecto.
+  Enterprise        $249.99/mes USD. Sin límites.
+                    Todas las funciones disponibles.
+                    Stripe Price ID: price_1TS5fk1mEYlZ24EhcubdEUIp
 
 ESTADOS DE SUSCRIPCIÓN (tenants.subscription_status):
   trial / active / expired / cancelled / suspended
+
+REGISTRO DE NUEVOS PRESTAMISTAS:
+  Al crear cuenta via /api/auth/register-tenant, automáticamente se asigna:
+    - Plan trial (is_trial_default=1)
+    - subscription_start = NOW
+    - subscription_end = NOW + 10 días
+  Cuando expira, requireTenant devuelve 402 SUBSCRIPTION_EXPIRED y el
+  frontend redirige a /billing para que el usuario pague.
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -390,183 +389,109 @@ ESTADOS DE SUSCRIPCIÓN (tenants.subscription_status):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 loan_products.type:
-  personal         — Préstamo personal estándar
-  san              — Préstamo tipo San (grupo solidario, es_san_type=1)
-  commercial       — Préstamo comercial
-  guarantee        — Préstamo con garantía (requires_guarantee=1)
+  personal / san / commercial / guarantee
 
-TIPOS DE AMORTIZACIÓN (amortization_type):
-  fixed_installment — Cuota fija (francesa): capital+interés constante
-  flat_interest      — Interés plano: interés calculado sobre capital inicial
-  interest_only      — Solo intereses por período, capital al final
-  declining_balance  — Balance decreciente: capital fijo + intereses decrecientes
+TIPOS DE AMORTIZACIÓN:
+  fixed_installment, flat_interest, interest_only, declining_balance
 
-TIPOS DE TASA (rate_type):
-  daily, weekly, biweekly, monthly, annual
-  Se convierte a tasa mensual internamente para los cálculos.
-
-FRECUENCIAS DE PAGO (payment_frequency):
-  daily, every_2_days, weekly, biweekly, monthly
-
-PRÉSTAMOS POR RÉDITOS (is_reditos=1):
-  El sistema soporta préstamos donde se pagan solo intereses por un período
-  y el capital al final. Se usa amortization_type = 'interest_only'.
+TIPOS DE TASA: daily, weekly, biweekly, monthly, annual
+FRECUENCIAS DE PAGO: daily, every_2_days, weekly, biweekly, monthly
 
 CICLO DE VIDA DEL PRÉSTAMO:
   draft → pending_approval → approved → disbursed → active
-  active puede transicionar a: liquidated / in_mora / write_off / voided
+  active → liquidated / in_mora / write_off / voided
 
 CÁLCULO DE MORA:
-  - mora_rate_daily: tasa diaria de mora (default 0.1% = 0.001)
-  - mora_grace_days: días de gracia antes de calcular mora (default 3)
-  - mora_base: puede ser 'cuota_vencida' (sobre el monto de la cuota vencida)
-                o 'saldo_capital' (sobre el capital pendiente)
-  - mora_max_rate: tope máximo de mora (default 30%)
-  - mora_fixed_enabled: si TRUE, aplica un monto fijo de mora en vez de porcentaje
-  - Formula: mora_daily = base_amount × mora_rate_daily × dias_vencidos
+  mora_daily = base_amount × mora_rate_daily × dias_vencidos
+  - mora_rate_daily: default 0.001 (0.1%)
+  - mora_grace_days: default 3
+  - mora_max_rate: default 0.30 (30%)
+  - mora_base: 'cuota_vencida' o 'saldo_capital'
+  - mora_fixed_enabled / mora_fixed_amount: monto fijo en vez de %
 
-OVERTIME (tiempo excedido):
-  Si un préstamo llega a su fecha de vencimiento (maturity_date) y aún no
-  fue liquidado, se calcula un recargo proporcional a los días de retraso:
-  overtime_charge acumulado en loans.overtime_charge
-  overtime_days acumulado en loans.overtime_days
-
-PRORROGA (extensión de plazo):
-  Un pago de tipo 'prorroga' desplaza todas las cuotas pendientes hacia adelante
-  en un período de pago. Se cobra un prorroga_fee (configurable en el préstamo).
-  La fecha original se preserva en due_date; la fecha desplazada en
-  deferred_due_date de cada cuota.
+OVERTIME: recargo si supera maturity_date sin liquidar.
+PRORROGA: pago tipo 'prorroga' desplaza cuotas, cobra prorroga_fee.
 
 REBATE (descuento por pago anticipado):
-  Si un cliente paga la totalidad antes de la fecha acordada, se aplica rebate:
-  - proportional: 100% de los intereses futuros restantes (cancelados)
-  - partial:       50% de los intereses futuros restantes
-  - fixed_rate:    porcentaje configurable (rebate_rate) de intereses restantes
-  - none:          sin rebate
+  proportional / partial / fixed_rate / none
 
-SCORE CREDITICIO (1-5):
-  Calculado automáticamente en cada pago registrado o anulado.
-  Factores (pesos configurables por tenant):
-    - Puntualidad de pagos (default 40%)
-    - Ratio de préstamos pagados (default 30%)
-    - Antigüedad del cliente en meses (default 20%)
-    - Sin mora histórica (default 10%)
-  Formula: raw = punctuality*0.5 + paidRatio*0.3 + ageMonths*0.2
-           score = max(1, min(5, round(raw * 4) + 1))
-  Modos: global (un score unificado) o configurable por prestamista.
+SCORE CREDITICIO (1-5): calculado en cada pago/anulación.
+  Factores con pesos configurables: puntualidad (40%), ratio pagados (30%),
+  antigüedad (20%), sin mora (10%).
 
-IMPORTACIÓN CSV:
-  El sistema acepta importación masiva de préstamos desde CSV.
-  Columnas requeridas incluyen datos del cliente, del préstamo y de cuotas.
-  Los préstamos importados incluyen campos currency y exchange_rate_to_dop.
+IMPORTACIÓN CSV: masivo con campos currency y exchange_rate_to_dop.
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 9. MÓDULO DE PAGOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Orden de aplicación de pagos (configurable por tenant):
-  Default: mora → cargos → interés → capital
-  (almacenado en tenants.payment_order como JSON array)
+Orden de aplicación (default): mora → cargos → interés → capital
+(configurable en tenants.payment_order JSON array)
 
-Tipos de pago:
-  regular         — Pago normal de cuotas
-  interest_only   — Solo paga intereses (difiere capital a la siguiente cuota)
-  prorroga        — Extiende el plazo del préstamo
-  prepago         — Pago anticipado (puede activar rebate)
+Tipos de pago: regular / interest_only / prorroga / prepago
 
-Anulación de pagos (void):
-  Solo tenant_owner o platform_owner pueden anular pagos.
-  Al anular: se recalculan todas las cuotas desde cero re-aplicando los
-  pagos restantes no anulados en orden cronológico.
-  Se re-calcula días_vencidos, saldos, y estado del préstamo.
-  Requiere motivo de anulación.
-  El recibo asociado se marca como anulado también.
+Anulación (void):
+  Solo tenant_owner o platform_owner.
+  Recalcula todas las cuotas re-aplicando pagos restantes en orden cronológico.
+  Re-calcula días_vencidos, saldos, estado.
+  Marca recibo asociado como anulado.
 
-Validaciones al registrar pago:
-  - Monto debe ser > 0
-  - El préstamo no puede estar en estado: liquidated, paid, cancelled, rejected
-  - Se actualiza el score del cliente automáticamente
+Validaciones:
+  - Monto > 0
+  - Préstamo no en estado: liquidated, paid, cancelled, rejected
+  - Score actualizado automáticamente
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 10. MÓDULO DE CONTRATOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Plantillas predefinidas (se crean automáticamente para cada tenant al inicio):
-  1. Contrato General de Préstamo o Pagaré — plantilla estándar (default)
-  2. Pagaré Notarial — formato notarial completo con artículos legales
-                       (República Dominicana)
+Plantillas predefinidas (auto-creadas para cada tenant nuevo):
+  1. Pagaré Estándar (default)
+  2. Contrato General de Préstamo
 
-VARIABLES DE PLANTILLA ({{variable}}):
-  {{client_name}}, {{client_id}}, {{client_address}}, {{client_city}}
-  {{client_email}}, {{client_phone}}
-  {{company_name}}, {{company_address}}, {{company_phone}}, {{company_email}}
-  {{rnc}}, {{representative_name}}, {{company_logo}}, {{company_signature}}
-  {{loan_number}}, {{amount}}, {{rate}}, {{term}}, {{monthly_payment}}
-  {{start_date}}, {{end_date}}, {{next_payment_date}}, {{print_date}}
-  {{payment_plan}} — tabla de cuotas completa en texto plano
-  {{notary_name}}, {{notary_collegiate_number}}, {{notary_office_address}}
-  {{acreedor_id}}, {{company_city}}, {{testigo1_nombre}}, {{testigo1_id}}
-  {{testigo1_domicilio}}, {{testigo2_nombre}}, {{testigo2_id}}, {{testigo2_domicilio}}
-  {{amount_words}}, {{installment_amount}}, {{installment_amount_words}}
-  {{rate_pct}}, {{rate_words}}, {{loan_term}}, {{loan_term_words}}
-  {{today_date_long}}, {{maturity_date_long}}, {{first_payment_date_long}}
-  {{disbursement_date_long}}
+VARIABLES DE PLANTILLA: {{client_name}}, {{client_id}}, {{amount}}, {{rate}},
+  {{term}}, {{payment_plan}}, {{notary_name}}, {{rnc}}, {{print_date}}, etc.
+  (lista completa en routes/platform.ts y routes/contracts.ts)
 
-MODOS DE FIRMA (configurable por tenant):
-  physical — firma física en papel (default)
-  digital  — firma digital con URL de evidencia
+MODOS DE FIRMA: physical (default) / digital (con URL de evidencia)
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 11. MÓDULO DE REPORTES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Reportes disponibles (endpoint /api/reports/):
+Endpoints (/api/reports/):
 
-  GET /summary        — KPIs del dashboard: cartera total, pagos del mes,
-                        mora total, nuevos préstamos, tasa de mora, YTD.
-                        Incluye alertas de negocio (tasa mora >15%, etc.)
-
-  GET /portfolio      — Cartera completa con envejecimiento (1-30, 31-60,
-                        61-90, 91-120, 121-180, 181+ días vencidos)
-
-  GET /mora           — Listado de préstamos en mora con detalle de mora acumulada
-
-  GET /collections    — Pagos registrados agrupados por cobrador
-
-  GET /advanced       — Tendencias: originaciones/pagos/mora por mes (6 meses),
-                        distribución por producto, distribución por cobrador,
-                        tabla de envejecimiento de cartera
-
-  GET /income         — Flujo de caja: ingresos/gastos + pagos recibidos
-                        agrupados por mes
-
-  GET /projection     — Proyección de cobros: cuotas pendientes agrupadas por
-                        fecha de vencimiento en un rango dado
-
-  GET /datacredito    — Reporte mensual formato DataCrédito (buró de crédito RD):
-                        55 columnas por cliente-préstamo, con 7 buckets de atraso
-                        y mapeos de código estándar (ESTATUS: V/C/X,
-                        MONEDA: 214/840/978, TIPO PRÉSTAMO: A/B/H)
-                        Exportable como Excel con SheetJS (CDN)
+  GET /dashboard           KPIs principales (cartera, pagos, mora, alertas)
+  GET /portfolio           Cartera con envejecimiento (current/d1_7/d8_15/d16_30/over30)
+  GET /mora                Préstamos en mora con detalle
+  GET /collections         Pagos agrupados por cobrador
+  GET /advanced            Tendencias mensuales, distribución por producto/cobrador
+  GET /income-expenses     [FIXED 1 May 2026] Ingresos/gastos por categoría,
+                           evolución mensual, transacciones recientes.
+                           Shape: { summary, byCategory, monthly, recent, period }
+  GET /bank-accounts       Movimientos por cuenta bancaria
+  GET /projection          Proyección de cobros futuros
+  GET /datacredito         Reporte mensual buró DataCrédito RD
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 12. MÓDULO DE WHATSAPP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  GET  /api/whatsapp/            — Historial de mensajes (últimos 100)
-  GET  /api/whatsapp/templates   — Plantillas activas del tenant
-  POST /api/whatsapp/templates   — Crear plantilla (name, event, body)
-  PUT  /api/whatsapp/templates/:id — Actualizar plantilla
-  DELETE /api/whatsapp/templates/:id — Soft delete (is_active=0)
-  POST /api/whatsapp/send        — Enviar mensaje (client_phone, body, event, loan_id)
+  GET  /api/whatsapp/            Historial (últimos 100)
+  GET  /api/whatsapp/templates   Plantillas activas
+  POST /api/whatsapp/templates   Crear plantilla
+  PUT  /api/whatsapp/templates/:id
+  DELETE /api/whatsapp/templates/:id (soft delete)
+  POST /api/whatsapp/send
 
-IMPORTANTE: No hay validación de consentimiento del cliente para envío.
-  Se envía mensajes a cualquier número sin restricciones. El campo
-  clients.consent_whatsapp existe pero NO se verifica en el envío.
+⚠️ NO HAY ENVÍO REAL: los mensajes se marcan como 'sent' pero no se envían.
+   Falta integrar Twilio, Meta WhatsApp Business API u otra solución.
+
+⚠️ NO SE VALIDA consent_whatsapp del cliente antes de enviar (riesgo legal).
 
 Eventos de plantillas: manual, payment_due, payment_received, overdue,
                         loan_approved, custom
@@ -577,59 +502,48 @@ Eventos de plantillas: manual, payment_due, payment_received, overdue,
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Cada tenant tiene un public_token único (16 caracteres hex).
-URL del portal: /solicitar/:public_token
+URL del portal: /apply/:public_token
 
 Funcionalidades:
-  - Formulario de solicitud de préstamo sin necesidad de login
-  - Captura datos personales completos del solicitante
-  - Permite subir fotos de cédula (frente y reverso) en Base64
-  - Las solicitudes quedan en estado 'pending' para revisión
-  - El prestamista puede aprobar/rechazar/convertir en préstamo desde el panel
+  - Formulario de solicitud sin login
+  - Captura datos personales completos
+  - Sube fotos de cédula (frente/reverso) en Base64
+  - Estado inicial: 'pending'
+  - Aprobación/rechazo/conversión desde el panel del prestamista
 
 RUTAS PÚBLICAS (sin autenticación):
-  GET  /api/public/tenant/:token   — Info pública del tenant (nombre, logo)
-  POST /api/public/loan-request    — Enviar solicitud de préstamo
+  GET  /api/public/tenant/:token   Info pública del tenant (nombre, logo)
+  POST /api/public/loan-request    Enviar solicitud
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 14. PANEL DE ADMINISTRACIÓN DE PLATAFORMA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Accesible únicamente para platform_owner, platform_admin, platform_support.
+Solo platform_owner / platform_admin / platform_support.
 URL frontend: /admin
 
-TABS DEL PANEL:
-  Overview    — Estadísticas globales: total tenants, usuarios, préstamos,
-                cartera total, revenue mensual/anual por plan.
-                Lista de suscripciones recientes y distribución por estado.
+TABS:
+  Overview    Estadísticas globales: tenants, usuarios, préstamos,
+              cartera total, revenue mensual/anual por plan en USD.
+              [ACTUALIZADO 1 May 2026: precios de planes en $ no RD$]
 
-  Empresas    — CRUD de empresas prestamistas. Ver/editar datos, asignar planes,
-                gestionar estado de suscripción (trial/active/expired/cancelled),
-                configurar fechas de suscripción, ver stats por empresa.
-                Crear nueva empresa con su usuario administrador.
+  Empresas    CRUD de tenants. Estado de suscripción, fechas, stats.
 
-  Planes      — CRUD de planes de suscripción. Configurar precios, límites,
-                features (permisos incluidos), días de prueba.
+  Planes      CRUD de planes (precios, límites, features, trial_days).
 
-  Usuarios    — Gestión de usuarios de la plataforma (no de tenants).
-                Asignar roles de plataforma, resetear contraseñas.
+  Usuarios    Gestión de usuarios de plataforma. Asignar roles, reset password.
 
-  Backups     — Crear backups de la base de datos SQLite.
-                Ver y eliminar backups existentes.
-                [Solo platform_owner] Sección "Limpieza de Datos por Empresa":
-                Permite borrar TODOS los datos operacionales de un tenant
-                específico (préstamos, clientes, pagos, etc.) conservando la
-                cuenta y el plan. Requiere escribir el nombre exacto de la
-                empresa como confirmación.
+  Backups     Crear/descargar/eliminar backups SQLite.
+              [Solo platform_owner] Limpieza de datos por tenant
+              (requiere escribir nombre exacto como confirmación).
 
-  Auditoría   — Log de todas las acciones del sistema con filtros.
+  Auditoría   Log de acciones con filtros.
 
-ENDPOINT ESPECIAL — Purga de datos por empresa:
+ENDPOINT ESPECIAL — Purga de datos:
   DELETE /api/admin/tenants/:id/purge-data
-  Body: { confirm_name: "Nombre exacto de la empresa" }
-  Solo accesible para platform_owner.
-  Borra todas las tablas operacionales del tenant, resetea tenant_settings.
-  Deja registro en audit_logs.
+  Body: { confirm_name: "..." }
+  Solo platform_owner. Borra tablas operacionales del tenant.
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -637,351 +551,773 @@ ENDPOINT ESPECIAL — Purga de datos por empresa:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Monedas soportadas (SUPPORTED_CURRENCIES en utils.ts):
-  DOP — Peso Dominicano (RD$)
-  USD — Dólar Estadounidense ($)
-  EUR — Euro (€)
-  HTG — Gourde Haitiano (G)
-  CAD — Dólar Canadiense (CA$)
-  GBP — Libra Esterlina (£)
+  DOP (RD$), USD ($), EUR (€), HTG (G), CAD (CA$), GBP (£)
 
 Configuración por tenant (tenant_settings):
   multi_currency_enabled: boolean
-  enabled_currencies: JSON array de códigos habilitados (default ["DOP"])
+  enabled_currencies: JSON array (default ["DOP"])
 
 Por préstamo:
-  loans.currency: moneda del préstamo
-  loans.exchange_rate_to_dop: tasa de cambio al momento del desembolso
+  loans.currency           moneda del préstamo
+  loans.exchange_rate_to_dop  tasa de cambio al desembolso
 
-La moneda predeterminada del tenant se configura en tenants.currency.
+Moneda predeterminada del tenant: tenants.currency (default DOP).
+
+⚠️ NOTA DE DISPLAY: Los planes de Stripe están en USD. El sistema usa
+formatCurrency() con la moneda del tenant para PRÉSTAMOS (RD$ default),
+pero PRECIOS DE PLANES de Stripe se muestran con $ inline (no RD$).
+Ver PlatformAdminPage.tsx (admin) y BillingPage.tsx (cliente).
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 16. CIBERSEGURIDAD IMPLEMENTADA
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-MEDIDAS DE SEGURIDAD ACTIVAS:
+JWT (auth.ts):
+  - Algoritmo forzado: { algorithms: ['HS256'] }
+  - Token de 7 días de expiración
+  - JWT_SECRET validado al inicio
 
-  JWT (auth.ts):
-    - Algoritmo forzado: { algorithms: ['HS256'] } — previene algorithm confusion
-    - Token de 7 días de expiración
-    - JWT_SECRET validado al inicio (error si no está configurado)
+Helmet.js:
+  - CSP en producción con whitelist (incluye js.stripe.com)
+  - HSTS, noSniff, frameguard deny, hidePoweredBy, xssFilter
+  - Referrer-Policy: strict-origin-when-cross-origin
 
-  Helmet.js:
-    - CSP en producción con whitelist estricta
-    - noSniff, frameguard: deny, hidePoweredBy, xssFilter
-    - HSTS en producción (maxAge 1 año, includeSubDomains, preload)
-    - Referrer-Policy: strict-origin-when-cross-origin
+CORS:
+  - Whitelist: FRONTEND_URL, prestamax.com, www/app subdominios
+  - Headers permitidos: Authorization, X-Tenant-Id, Stripe-Signature
 
-  CORS:
-    - Whitelist estricta: FRONTEND_URL, prestamax.com, app.prestamax.com
-    - Credentials: true, methods: GET/POST/PUT/DELETE/PATCH
+Rate Limiting:
+  - Global: 300 req/15min/IP (excepto /health y /api/billing/webhook)
+  - Auth: 15 intentos/15min (anti brute-force)
+  - Register: 5/hora
+  - Admin: 100/15min
+  - Bulk import/export: 20/15min
 
-  Rate Limiting (express-rate-limit):
-    - Global: 200 req/15min por IP
-    - Auth endpoints: 15 intentos/15min (anti-brute-force)
-    - /health exento del rate limit global
+Middleware seguridad: sanitizeInputs, blockKnownBots, detectMaliciousPayload,
+                      auditLogger
 
-  Middleware de seguridad (securityMiddleware.ts):
-    - sanitizeInputs: limpia inputs HTML/XSS en req.body
-    - blockKnownBots: bloquea user agents maliciosos
-    - detectMaliciousPayload: detecta intentos de SQL injection y XSS
-    - auditLogger: registra acciones sensibles en audit_logs
+Aislamiento de Tenants: requireTenant + AND tenant_id=? en todas las queries
 
-  Aislamiento de Tenants:
-    - requireTenant verifica ownership de cada recurso
-    - Todas las queries incluyen tenant_id en WHERE
-    - IDOR corregidos: loans.reject, contracts.delete, payments.void
-      todos usan AND tenant_id=? en sus queries
+Contraseñas: bcrypt cost 12, validación complejidad
+             (min 8, 1 mayúscula, 1 número, 1 carácter especial)
 
-  Contraseñas:
-    - Bcrypt con cost factor 12
-    - Validación de complejidad: min 8 chars, 1 mayúscula, 1 número,
-      1 carácter especial
-    - Aplicado en: register-tenant, change-password, admin reset-password
+ErrorHandler: en producción mensaje genérico (no internals)
 
-  Bootstrap protegido:
-    - /api/admin/bootstrap requiere requireFirstBootstrap middleware
-    - Si ya existe un admin, solo admins pueden ejecutarlo
+/health endpoint: solo { status: "ok" }
 
-  ErrorHandler:
-    - En producción: errores 5xx devuelven mensaje genérico (no internals)
-    - En desarrollo: muestra mensaje real para debugging
-    - Siempre loguea el stack completo en consola del servidor
+Webhook Stripe: firma HMAC verificada via stripe.webhooks.constructEvent
+                Body raw preservado con express.raw() ANTES de express.json
 
-  /health endpoint:
-    - Solo devuelve { status: "ok" } — sin version ni nombre del sistema
-
-PENDIENTES CONOCIDOS (no implementados):
-  - Token blacklist/logout (los JWT son válidos hasta expirar aunque el usuario
-    haga logout — requeriría Redis o tabla de tokens revocados)
-  - Validación de MIME type/tamaño en imágenes Base64 del portal público
-  - Rate limiting individual por usuario autenticado (además de por IP)
+PENDIENTES CONOCIDOS:
+  - Token blacklist/logout (JWT siguen válidos hasta expirar)
+  - Validación MIME type/tamaño en imágenes Base64 portal público
+  - Rate limiting individual por usuario autenticado
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-17. VARIABLES DE ENTORNO REQUERIDAS
+17. VARIABLES DE ENTORNO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Backend (.env en backend/):
-  JWT_SECRET          — Secreto para firmar JWT (mínimo 32 chars, aleatorio)
-  DATABASE_PATH       — Ruta absoluta al archivo prestamax.db (opcional,
-                        por defecto busca prestamax.db 3 niveles arriba de /src/db/)
-  NODE_ENV            — 'production' o 'development'
-  PORT                — Puerto del servidor (default 3001)
-  FRONTEND_URL        — URL del frontend para CORS y CSP
-  STRIPE_SECRET_KEY   — Clave secreta de Stripe (para pagos de suscripciones)
-  STRIPE_WEBHOOK_SECRET — Secreto webhook de Stripe
+BACKEND (en Render dashboard, servicio prestamax-api > Environment):
 
-Frontend (.env en frontend/):
-  VITE_API_URL        — URL base del backend (ej: https://api.prestamax.com)
+  NODE_ENV                = production
+  DATABASE_PATH           = /var/data/prestamax.db    (disco persistente)
+  JWT_SECRET              = (autogenerado por Render)
+  JWT_EXPIRES_IN          = 7d
+  FRONTEND_URL            = https://prestamax-umber.vercel.app
+  STRIPE_SECRET_KEY       = sk_test_51TS5TM1mEYlZ24Eh... (TEST MODE)
+  STRIPE_WEBHOOK_SECRET   = whsec_iRWOQ4ln6aAnBUT3y2pOQmofLOcxBHA5
+  STRIPE_PRICE_STARTER    = price_1TS5cX1mEYlZ24EhpFfFP2sN
+  STRIPE_PRICE_BASICO     = price_1TS5eV1mEYlZ24EhwiDlAeUQ
+  STRIPE_PRICE_PROFESIONAL = price_1TS5fI1mEYlZ24Eh4PDpN0s9
+  STRIPE_PRICE_ENTERPRISE = price_1TS5fk1mEYlZ24EhcubdEUIp
 
+FRONTEND (en Vercel dashboard, project > Environment Variables):
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-18. DESPLIEGUE EN RENDER
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  VITE_API_URL            = https://prestamax-api.onrender.com/api
 
-El sistema está configurado para despliegue en Render.com:
-
-  Backend (Web Service):
-    - Build: npm install && npm run build
-    - Start: node dist/index.js
-    - Persistent disk montado para prestamax.db (SQLite no es compatible con
-      sistemas de archivos efímeros sin disco persistente)
-
-  Frontend (Static Site):
-    - Build: npm install && npm run build
-    - Publish directory: dist/
-
-  IMPORTANTE: En Render, el disco persistente es necesario para SQLite.
-  Sin él, la DB se resetea en cada deployment. Alternativa futura: migrar
-  a Supabase (PostgreSQL) que fue mencionado como opción en los requerimientos
-  iniciales pero se implementó con SQLite por simplicidad.
+LOCAL (.env en backend/, NO se commitea):
+  DATABASE_PATH=./prestamax.db
+  JWT_SECRET=(generar con: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")
+  PORT=3001
+  NODE_ENV=development
+  FRONTEND_URL=http://localhost:5173
+  + las mismas STRIPE_* del listado backend si se prueba localmente
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-19. CONFIGURACIÓN DE LA EMPRESA PRESTAMISTA (Settings)
+18. DESPLIEGUE EN RENDER (BACKEND)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Desde Settings > General, el prestamista puede configurar:
+Servicio: prestamax-api (Web Service)
+Plan: Starter ($7/mes) + Persistent Disk 1 GB ($0.25/mes)
+Región: Oregon
+URL pública: https://prestamax-api.onrender.com
+Service ID: srv-d7pukelckfvc739bkan0
+
+Configuración (render.yaml):
+  buildCommand:    npm install --include=dev && npm run build
+                   ⚠️ --include=dev es CRÍTICO: NODE_ENV=production omite
+                   devDependencies por defecto, pero typescript y @types/node
+                   son necesarios para compilar.
+  startCommand:    npm start (= node dist/index.js)
+  healthCheckPath: /health
+  autoDeploy:      true (en cada push a main)
+  disk:            mount /var/data, 1 GB (donde vive prestamax.db)
+  Node version:    >=22.0.0 (Render selecciona 25.9.0 actualmente)
+
+Tiempo de build: ~5-10 min
+Tiempo de redeploy por env var: ~3-5 min
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+19. DESPLIEGUE EN VERCEL (FRONTEND)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Proyecto: prestamax (en cuenta digitalconnectdr's projects, plan Hobby)
+URL pública: https://prestamax-umber.vercel.app
+(El slug "prestamax" estaba tomado globalmente en Vercel, por eso "umber")
+
+Configuración:
+  Framework Preset: Vite (auto-detectado)
+  Root Directory:   prestamax/frontend  ⚠️ CRÍTICO
+  Build Command:    npm run build (= tsc && vite build)
+  Output Directory: dist
+  Install Command:  npm install
+
+vercel.json:
+  - rewrites para SPA: /(.*) → /index.html
+  - cache-control immutable para /assets/*
+
+Tiempo de build: ~2-3 min
+Auto-deploy: en cada push a main
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+20. INTEGRACIÓN STRIPE (TEST MODE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Cuenta: Digital Connect sandbox (digitalconnectdr@gmail.com)
+Modo actual: TEST (sandbox, no cobra dinero real)
+
+ENDPOINTS (/api/billing/):
+  GET  /plans           Lista planes con Price IDs
+  GET  /subscription    Estado actual del tenant
+  POST /checkout        Crea Checkout Session, devuelve URL para redirect
+  POST /portal          Abre Customer Portal, devuelve URL para redirect
+  POST /webhook         Recibe eventos de Stripe (firma HMAC verificada)
+
+WEBHOOK CONFIGURADO:
+  URL: https://prestamax-api.onrender.com/api/billing/webhook
+  Events: checkout.session.completed, customer.subscription.created,
+          customer.subscription.updated, customer.subscription.deleted,
+          invoice.payment_failed
+  Signing secret: whsec_iRWOQ4ln6aAnBUT3y2pOQmofLOcxBHA5
+  API version: 2026-04-22.dahlia
+  Listen to: Your account
+
+EVENTOS PROCESADOS POR EL BACKEND:
+  checkout.session.completed       → activa suscripción, guarda customer_id
+  customer.subscription.created    → actualiza estado y plan
+  customer.subscription.updated    → actualiza estado y plan
+  customer.subscription.deleted    → marca como cancelada
+  invoice.payment_failed           → marca como expired
+
+⚠️ EL WEBHOOK NECESITA RAW BODY. En backend/src/index.ts el route
+/api/billing/webhook se monta con express.raw() ANTES de express.json().
+Si esto se rompe, el webhook fallará con "signature verification failed".
+
+TARJETAS DE PRUEBA (test mode):
+  Exitosa:               4242 4242 4242 4242
+  Declinada:             4000 0000 0000 0002
+  Requiere 3DS:          4000 0025 0000 3155
+  Expiry: cualquier futura. CVC: cualquier 3 dígitos.
+
+CUSTOMER PORTAL: configurado en
+https://dashboard.stripe.com/test/settings/billing/portal
+Permite al cliente: actualizar tarjeta, cancelar, cambiar plan.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+21. AUTO-DEPLOY Y KEEPALIVE PING (GITHUB ACTIONS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+AUTO-DEPLOY:
+  Push a main → Render redeploya backend (~5-10 min)
+                Vercel redeploya frontend (~2-3 min)
+  Ambos servicios escuchan webhooks de GitHub vía Git integration.
+
+KEEPALIVE PING:
+  Workflow: .github/workflows/keepalive.yml
+  Frecuencia: cada 10 minutos (cron */10 * * * *)
+  Hace: GET https://prestamax-api.onrender.com/health
+  Propósito: evitar el "cold start" del plan Starter de Render
+             (el servicio se duerme tras 15 min sin tráfico)
+  Permite ejecución manual desde la UI de GitHub Actions.
+
+LIMITACIONES:
+  - GitHub Actions cron puede tener delays de 5-30 min en horas pico
+  - Workflows scheduled se desactivan tras 60 días sin commits
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+22. COSTOS MENSUALES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Render Web Service Starter:        $7.00 / mes
+Render Persistent Disk 1 GB:       $0.25 / mes
+Vercel Hobby plan:                 $0.00 / mes
+GitHub (repo privado plan Free):   $0.00 / mes
+GitHub Actions:                    $0.00 / mes (lejos de límites)
+Stripe (TEST mode):                $0.00 / mes
+Stripe (LIVE mode):                2.9% + $0.30 USD por transacción exitosa
+                                   (sin costo fijo mensual)
+
+TOTAL FIJO ACTUAL: $7.25 / mes
+Cuando empiecen pagos reales, Stripe descuenta su comisión automáticamente.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+23. OPERACIONES COMUNES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESPLEGAR UN CAMBIO DE CÓDIGO:
+  1. Editar archivos localmente
+  2. Tener clonado el repo (git clone https://github.com/digitalconnectdr/PrestaMax.git)
+  3. cd repo, git add ., git commit -m "...", git push
+  4. Render y Vercel desplegan automáticamente en 2-10 min
+
+ACCEDER AL SHELL DEL BACKEND EN PRODUCCIÓN:
+  Dashboard de Render → servicio prestamax-api → "Shell" en sidebar
+  ⚠️ Pegar comandos con Ctrl+Shift+V (no Ctrl+V normal en xterm.js)
+
+EJECUTAR SQL MANUAL EN LA DB DE PRODUCCIÓN:
+  En el Shell de Render:
+    node -e "const{DatabaseSync}=require('node:sqlite');
+             const db=new DatabaseSync('/var/data/prestamax.db');
+             console.log(db.prepare('SELECT * FROM users').all());"
+
+ELEVAR USUARIO A platform_owner:
+  En el Shell de Render:
+    node -e "const{DatabaseSync}=require('node:sqlite');
+             const db=new DatabaseSync('/var/data/prestamax.db');
+             const r=db.prepare('UPDATE users SET platform_role=? WHERE email=?')
+                       .run('platform_owner','EMAIL_AQUI');
+             console.log('Filas:',r.changes);"
+  El usuario debe cerrar sesión y volver a entrar para refrescar el JWT.
+
+HACER BACKUP DE LA DB:
+  - Desde el Panel Admin /admin → tab Backups → "Crear backup"
+  - O por Shell:
+      cp /var/data/prestamax.db /var/data/backups/prestamax_$(date +%Y%m%d).db
+
+CAMBIAR ENV VARS EN RENDER:
+  Dashboard → servicio → Environment → editar valor → "Save, rebuild, and deploy"
+  Toma ~3-5 min en aplicarse (reinicio del servicio)
+
+CAMBIAR ENV VARS EN VERCEL:
+  Dashboard → project → Settings → Environment Variables → editar
+  Requiere redeploy manual (Settings → Deployments → Redeploy)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+24. CONFIGURACIÓN DE LA EMPRESA PRESTAMISTA (Settings)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Settings > General:
   - Datos de la empresa (nombre, RNC, teléfono, email, dirección, logo, firma)
   - Representante legal y datos notariales (para contratos)
-  - Testigos para contratos notariales (nombre, cédula, domicilio × 2)
+  - Testigos para contratos notariales (×2)
   - Moneda predeterminada
   - Multi-moneda (habilitar/deshabilitar, monedas habilitadas)
-  - Modo de firma (física o digital)
+  - Modo de firma (física/digital)
 
-Configuración de mora (Settings > Mora):
-  - mora_rate_daily: tasa diaria (ej: 0.001 = 0.1%)
-  - mora_grace_days: días de gracia (ej: 3)
-  - mora_max_rate: máximo de mora acumulada (ej: 0.30 = 30%)
+Settings > Mora:
+  - mora_rate_daily, mora_grace_days, mora_max_rate
   - mora_base: cuota_vencida o saldo_capital
-  - mora_fixed_enabled: monto fijo de mora (sí/no)
-  - mora_fixed_amount: monto fijo si está habilitado
+  - mora_fixed_enabled, mora_fixed_amount
 
-Configuración de rebate (Settings > Rebate):
-  - rebate_enabled: habilitar/deshabilitar
-  - rebate_type: proportional / partial / fixed_rate / none
-  - rebate_rate: porcentaje si es fixed_rate
+Settings > Rebate:
+  - rebate_enabled, rebate_type, rebate_rate
 
-Score crediticio (Settings > Score):
+Settings > Score:
   - score_mode: global o per_tenant
   - score_w_punctuality, score_w_paid_loans, score_w_antiquity, score_w_no_mora
-    (pesos del algoritmo de score, deben sumar 1.0)
+    (deben sumar 1.0)
+
+Settings > Suscripción (en /billing o /settings/subscription):
+  - Estado actual, días restantes de trial, botón Suscribirse, Customer Portal
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-20. MIGRACIONES DE BASE DE DATOS
+25. MIGRACIONES DE BASE DE DATOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-No existe un sistema de migraciones formal. Las migraciones se aplican en
-initializeDatabase() usando try/catch con ALTER TABLE ADD COLUMN.
-Si la columna ya existe, el error se ignora silenciosamente.
+NO existe sistema de migraciones formal. Se usa CREATE TABLE IF NOT EXISTS y
+ALTER TABLE ADD COLUMN con try/catch silencioso en initializeDatabase().
 
-Este patrón es seguro para nuevos deployments porque:
-  - CREATE TABLE IF NOT EXISTS crea tablas solo si no existen
-  - ALTER TABLE ADD COLUMN falla silenciosamente si la columna ya existe
+Patrón seguro para nuevos deployments:
+  - CREATE TABLE IF NOT EXISTS crea solo si no existe
+  - ALTER TABLE ADD COLUMN falla silenciosamente si columna ya existe
 
-Al agregar nuevas columnas, siempre usar este patrón:
+Al agregar nuevas columnas, usar siempre:
   try { db.exec(`ALTER TABLE tabla ADD COLUMN nueva_col TIPO DEFAULT valor`); } catch(_) {}
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-21. API — RUTAS PRINCIPALES
+26. API — RUTAS PRINCIPALES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Base URL: /api
 
 AUTENTICACIÓN:
-  POST /api/auth/login                  — Login (email, password)
-  GET  /api/auth/me                     — Usuario actual + tenants
-  PUT  /api/auth/profile                — Actualizar perfil
-  POST /api/auth/change-password        — Cambiar contraseña
-  POST /api/auth/register-tenant        — Registro de nuevo prestamista
+  POST /api/auth/login                  Login (email, password)
+  GET  /api/auth/me                     Usuario actual + tenants
+  PUT  /api/auth/profile                Actualizar perfil
+  POST /api/auth/change-password        Cambiar contraseña
+  POST /api/auth/register-tenant        Registro de nuevo prestamista (trial 10d)
 
 PRÉSTAMOS:
-  GET    /api/loans                     — Listado con filtros y paginación
-  POST   /api/loans                     — Crear préstamo
-  GET    /api/loans/:id                 — Detalle del préstamo
-  PUT    /api/loans/:id                 — Editar préstamo
-  DELETE /api/loans/:id                 — Cancelar préstamo
-  POST   /api/loans/:id/approve         — Aprobar (verifica garantía si aplica)
-  POST   /api/loans/:id/reject          — Rechazar (con tenant_id validado)
-  POST   /api/loans/:id/disburse        — Desembolsar y generar cuotas
-  POST   /api/loans/:id/void            — Anular préstamo
-  POST   /api/loans/bulk-import         — Importar CSV masivo
+  GET    /api/loans                     Listado con filtros y paginación
+  POST   /api/loans                     Crear préstamo
+  GET    /api/loans/:id                 Detalle del préstamo
+  PUT    /api/loans/:id                 Editar préstamo
+  DELETE /api/loans/:id                 Cancelar préstamo
+  POST   /api/loans/:id/approve         Aprobar
+  POST   /api/loans/:id/reject          Rechazar
+  POST   /api/loans/:id/disburse        Desembolsar y generar cuotas
+  POST   /api/loans/:id/void            Anular préstamo
+  POST   /api/loans/bulk-import         Importar CSV masivo
 
 PAGOS:
-  GET    /api/payments                  — Listado con filtros
-  POST   /api/payments                  — Registrar pago
-  GET    /api/payments/:id              — Detalle del pago
-  POST   /api/payments/:id/void         — Anular pago (con tenant_id validado)
-  PUT    /api/payments/:id              — Editar metadatos del pago
+  GET    /api/payments
+  POST   /api/payments                  Registrar pago
+  GET    /api/payments/:id
+  POST   /api/payments/:id/void         Anular pago
+  PUT    /api/payments/:id              Editar metadatos
 
 CLIENTES:
-  GET    /api/clients                   — Listado con búsqueda
-  POST   /api/clients                   — Crear cliente
-  GET    /api/clients/:id               — Detalle + historial + documentos
-  PUT    /api/clients/:id               — Editar cliente
-  DELETE /api/clients/:id               — Desactivar cliente
+  GET    /api/clients
+  POST   /api/clients
+  GET    /api/clients/:id               Detalle + historial + documentos
+  PUT    /api/clients/:id
+  DELETE /api/clients/:id               Desactivar
 
 CONTRATOS:
-  GET    /api/contracts                 — Listado del tenant
-  POST   /api/contracts                 — Generar contrato desde plantilla
-  POST   /api/contracts/:id/sign        — Firmar contrato
-  DELETE /api/contracts/:id             — Eliminar contrato (con tenant_id)
+  GET    /api/contracts
+  POST   /api/contracts                 Generar desde plantilla
+  POST   /api/contracts/:id/sign
+  DELETE /api/contracts/:id
 
 RECIBOS:
-  GET    /api/receipts                  — Listado del tenant
-  POST   /api/receipts/:id/reprint      — Marcar como reimpreso
+  GET    /api/receipts
+  POST   /api/receipts/:id/reprint
 
 REPORTES:
-  GET    /api/reports/summary
-  GET    /api/reports/portfolio
-  GET    /api/reports/mora
-  GET    /api/reports/collections
-  GET    /api/reports/advanced
-  GET    /api/reports/income
-  GET    /api/reports/projection?start=&end=
-  GET    /api/reports/datacredito
+  GET /api/reports/dashboard
+  GET /api/reports/portfolio
+  GET /api/reports/mora
+  GET /api/reports/collections
+  GET /api/reports/advanced
+  GET /api/reports/income-expenses?from=&to=
+  GET /api/reports/bank-accounts
+  GET /api/reports/projection?start=&end=
+  GET /api/reports/datacredito
+
+BILLING (Stripe) — NUEVO 1 May 2026:
+  GET  /api/billing/plans
+  GET  /api/billing/subscription
+  POST /api/billing/checkout            { plan_slug: "starter|basico|profesional|enterprise" }
+  POST /api/billing/portal              Devuelve URL del Customer Portal
+  POST /api/billing/webhook             (raw body, llamado por Stripe)
 
 CONFIGURACIÓN (Settings):
-  GET/PUT /api/settings/general         — Config de la empresa
-  GET     /api/settings/users           — Usuarios del tenant
-  POST    /api/settings/users/invite    — Invitar/crear usuario
-  PUT     /api/settings/users/:id       — Editar usuario/roles
-  DELETE  /api/settings/users/:id       — Desactivar usuario
+  GET/PUT /api/settings/general
+  GET     /api/settings/users
+  POST    /api/settings/users/invite
+  PUT     /api/settings/users/:id
+  DELETE  /api/settings/users/:id
   POST    /api/settings/users/:id/reset-password
   GET/POST/PUT/DELETE /api/settings/branches
   GET/POST/PUT/DELETE /api/settings/bank-accounts
   GET/POST/PUT/DELETE /api/settings/loan-products
   GET/POST/PUT/DELETE /api/settings/contract-templates
 
-ADMINISTRACIÓN DE PLATAFORMA:
-  GET    /api/admin/stats               — Estadísticas globales
-  GET    /api/admin/tenants             — Lista de empresas
-  POST   /api/admin/tenants             — Crear empresa
-  PUT    /api/admin/tenants/:id         — Actualizar empresa
-  DELETE /api/admin/tenants/:id/purge-data — Borrar datos de empresa
-  GET    /api/admin/plans               — Lista de planes
-  POST   /api/admin/plans               — Crear plan
-  PUT    /api/admin/plans/:id           — Actualizar plan
-  DELETE /api/admin/plans/:id           — Eliminar plan
-  GET    /api/admin/users               — Usuarios de plataforma
-  POST   /api/admin/backup              — Crear backup SQLite
-  GET    /api/admin/backups             — Lista de backups
-  DELETE /api/admin/backup/:filename    — Eliminar backup
-  GET    /api/admin/audit-logs          — Log de auditoría
+ADMIN PLATAFORMA:
+  GET    /api/admin/stats
+  GET    /api/admin/tenants
+  POST   /api/admin/tenants
+  PUT    /api/admin/tenants/:id
+  DELETE /api/admin/tenants/:id/purge-data
+  GET    /api/admin/plans
+  POST   /api/admin/plans
+  PUT    /api/admin/plans/:id
+  DELETE /api/admin/plans/:id
+  GET    /api/admin/users
+  POST   /api/admin/backup
+  GET    /api/admin/backups
+  DELETE /api/admin/backup/:filename
+  GET    /api/admin/audit-logs
 
 SALUD:
-  GET /health                           — { status: "ok" }
+  GET /health                           { status: "ok" }
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-22. CALCULADORA DE PRÉSTAMOS
+27. CALCULADORA DE PRÉSTAMOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Disponible en /calculadora. No requiere préstamo activo.
+Disponible en /calculator.
 
-Parámetros de entrada:
-  - Monto del préstamo
-  - Tipo de amortización (fixed_installment, flat_interest, interest_only)
-  - Tasa de interés y tipo de tasa (daily/weekly/biweekly/monthly/annual)
-  - Plazo y unidad (days/weeks/months)
-  - Frecuencia de pago (daily/every_2_days/weekly/biweekly/monthly)
-  - Fecha del primer pago
+Parámetros: monto, tipo de amortización, tasa, plazo, frecuencia, fecha 1er pago.
+Salida: tabla de amortización completa, totales, gráfica capital vs interés.
 
-Salida:
-  - Tabla de amortización completa
-  - Total a pagar, total intereses, cuota mensual
-  - Gráfica de distribución capital vs interés
-
-Conversiones de tasa interna:
-  daily → mensual: tasa × 30
-  weekly → mensual: tasa × 4.33
-  biweekly → mensual: tasa × 2
-  annual → mensual: tasa / 12
-  monthly → directa
+Conversiones internas: daily×30, weekly×4.33, biweekly×2, annual÷12, monthly directo.
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-23. NOTAS IMPORTANTES PARA DESARROLLO FUTURO
+28. NOTAS IMPORTANTES PARA DESARROLLO FUTURO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1. SINCRONIZACIÓN DE PERMISOS: Cualquier cambio en backend/src/lib/permissions.ts
-   DEBE replicarse manualmente en frontend/src/lib/permissions.ts.
-   Estos dos archivos deben ser idénticos.
+   DEBE replicarse en frontend/src/lib/permissions.ts. Los dos archivos deben
+   ser idénticos.
 
-2. MIGRACIONES: Siempre usar el patrón try/catch con ALTER TABLE ADD COLUMN
-   en la función initializeDatabase() de database.ts.
+2. MIGRACIONES: try/catch con ALTER TABLE ADD COLUMN en initializeDatabase().
 
 3. IDOR PROTECTION: Toda query UPDATE/DELETE debe incluir AND tenant_id=?
-   para prevenir acceso cruzado entre tenants.
 
-4. SCORE: El score se almacena en la tabla clients (score INTEGER 1-5).
-   Se recalcula automáticamente en recalcClientScore() después de cada pago
-   o anulación. La escala es 1-5 (no 0-100).
+4. SCORE: Tabla clients (INTEGER 1-5). Se recalcula en recalcClientScore()
+   después de cada pago/anulación.
 
-5. SALDO TOTAL: total_balance = principal_balance + interest_balance +
-                                mora_balance + charges_balance
+5. SALDO TOTAL: total_balance = principal + interest + mora + charges
 
-6. DÍAS VENCIDOS: Se recalcula usando SQL MIN(julianday('now') - julianday(due_date))
-   sobre cuotas en estado pending/partial con due_date < hoy.
+6. DÍAS VENCIDOS: SQL MIN(julianday('now') - julianday(due_date)) sobre cuotas
+   pending/partial con due_date < hoy.
 
-7. CONTRASEÑAS: Las contraseñas del propietario (jcpenalo@gmail.com) fueron
-   configuradas directamente en la DB (no por API), por lo que no pasan
-   las validaciones de complejidad que sí aplican a usuarios nuevos.
+7. WHATSAPP: Sin envío real. Falta integrar Twilio/Meta API.
+   Validar consent_whatsapp del cliente antes de enviar (riesgo legal).
 
-8. WHATSAPP: No hay integración real con la API de WhatsApp. El sistema registra
-   los mensajes como 'sent' pero no hay implementación real de envío. Se necesita
-   integrar con Twilio, Meta WhatsApp Business API u otra solución.
+8. STRIPE — 100% IMPLEMENTADO en TEST MODE (1 May 2026):
+   - Checkout, Customer Portal, Webhook funcionando
+   - Para LIVE mode ver Sección 31 (Tareas Pendientes)
 
-9. STRIPE: La integración con Stripe está parcialmente implementada. Las tablas
-   tienen campos stripe_customer_id y stripe_subscription_id pero la lógica
-   completa de webhooks y cobro automático puede requerir trabajo adicional.
+9. AUTO-SEED bloqueado en producción (process.env.NODE_ENV === 'production').
 
-10. AUTO-SEED: Si la DB está vacía al iniciar (users count = 0), el sistema
-    intenta cargar datos de demo desde seed.ts. En producción esto no debe
-    ocurrir porque ya existe el usuario del platform_owner.
+10. WEBHOOK STRIPE NECESITA RAW BODY: ver index.ts
+    app.post('/api/billing/webhook', express.raw(...)) ANTES de express.json()
+    Si esto se rompe, el webhook falla con "signature verification failed".
 
-11. TENANT REQUERIDO PARA OPERAR: El platform_owner también necesita pertenecer
-    a al menos un tenant para que el frontend envíe el header x-tenant-id y las
-    rutas de operaciones (dashboard, préstamos, pagos, etc.) funcionen. Sin tenant,
-    el frontend recibe tenants=[] en el login y todas las llamadas tenant-scoped
-    devuelven 400 "Tenant ID requerido".
-    SOLUCIÓN APLICADA: Se creó el tenant "PrestaMax Demo" para jcpenalo@gmail.com.
+11. NO USAR PRISMA NI POSTGRESQL: el proyecto tiene archivos legacy de Prisma
+    y supabase/MIGRATION_GUIDE.md, pero se corre con node:sqlite (built-in
+    Node 22+). El archivo db-postgres.ts está EXCLUIDO del build en tsconfig.
 
-12. DASHBOARD FALLBACK: DashboardPage.tsx tenía datos demo hardcodeados (75,000,
-    5 clientes, etc.) que se mostraban cuando la API fallaba. Fue corregido para
-    mostrar ceros en caso de error, evitando confusión con datos ficticios.
+12. FRONTEND USA camelize/snakify AUTOMÁTICAMENTE en api.ts.
+    Backend devuelve snake_case → frontend recibe camelCase.
+    Tener esto en cuenta al crear endpoints nuevos.
 
-13. ESTADO INICIAL DE LA BD (post-reset Abril 2026):
-    - 1 usuario: jcpenalo@gmail.com (platform_owner)
-    - 1 tenant: "PrestaMax Demo" (plan Enterprise, suscripción hasta 2099)
-    - 6 planes: Plan Trial, Starter, Básico, Profesional, Enterprise, Empresarial
-    - 0 clientes, 0 préstamos, 0 pagos (sistema limpio)
+13. PRECIOS DE STRIPE en USD pero formatCurrency() usa moneda del tenant (DOP).
+    Para mostrar precios de planes, usar inline ${value.toFixed(2)} en lugar
+    de formatCurrency(). Ver PlatformAdminPage.tsx y BillingPage.tsx.
+
+14. EL TENANT DE JUAN EN PRODUCCIÓN: "PrestaMax Admin"
+    User ID: 5192eb37-df24-4bf2-b093-aa4d5bb0b191
+    Plan: Enterprise (test mode), suscripción active
+    Para reactivar trial o resetear: usar Shell de Render con SQL manual.
+
+15. SUSCRIPCIÓN EXPIRADA: cuando subscription_end < ahora, requireTenant
+    devuelve HTTP 402 con code: SUBSCRIPTION_EXPIRED. El frontend debe
+    interceptar y redirigir a /billing.
+
+16. KEEPALIVE WORKFLOW se desactiva tras 60 días sin commits.
+    Si pasa, ir a https://github.com/digitalconnectdr/PrestaMax/actions
+    y reactivarlo manualmente.
+
+17. ENV VARS .env DEL BACKEND no se commitean (en .gitignore).
+    Para regenerar JWT_SECRET local:
+    node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+
+18. FUSE FILESYSTEM EN ENTORNO DE DESARROLLO (sandbox de IA):
+    Los tools Edit/Write a veces truncan archivos largos (queda padding NULL
+    al final si el contenido nuevo es más corto). Si pasa, reescribir via
+    bash heredoc o usar Python para edits quirúrgicos. Read tool puede mostrar
+    contenido cacheado distinto al de disco.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+29. URLS Y ACCESOS DE PRODUCCIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+URLs:
+  Frontend (Vercel):    https://prestamax-umber.vercel.app
+  Backend  (Render):    https://prestamax-api.onrender.com
+  Health endpoint:      https://prestamax-api.onrender.com/health
+  Repositorio Git:      https://github.com/digitalconnectdr/PrestaMax
+  Branch principal:     main
+
+Páginas clave del frontend:
+  /login                Login
+  /register             Auto-registro de prestamistas
+  /dashboard            Dashboard principal
+  /billing              Pagina de suscripción (planes + Stripe)
+  /settings/subscription  Mismo destino que /billing
+  /admin                Panel de plataforma (solo platform_owner)
+  /apply/:public_token  Portal público de solicitud (sin login)
+
+Cuentas de admin:
+  GitHub:    digitalconnectdr (organización/cuenta)
+  Vercel:    digitalconnectdr's projects (Hobby plan)
+  Render:    Digital Connect Dr (Starter plan)
+  Stripe:    Digital Connect sandbox (digitalconnectdr@gmail.com, modo Test)
+
+Login del propietario en PrestaMax:
+  Email:    jcpenalo@gmail.com
+  Rol:      platform_owner
+  Tenant:   PrestaMax Admin (Enterprise plan, test mode)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+30. HISTORIAL DE COMMITS DEL DEPLOY (1 MAYO 2026)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Commits realizados durante la sesión de deploy (de más reciente a más antiguo):
+
+  4e8a9f2  Fix: shape de /api/reports/income-expenses para matchear frontend
+  6259991  Fix: /api/reports/income-expenses devolvia 500
+  37d5439  Fix: mostrar precios de planes Stripe en USD (no RD$)
+  9e3986a  Fix: quitar customer_creation de checkout (solo aplica a mode=payment)
+  c4f98f1  Add: integracion Stripe completa (suscripciones SaaS)
+  c7594e8  Add: GitHub Actions keepalive ping cada 10 min para Render
+  42b9de8  Fix: reescribir package.json del frontend y render.yaml (truncados FS)
+  a02c323  Fix: incluir devDependencies en build de Render
+  1b38582  Fix: complete index.ts (was truncated by FS issue)
+  3868abe  Initial commit: PrestaMax SaaS multi-tenant
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+31. TAREAS PENDIENTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[A] MIGRAR STRIPE DE TEST MODE A LIVE MODE
+================================================================================
+    (Cuando estés listo para cobrar dinero real a prestamistas)
+
+    PASO 1 — ACTIVAR LA CUENTA DE STRIPE PARA LIVE MODE
+       URL: https://dashboard.stripe.com/account/onboarding
+       Completar todos los datos del negocio:
+         - Business name (razón social)
+         - Business type (sociedad, persona física, etc.)
+         - RNC / Tax ID dominicano
+         - Dirección física del negocio
+         - Sitio web (opcional pero recomendado)
+         - Descripción de productos/servicios
+         - Datos del representante legal (cédula, fecha nacimiento)
+         - Cuenta bancaria DR para recibir los pagos
+         - Verificación de identidad (subir foto de cédula del titular)
+       Stripe revisa los datos en 1-3 días hábiles.
+       Cuando esté aprobada, el toggle Sandbox/Live arriba a la derecha
+       del dashboard estará disponible.
+
+    PASO 2 — CAMBIAR AL MODO LIVE
+       En el dashboard de Stripe, click en el toggle arriba a la derecha
+       que dice "Sandbox" → cambiarlo a "Live".
+       Verificar que la URL ahora dice "/dashboard" SIN "/test/".
+
+    PASO 3 — CREAR LOS 4 PRODUCTOS EN LIVE MODE
+       URL: https://dashboard.stripe.com/products (sin /test/)
+       Click "+ Add product" y crear UNO POR UNO los mismos 4 productos:
+
+         Producto 1: PrestaMax Starter
+           Precio: 29.99 USD, Recurring monthly
+         Producto 2: PrestaMax Basico
+           Precio: 59.99 USD, Recurring monthly
+         Producto 3: PrestaMax Profesional
+           Precio: 119.99 USD, Recurring monthly
+         Producto 4: PrestaMax Enterprise
+           Precio: 249.99 USD, Recurring monthly
+
+       Para cada producto después de crearlo, copiar el Price ID (empieza
+       con price_... pero estos serán DIFERENTES a los de test).
+       Anotar los 4 Price IDs Live.
+
+    PASO 4 — ACTIVAR EL CUSTOMER PORTAL EN LIVE MODE
+       URL: https://dashboard.stripe.com/settings/billing/portal
+       Activar las mismas funciones que en test mode:
+         - Customers can update payment method
+         - Customers can cancel subscriptions
+         - Customers can switch plans (seleccionar los 4 productos Live)
+         - Customers can update billing address
+       Headline: "Gestiona tu suscripcion de PrestaMax"
+       Save
+
+    PASO 5 — OBTENER LAS API KEYS LIVE
+       URL: https://dashboard.stripe.com/apikeys (sin /test/)
+       Copiar:
+         - Publishable key (empieza con pk_live_...)
+         - Secret key (empieza con sk_live_...) — click "Reveal" primero
+       ⚠️ GUARDAR ESTAS KEYS DE FORMA SEGURA — NO commitearlas a Git
+
+    PASO 6 — CREAR EL WEBHOOK EN LIVE MODE
+       URL: https://dashboard.stripe.com/workbench/webhooks (sin /test/)
+       Click "+ Add destination"
+
+       Step 1 (Select events):
+         - Events from: Your account
+         - Marcar exactamente los 5 eventos:
+           * checkout.session.completed
+           * customer.subscription.created
+           * customer.subscription.updated
+           * customer.subscription.deleted
+           * invoice.payment_failed
+         - Continue
+
+       Step 2 (Choose destination type):
+         - Webhook endpoint → Continue
+
+       Step 3 (Configure your destination):
+         - Endpoint URL: https://prestamax-api.onrender.com/api/billing/webhook
+         - Description: PrestaMax production live webhook
+         - Create destination
+
+       Después de crear, ir a la página del webhook y copiar el "Signing
+       secret" (empieza con whsec_...).
+
+    PASO 7 — ACTUALIZAR LAS 6 ENV VARS EN RENDER
+       URL: https://dashboard.render.com → servicio prestamax-api → Environment
+       EDITAR (no agregar nuevas, EDITAR las existentes):
+
+         STRIPE_SECRET_KEY        = sk_live_... (nueva, paso 5)
+         STRIPE_WEBHOOK_SECRET    = whsec_... (nueva, paso 6)
+         STRIPE_PRICE_STARTER     = price_... (nuevo Live, paso 3)
+         STRIPE_PRICE_BASICO      = price_... (nuevo Live, paso 3)
+         STRIPE_PRICE_PROFESIONAL = price_... (nuevo Live, paso 3)
+         STRIPE_PRICE_ENTERPRISE  = price_... (nuevo Live, paso 3)
+
+       Click "Save, rebuild, and deploy" abajo.
+       Esperar ~3-5 min al redeploy.
+
+    PASO 8 — PROBAR CON UNA TARJETA REAL
+       - Refresh el frontend en https://prestamax-umber.vercel.app
+       - Crear una cuenta de prueba con un email DIFERENTE al tuyo
+         (porque tu cuenta jcpenalo@gmail.com ya está como Enterprise test)
+       - Ir a /billing → Suscribirse a Starter ($29.99/mes)
+       - Usar una tarjeta REAL personal (NO 4242...)
+       - Verificar que se cobra realmente
+       - En Stripe dashboard verás el pago en
+         https://dashboard.stripe.com/payments
+       - Después puedes reembolsar la transacción desde Stripe si era solo
+         para pruebas.
+
+    PASO 9 — CONSIDERACIONES IMPORTANTES
+       - En Live mode, las transacciones SI cobran dinero real
+       - Stripe cobra 2.9% + $0.30 USD por transacción exitosa
+       - Stripe transfiere el dinero a tu cuenta bancaria DR cada 2-7 días
+         (cronograma se configura en
+          https://dashboard.stripe.com/settings/payouts)
+       - Mantener actualizado Privacy Policy y Terms con tu información
+         legal real (RNC, dirección, etc.)
+       - Los productos en TEST mode quedan separados, puedes seguir usando
+         test mode para desarrollo
+
+
+[B] OTRAS TAREAS PENDIENTES
+================================================================================
+
+  - Conectar dominio personalizado prestamax.com (cuando lo compres):
+    * En Vercel: Settings > Domains → Add prestamax.com
+    * En Render: Settings > Custom Domains → Add api.prestamax.com
+    * Actualizar VITE_API_URL a https://api.prestamax.com/api en Vercel
+    * Actualizar FRONTEND_URL a https://prestamax.com en Render
+    * El backend ya tiene en CORS los origins prestamax.com/www/app
+
+  - Implementar envío real de WhatsApp (Twilio o Meta API)
+  - Validar consentimiento WhatsApp del cliente antes de enviar
+  - Implementar token blacklist para JWT (logout real)
+  - Validar MIME type/tamaño de imágenes Base64 del portal público
+  - Rate limiting por usuario autenticado (no solo por IP)
+
+  - Considerar migración a Supabase/PostgreSQL cuando crezca el negocio
+    (la guía ya está en backend/supabase/MIGRATION_GUIDE.md)
+    Justifica cuando: 100+ tenants concurrentes con muchos pagos simultáneos,
+    necesidad de Supabase Auth, Storage, o Realtime.
+
+
+[C] CONVERTIR LA WEB EN APP MOVIL PARA ANDROID Y iOS (CAPACITOR)
+================================================================================
+    (En espera. Primero estabilizar todas las funciones web)
+
+    Estrategia: usar Capacitor para empaquetar la app React/Vite existente
+    en contenedores nativos. Mantiene 100% del codigo actual.
+
+    Costo: Apple Developer $99/ano + Google Play $25 una sola vez.
+
+    PASO 1 — SETUP BASICO (1 dia)
+       cd prestamax/frontend
+       npm install @capacitor/core @capacitor/cli
+       npx cap init prestamax com.digitalconnectdr.prestamax
+       npm install @capacitor/android @capacitor/ios
+       npx cap add android
+       npx cap add ios   (requiere Mac con Xcode)
+       npm run build && npx cap sync
+       npx cap open android   (abre Android Studio)
+
+    PASO 2 — PULIR PARA MOBILE (1 dia)
+       - Verificar responsive en pantallas chicas
+       - Splash screen con logo PrestaMax
+       - Icon de app (1024x1024 base)
+       - Status bar color
+       - Orientacion portrait fija
+       - Configurar CapacitorConfig en capacitor.config.ts
+
+    PASO 3 — APIs NATIVAS UTILES (opcional, 1-2 dias por feature)
+       - Camara nativa para escanear cedulas (cobradores en campo):
+           npm install @capacitor/camera
+       - GPS para verificar visitas de cobranza:
+           npm install @capacitor/geolocation
+       - Push notifications (recordatorios pagos vencidos):
+           npm install @capacitor/push-notifications
+           + configurar FCM (Android) y APNs (iOS)
+       - Biometria para login rapido:
+           npm install @capacitor/biometric-auth (o capacitor-native-biometric)
+       - Compartir contratos PDF a WhatsApp:
+           npm install @capacitor/share
+
+    PASO 4 — PUBLICACION EN TIENDAS (1-3 dias + review)
+       Android (Google Play):
+         - Crear cuenta en https://play.google.com/console ($25 una vez)
+         - Generar APK firmado con keystore
+         - Llenar metadatos, screenshots, politica privacidad
+         - Subir a "Internal testing" primero, luego "Production"
+         - Review tipicamente 1-3 dias
+
+       iOS (App Store):
+         - Inscribirse en https://developer.apple.com/programs/ ($99/ano)
+         - Generar certificados y provisioning profiles en Xcode
+         - Subir a App Store Connect
+         - Llenar metadatos, screenshots
+         - Review tipicamente 1-3 dias (a veces mas estricto)
+
+    CONSIDERACIONES:
+       - VITE_API_URL en mobile debe apuntar al backend de Render
+         (https://prestamax-api.onrender.com/api), no a localhost
+       - CORS en backend ya permite el origen, no requiere cambios
+       - Stripe Checkout funciona via WebView dentro de la app
+       - Para "live updates" sin republicar (parches menores):
+         npm install @capgo/capacitor-updater  (gratis hasta cierto limite)
+       - El bundle se vuelve mas pesado (~3-5 MB), pero aceptable
+
+    REQUISITOS DE HARDWARE:
+       - Android: cualquier maquina con Android Studio
+       - iOS: SOLO funciona en Mac con Xcode (no se puede compilar
+         iOS desde Windows/Linux)
+       - Si no tienes Mac: alternativas como MacInCloud o EAS Build de Expo
+
+
 
 ================================================================================
   FIN DEL DOCUMENTO
   PrestaMax — Sistema de Gestión de Préstamos SaaS
   Propietario: Juan C. Peñalo (jcpenalo@gmail.com)
-==============================================================================
+  Estado: Deployado y operativo en producción desde 1 Mayo 2026
+================================================================================
