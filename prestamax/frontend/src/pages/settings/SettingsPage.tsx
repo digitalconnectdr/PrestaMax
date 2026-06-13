@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { TenantContext } from '@/contexts/TenantContext'
 import { PERM_BY_MODULE, PERM_DEFS, PermKey } from '@/lib/permissions'
 import { usePermission } from '@/hooks/usePermission'
+import { useT } from '@/lib/i18n'
+import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
@@ -97,6 +99,7 @@ const SettingsPage: React.FC = () => {
   const [planFeatures, setPlanFeatures] = useState<string[]>([])
   const [isSavingPerms, setIsSavingPerms] = useState(false)
   const { isAdmin: currentUserIsAdmin, can } = usePermission()
+  const tGen = useT()
 
   // Branches
   const [branches, setBranches] = useState<Branch[]>([])
@@ -667,6 +670,11 @@ const SettingsPage: React.FC = () => {
           {/* ── GENERAL ── */}
           {activeTab === 'general' && (
             <div className="space-y-6">
+              <Card>
+                <h3 className="section-title mb-1">{tGen('common.language')}</h3>
+                <p className="text-sm text-slate-500 mb-4">Selecciona el idioma de la interfaz / Select interface language / Selecione o idioma</p>
+                <LanguageSwitcher variant="inline" />
+              </Card>
               <Card>
                 <h3 className="section-title mb-4">Información de la Empresa</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

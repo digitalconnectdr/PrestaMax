@@ -5,6 +5,10 @@
 //   import { useT, setLocale, getLocale } from '@/lib/i18n'
 //   const t = useT()
 //   <h1>{t('login.title')}</h1>
+//
+// ESTRUCTURA (Jun 2026): una entrada por clave con los 3 idiomas juntos, para
+// que agregar texto nuevo no desincronice idiomas. Se traduce por fases; si una
+// clave falta en un idioma cae a español y luego a la propia clave.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useSyncExternalStore } from 'react'
 
@@ -18,125 +22,89 @@ export const SUPPORTED_LOCALES: { code: Locale; name: string; flag: string }[] =
   { code: 'pt', name: 'Português',  flag: '🇧🇷' },
 ]
 
-// ── Diccionarios ─────────────────────────────────────────────────────────────
+// ── Diccionario unificado: key -> { es, en, pt } ─────────────────────────────
+type Tri = { es: string; en: string; pt: string }
+
+const TR: Record<string, Tri> = {
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  'auth.login':      { es: 'Iniciar Sesión',     en: 'Sign in',            pt: 'Entrar' },
+  'auth.logout':     { es: 'Cerrar sesión',      en: 'Sign out',           pt: 'Sair' },
+  'auth.register':   { es: 'Regístrate aquí',    en: 'Sign up here',       pt: 'Cadastre-se aqui' },
+  'auth.email':      { es: 'Correo electrónico', en: 'Email',              pt: 'E-mail' },
+  'auth.password':   { es: 'Contraseña',         en: 'Password',           pt: 'Senha' },
+  'auth.no_account': { es: '¿Aún no tienes cuenta?', en: "Don't have an account?", pt: 'Ainda não tem uma conta?' },
+  'auth.need_help':  { es: '¿Necesitas ayuda? Contacta a', en: 'Need help? Contact', pt: 'Precisa de ajuda? Contate' },
+  'auth.terms':      { es: 'Términos de Uso',    en: 'Terms of Use',       pt: 'Termos de Uso' },
+  'auth.privacy':    { es: 'Política de Privacidad', en: 'Privacy Policy',  pt: 'Política de Privacidade' },
+  'auth.welcome':    { es: 'Bienvenido a PrestaMax', en: 'Welcome to PrestaMax', pt: 'Bem-vindo ao PrestaMax' },
+
+  // ── Common ─────────────────────────────────────────────────────────────────
+  'common.cancel':   { es: 'Cancelar',   en: 'Cancel',      pt: 'Cancelar' },
+  'common.save':     { es: 'Guardar',    en: 'Save',        pt: 'Salvar' },
+  'common.delete':   { es: 'Eliminar',   en: 'Delete',      pt: 'Excluir' },
+  'common.edit':     { es: 'Editar',     en: 'Edit',        pt: 'Editar' },
+  'common.search':   { es: 'Buscar',     en: 'Search',      pt: 'Buscar' },
+  'common.loading':  { es: 'Cargando...', en: 'Loading...', pt: 'Carregando...' },
+  'common.language': { es: 'Idioma',     en: 'Language',    pt: 'Idioma' },
+  'common.logout':   { es: 'Cerrar sesión', en: 'Sign out', pt: 'Sair' },
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+  'header.search_placeholder': { es: 'Buscar clientes, préstamos…', en: 'Search clients, loans…', pt: 'Buscar clientes, empréstimos…' },
+
+  // ── Nav: grupos ──────────────────────────────────────────────────────────────
+  'navgroup.main':           { es: 'PRINCIPAL',      en: 'MAIN',           pt: 'PRINCIPAL' },
+  'navgroup.operations':     { es: 'OPERACIONES',    en: 'OPERATIONS',     pt: 'OPERAÇÕES' },
+  'navgroup.collections':    { es: 'COBRANZAS',      en: 'COLLECTIONS',    pt: 'COBRANÇAS' },
+  'navgroup.communications': { es: 'COMUNICACIONES', en: 'COMMUNICATIONS', pt: 'COMUNICAÇÕES' },
+  'navgroup.analysis':       { es: 'ANÁLISIS',       en: 'ANALYTICS',      pt: 'ANÁLISE' },
+  'navgroup.config':         { es: 'CONFIGURACIÓN',  en: 'SETTINGS',       pt: 'CONFIGURAÇÕES' },
+  'navgroup.help':           { es: 'AYUDA',          en: 'HELP',           pt: 'AJUDA' },
+  'navgroup.platform':       { es: 'PLATAFORMA',     en: 'PLATFORM',       pt: 'PLATAFORMA' },
+
+  // ── Nav: items ───────────────────────────────────────────────────────────────
+  'nav.dashboard':     { es: 'Dashboard',          en: 'Dashboard',          pt: 'Painel' },
+  'nav.clients':       { es: 'Clientes',           en: 'Clients',            pt: 'Clientes' },
+  'nav.loans':         { es: 'Préstamos',          en: 'Loans',              pt: 'Empréstimos' },
+  'nav.payments':      { es: 'Pagos',              en: 'Payments',           pt: 'Pagamentos' },
+  'nav.contracts':     { es: 'Contratos',          en: 'Contracts',          pt: 'Contratos' },
+  'nav.income':        { es: 'Ingresos y Gastos',  en: 'Income & Expenses',  pt: 'Receitas e Despesas' },
+  'nav.calculator':    { es: 'Calculadora',        en: 'Calculator',         pt: 'Calculadora' },
+  'nav.templates':     { es: 'Plantillas',         en: 'Templates',          pt: 'Modelos' },
+  'nav.requests':      { es: 'Solicitudes',        en: 'Requests',           pt: 'Solicitações' },
+  'nav.investors':     { es: 'Inversionistas',     en: 'Investors',          pt: 'Investidores' },
+  'nav.collections':   { es: 'Mi Cartera',         en: 'My Portfolio',       pt: 'Minha Carteira' },
+  'nav.promises':      { es: 'Promesas de Pago',   en: 'Payment Promises',   pt: 'Promessas de Pagamento' },
+  'nav.whatsapp':      { es: 'WhatsApp',           en: 'WhatsApp',           pt: 'WhatsApp' },
+  'nav.reports':       { es: 'Reportes',           en: 'Reports',            pt: 'Relatórios' },
+  'nav.accounting':    { es: 'Exportar Contabilidad', en: 'Export Accounting', pt: 'Exportar Contabilidade' },
+  'nav.projection':    { es: 'Proyección de Cobros', en: 'Collections Forecast', pt: 'Projeção de Cobranças' },
+  'nav.settings':      { es: 'General',            en: 'General',            pt: 'Geral' },
+  'nav.products':      { es: 'Productos',          en: 'Products',           pt: 'Produtos' },
+  'nav.users':         { es: 'Usuarios',           en: 'Users',              pt: 'Usuários' },
+  'nav.branches':      { es: 'Sucursales',         en: 'Branches',           pt: 'Filiais' },
+  'nav.bank_accounts': { es: 'Cuentas Bancarias',  en: 'Bank Accounts',      pt: 'Contas Bancárias' },
+  'nav.subscription':  { es: 'Mi Suscripción',     en: 'My Subscription',    pt: 'Minha Assinatura' },
+  'nav.help':          { es: 'Guía del Sistema',   en: 'System Guide',       pt: 'Guia do Sistema' },
+  'nav.admin':         { es: 'Admin Panel',        en: 'Admin Panel',        pt: 'Painel Admin' },
+
+  // ── Landing ──────────────────────────────────────────────────────────────────
+  'landing.subtitle':          { es: 'Plataforma de gestión de préstamos personales y comerciales para prestamistas profesionales.', en: 'Personal and commercial loan management platform for professional lenders.', pt: 'Plataforma de gestão de empréstimos pessoais e comerciais para credores profissionais.' },
+  'landing.feature.dashboard': { es: 'Dashboard en tiempo real', en: 'Real-time dashboard', pt: 'Painel em tempo real' },
+  'landing.feature.score':     { es: 'Score crediticio interno', en: 'Internal credit score', pt: 'Score de crédito interno' },
+  'landing.feature.multi':     { es: 'Multi-moneda', en: 'Multi-currency', pt: 'Multi-moeda' },
+  'landing.feature.apply':     { es: 'Solicitud en línea', en: 'Online application', pt: 'Solicitação online' },
+  'landing.feature.whatsapp':  { es: 'WhatsApp y notificaciones', en: 'WhatsApp & notifications', pt: 'WhatsApp e notificações' },
+  'landing.feature.secure':    { es: 'Seguro y multi-empresa', en: 'Secure & multi-company', pt: 'Seguro e multi-empresa' },
+}
+
+// Diccionarios derivados por locale (compatibilidad con el lookup existente)
 type Dict = Record<string, string>
-
-const dictES: Dict = {
-  // Auth
-  'auth.login':           'Iniciar Sesión',
-  'auth.logout':          'Cerrar sesión',
-  'auth.register':        'Regístrate aquí',
-  'auth.email':           'Correo electrónico',
-  'auth.password':        'Contraseña',
-  'auth.no_account':      '¿Aún no tienes cuenta?',
-  'auth.need_help':       '¿Necesitas ayuda? Contacta a',
-  'auth.terms':           'Términos de Uso',
-  'auth.privacy':         'Política de Privacidad',
-  'auth.welcome':         'Bienvenido a PrestaMax',
-  // Common
-  'common.cancel':        'Cancelar',
-  'common.save':          'Guardar',
-  'common.delete':        'Eliminar',
-  'common.edit':          'Editar',
-  'common.search':        'Buscar',
-  'common.loading':       'Cargando...',
-  'common.language':      'Idioma',
-  // Nav
-  'nav.dashboard':        'Dashboard',
-  'nav.clients':          'Clientes',
-  'nav.loans':            'Préstamos',
-  'nav.payments':         'Pagos',
-  'nav.contracts':        'Contratos',
-  'nav.calculator':       'Calculadora',
-  'nav.requests':         'Solicitudes',
-  'nav.collections':      'Cobranzas',
-  'nav.reports':          'Reportes',
-  'nav.settings':         'Configuración',
-  // Landing
-  'landing.subtitle':         'Plataforma de gestión de préstamos personales y comerciales para prestamistas profesionales.',
-  'landing.feature.dashboard':'Dashboard en tiempo real',
-  'landing.feature.score':    'Score crediticio interno',
-  'landing.feature.multi':    'Multi-moneda',
-  'landing.feature.apply':    'Solicitud en línea',
-  'landing.feature.whatsapp': 'WhatsApp y notificaciones',
-  'landing.feature.secure':   'Seguro y multi-empresa',
+const DICTIONARIES: Record<Locale, Dict> = { es: {}, en: {}, pt: {} }
+for (const key in TR) {
+  DICTIONARIES.es[key] = TR[key].es
+  DICTIONARIES.en[key] = TR[key].en
+  DICTIONARIES.pt[key] = TR[key].pt
 }
-
-const dictEN: Dict = {
-  'auth.login':           'Sign in',
-  'auth.logout':          'Sign out',
-  'auth.register':        'Sign up here',
-  'auth.email':           'Email',
-  'auth.password':        'Password',
-  'auth.no_account':      "Don't have an account?",
-  'auth.need_help':       'Need help? Contact',
-  'auth.terms':           'Terms of Use',
-  'auth.privacy':         'Privacy Policy',
-  'auth.welcome':         'Welcome to PrestaMax',
-  'common.cancel':        'Cancel',
-  'common.save':          'Save',
-  'common.delete':        'Delete',
-  'common.edit':          'Edit',
-  'common.search':        'Search',
-  'common.loading':       'Loading...',
-  'common.language':      'Language',
-  'nav.dashboard':        'Dashboard',
-  'nav.clients':          'Clients',
-  'nav.loans':            'Loans',
-  'nav.payments':         'Payments',
-  'nav.contracts':        'Contracts',
-  'nav.calculator':       'Calculator',
-  'nav.requests':         'Requests',
-  'nav.collections':      'Collections',
-  'nav.reports':          'Reports',
-  'nav.settings':         'Settings',
-  'landing.subtitle':         'Personal and commercial loan management platform for professional lenders.',
-  'landing.feature.dashboard':'Real-time dashboard',
-  'landing.feature.score':    'Internal credit score',
-  'landing.feature.multi':    'Multi-currency',
-  'landing.feature.apply':    'Online application',
-  'landing.feature.whatsapp': 'WhatsApp & notifications',
-  'landing.feature.secure':   'Secure & multi-company',
-}
-
-const dictPT: Dict = {
-  'auth.login':           'Entrar',
-  'auth.logout':          'Sair',
-  'auth.register':        'Cadastre-se aqui',
-  'auth.email':           'E-mail',
-  'auth.password':        'Senha',
-  'auth.no_account':      'Ainda não tem uma conta?',
-  'auth.need_help':       'Precisa de ajuda? Contate',
-  'auth.terms':           'Termos de Uso',
-  'auth.privacy':         'Política de Privacidade',
-  'auth.welcome':         'Bem-vindo ao PrestaMax',
-  'common.cancel':        'Cancelar',
-  'common.save':          'Salvar',
-  'common.delete':        'Excluir',
-  'common.edit':          'Editar',
-  'common.search':        'Buscar',
-  'common.loading':       'Carregando...',
-  'common.language':      'Idioma',
-  'nav.dashboard':        'Painel',
-  'nav.clients':          'Clientes',
-  'nav.loans':            'Empréstimos',
-  'nav.payments':         'Pagamentos',
-  'nav.contracts':        'Contratos',
-  'nav.calculator':       'Calculadora',
-  'nav.requests':         'Solicitações',
-  'nav.collections':      'Cobranças',
-  'nav.reports':          'Relatórios',
-  'nav.settings':         'Configurações',
-  'landing.subtitle':         'Plataforma de gestão de empréstimos pessoais e comerciais para credores profissionais.',
-  'landing.feature.dashboard':'Painel em tempo real',
-  'landing.feature.score':    'Score de crédito interno',
-  'landing.feature.multi':    'Multi-moeda',
-  'landing.feature.apply':    'Solicitação online',
-  'landing.feature.whatsapp': 'WhatsApp e notificações',
-  'landing.feature.secure':   'Seguro e multi-empresa',
-}
-
-const DICTIONARIES: Record<Locale, Dict> = { es: dictES, en: dictEN, pt: dictPT }
 
 // ── Store con listeners (para que React re-renderice al cambiar locale) ──────
 let _locale: Locale = (() => {

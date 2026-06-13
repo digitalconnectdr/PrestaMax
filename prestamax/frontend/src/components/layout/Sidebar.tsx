@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
+import { useT } from '@/lib/i18n'
 
 interface SidebarProps {
   isOpen?: boolean
@@ -19,6 +20,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
   const navigate = useNavigate()
   const { state, logout } = useAuth()
   const { can, canAny } = usePermission()
+  const t = useT()
 
   const isActive = (path: string) => {
     if (path === '/settings') return location.pathname === '/settings'
@@ -35,70 +37,70 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
 
   const navGroups = [
     {
-      label: 'PRINCIPAL',
+      label: t('navgroup.main'),
       items: [
-        { icon: BarChart3, label: 'Dashboard', path: '/dashboard', show: can('reports.dashboard') },
+        { icon: BarChart3, label: t('nav.dashboard'), path: '/dashboard', show: can('reports.dashboard') },
       ],
     },
     {
-      label: 'OPERACIONES',
+      label: t('navgroup.operations'),
       items: [
-        { icon: Users,        label: 'Clientes',         path: '/clients',    show: can('clients.view') },
-        { icon: DollarSign,   label: 'Préstamos',        path: '/loans',      show: can('loans.view') },
-        { icon: CreditCard,   label: 'Pagos',            path: '/payments',   show: can('payments.view') },
+        { icon: Users,        label: t('nav.clients'),     path: '/clients',    show: can('clients.view') },
+        { icon: DollarSign,   label: t('nav.loans'),       path: '/loans',      show: can('loans.view') },
+        { icon: CreditCard,   label: t('nav.payments'),    path: '/payments',   show: can('payments.view') },
         // Recibos eliminado — funcionalidad integrada en Pagos (imprimir + WhatsApp)
-        { icon: FileCheck,    label: 'Contratos',        path: '/contracts',  show: can('contracts.view') },
-        { icon: TrendingUp,   label: 'Ingresos y Gastos',path: '/income',     show: can('income.view') },
-        { icon: Calculator,   label: 'Calculadora',      path: '/calculator', show: can('calculator.use') },
-        { icon: BookOpen,     label: 'Plantillas',       path: '/templates',  show: can('templates.view') },
-        { icon: ClipboardList,label: 'Solicitudes',      path: '/requests',   show: can('requests.view') },
-        { icon: Briefcase,    label: 'Inversionistas',   path: '/investors',  show: can('investors.view') },
+        { icon: FileCheck,    label: t('nav.contracts'),   path: '/contracts',  show: can('contracts.view') },
+        { icon: TrendingUp,   label: t('nav.income'),      path: '/income',     show: can('income.view') },
+        { icon: Calculator,   label: t('nav.calculator'),  path: '/calculator', show: can('calculator.use') },
+        { icon: BookOpen,     label: t('nav.templates'),   path: '/templates',  show: can('templates.view') },
+        { icon: ClipboardList,label: t('nav.requests'),    path: '/requests',   show: can('requests.view') },
+        { icon: Briefcase,    label: t('nav.investors'),   path: '/investors',  show: can('investors.view') },
       ],
     },
     {
-      label: 'COBRANZAS',
+      label: t('navgroup.collections'),
       items: [
-        { icon: Truck,     label: 'Mi Cartera',       path: '/collections',          show: can('collections.view') },
-        { icon: FileText,  label: 'Promesas de Pago', path: '/collections/promises', show: can('collections.promises') },
+        { icon: Truck,     label: t('nav.collections'), path: '/collections',          show: can('collections.view') },
+        { icon: FileText,  label: t('nav.promises'),    path: '/collections/promises', show: can('collections.promises') },
       ],
     },
     {
-      label: 'COMUNICACIONES',
+      label: t('navgroup.communications'),
       items: [
-        { icon: MessageCircle, label: 'WhatsApp', path: '/whatsapp', show: can('whatsapp.view') },
+        { icon: MessageCircle, label: t('nav.whatsapp'), path: '/whatsapp', show: can('whatsapp.view') },
       ],
     },
     {
-      label: 'ANÁLISIS',
+      label: t('navgroup.analysis'),
       items: [
-        { icon: BarChart3,     label: 'Reportes',            path: '/reports',
+        { icon: BarChart3,     label: t('nav.reports'),     path: '/reports',
           show: canAny(['reports.portfolio','reports.mora','reports.collections','reports.advanced','reports.income']) },
-        { icon: FileSpreadsheet,label: 'Exportar Contabilidad',path: '/reports/accounting',     show: can('reports.dashboard') },
-        { icon: CalendarRange, label: 'Proyección de Cobros', path: '/reports/projection',
+        { icon: FileSpreadsheet,label: t('nav.accounting'), path: '/reports/accounting',     show: can('reports.dashboard') },
+        { icon: CalendarRange, label: t('nav.projection'),  path: '/reports/projection',
           show: can('reports.projection') },
       ],
     },
     {
-      label: 'CONFIGURACIÓN',
+      label: t('navgroup.config'),
       items: [
-        { icon: Settings,  label: 'General',           path: '/settings',              show: can('settings.general') },
-        { icon: Package,   label: 'Productos',         path: '/settings/products',     show: can('settings.products') },
-        { icon: Users2,    label: 'Usuarios',          path: '/settings/users',        show: can('settings.users') },
-        { icon: MapPin,    label: 'Sucursales',        path: '/settings/branches',     show: can('settings.branches') },
-        { icon: Landmark,  label: 'Cuentas Bancarias', path: '/settings/bank-accounts',show: can('settings.bank_accounts') },
-        { icon: CreditCard,label: 'Mi Suscripción',   path: '/settings/subscription', show: true },
+        { icon: Settings,  label: t('nav.settings'),      path: '/settings',              show: can('settings.general') },
+        { icon: Package,   label: t('nav.products'),      path: '/settings/products',     show: can('settings.products') },
+        { icon: Users2,    label: t('nav.users'),         path: '/settings/users',        show: can('settings.users') },
+        { icon: MapPin,    label: t('nav.branches'),      path: '/settings/branches',     show: can('settings.branches') },
+        { icon: Landmark,  label: t('nav.bank_accounts'), path: '/settings/bank-accounts',show: can('settings.bank_accounts') },
+        { icon: CreditCard,label: t('nav.subscription'),  path: '/settings/subscription', show: true },
       ],
     },
     {
-      label: 'AYUDA',
+      label: t('navgroup.help'),
       items: [
-        { icon: HelpCircle, label: 'Guía del Sistema', path: '/help', show: true },
+        { icon: HelpCircle, label: t('nav.help'), path: '/help', show: true },
       ],
     },
     ...(isPlatformAdmin ? [{
-      label: 'PLATAFORMA',
+      label: t('navgroup.platform'),
       items: [
-        { icon: ShieldCheck, label: 'Admin Panel', path: '/admin', show: true },
+        { icon: ShieldCheck, label: t('nav.admin'), path: '/admin', show: true },
       ],
     }] : []),
   ]
@@ -157,7 +159,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
         <div className="border-t border-white/10 p-4 space-y-2">
           <button onClick={handleLogout} className="sidebar-link w-full text-left text-red-300 hover:text-red-200 hover:bg-red-600/20">
             <LogOut className="w-4 h-4" />
-            <span>Cerrar sesión</span>
+            <span>{t('common.logout')}</span>
           </button>
           <p className="text-[10px] text-white/30 text-center leading-tight pt-1">
             JPRS Digital Connect
