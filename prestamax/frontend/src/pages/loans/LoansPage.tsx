@@ -11,6 +11,7 @@ import { DollarSign, Plus, Eye, AlertCircle, Upload, Download, X, CheckCircle, X
 import { formatCurrency, formatDate, getCurrencySymbol } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { useT } from '@/lib/i18n'
 
 // ── CSV Import Modal ──────────────────────────────────────────────
 const CSV_TEMPLATE_HEADERS = [
@@ -31,27 +32,29 @@ const CSV_TEMPLATE_EXAMPLE2 = [
   'monthly','flat_interest','2024-03-01','0','',
   'Negocio propio','Préstamo en dólares','PRE-2024-00002','USD','58.50'
 ]
+// descKey -> clave i18n (imp.f.*). El nombre de columna (field) es el header
+// literal del CSV y NO se traduce.
 const CSV_FIELD_HELP = [
-  { field: 'client_name',         req: true,  desc: 'Nombre completo del cliente (requerido)' },
-  { field: 'client_phone',        req: false, desc: 'Teléfono — se usa para identificar cliente existente' },
-  { field: 'client_email',        req: false, desc: 'Correo electrónico del cliente' },
-  { field: 'client_id_number',    req: false, desc: 'Cédula o pasaporte — se usa para vincular cliente existente' },
-  { field: 'client_address',      req: false, desc: 'Dirección del cliente' },
-  { field: 'loan_amount',         req: true,  desc: 'Monto original del préstamo en la moneda indicada (ej: 50000 para DOP ó 1500 para USD)' },
-  { field: 'interest_rate',       req: true,  desc: 'Tasa de interés en % (ej: 5 = 5%)' },
-  { field: 'rate_type',           req: false, desc: 'monthly | daily | annual  (default: monthly)' },
-  { field: 'loan_type',           req: false, desc: 'personal | commercial | san | guarantee  (default: personal)' },
-  { field: 'term_months',         req: true,  desc: 'Plazo en meses (ej: 12)' },
-  { field: 'payment_frequency',   req: false, desc: 'monthly | weekly | biweekly | daily  (default: monthly)' },
-  { field: 'amortization_type',   req: false, desc: 'fixed_installment | flat_interest | interest_only  (default: fixed_installment)' },
-  { field: 'start_date',          req: true,  desc: 'Fecha de desembolso formato YYYY-MM-DD (ej: 2024-01-15)' },
-  { field: 'amount_paid',         req: false, desc: 'Total ya pagado en la misma moneda del préstamo — marca cuotas como pagas automáticamente' },
-  { field: 'outstanding_balance', req: false, desc: 'Saldo principal pendiente actual en la moneda del préstamo (deja vacío para calcularlo)' },
-  { field: 'purpose',             req: false, desc: 'Propósito del préstamo (ej: Negocio propio)' },
-  { field: 'notes',               req: false, desc: 'Notas adicionales internas' },
-  { field: 'loan_number',         req: false, desc: 'Número original del préstamo (se genera automáticamente si se omite)' },
-  { field: 'currency',            req: false, desc: 'Moneda del préstamo: DOP | USD | EUR | HTG | MXN | COP | PEN | CLP | BOB | UYU | BRL | GTQ  (default: DOP)' },
-  { field: 'exchange_rate_to_dop',req: false, desc: 'Tasa de cambio respecto al peso dominicano en la fecha de desembolso (ej: 58.50). Solo requerido si currency ≠ DOP' },
+  { field: 'client_name',         req: true,  descKey: 'imp.f.client_name' },
+  { field: 'client_phone',        req: false, descKey: 'imp.f.client_phone' },
+  { field: 'client_email',        req: false, descKey: 'imp.f.client_email' },
+  { field: 'client_id_number',    req: false, descKey: 'imp.f.client_id_number' },
+  { field: 'client_address',      req: false, descKey: 'imp.f.client_address' },
+  { field: 'loan_amount',         req: true,  descKey: 'imp.f.loan_amount' },
+  { field: 'interest_rate',       req: true,  descKey: 'imp.f.interest_rate' },
+  { field: 'rate_type',           req: false, descKey: 'imp.f.rate_type' },
+  { field: 'loan_type',           req: false, descKey: 'imp.f.loan_type' },
+  { field: 'term_months',         req: true,  descKey: 'imp.f.term_months' },
+  { field: 'payment_frequency',   req: false, descKey: 'imp.f.payment_frequency' },
+  { field: 'amortization_type',   req: false, descKey: 'imp.f.amortization_type' },
+  { field: 'start_date',          req: true,  descKey: 'imp.f.start_date' },
+  { field: 'amount_paid',         req: false, descKey: 'imp.f.amount_paid' },
+  { field: 'outstanding_balance', req: false, descKey: 'imp.f.outstanding_balance' },
+  { field: 'purpose',             req: false, descKey: 'imp.f.purpose' },
+  { field: 'notes',               req: false, descKey: 'imp.f.notes' },
+  { field: 'loan_number',         req: false, descKey: 'imp.f.loan_number' },
+  { field: 'currency',            req: false, descKey: 'imp.f.currency' },
+  { field: 'exchange_rate_to_dop',req: false, descKey: 'imp.f.exchange_rate' },
 ]
 
 function parseCSVLine(line: string): string[] {
@@ -84,6 +87,7 @@ function parseCSV(text: string): Record<string, string>[] {
 interface ImportResult { row: number; status: 'created' | 'error'; loanNumber?: string; clientName?: string; error?: string }
 
 const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }> = ({ onClose, onImported }) => {
+  const t = useT()
   const [step, setStep] = useState<'upload' | 'preview' | 'result'>('upload')
   const [rows, setRows] = useState<Record<string, string>[]>([])
   const [results, setResults] = useState<ImportResult[]>([])
@@ -109,7 +113,7 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
     const reader = new FileReader()
     reader.onload = (ev) => {
       const parsed = parseCSV(ev.target?.result as string)
-      if (!parsed.length) { toast.error('El CSV está vacío o tiene formato incorrecto'); return }
+      if (!parsed.length) { toast.error(t('imp.empty_csv')); return }
       setRows(parsed)
       setStep('preview')
     }
@@ -125,7 +129,7 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
       setStep('result')
       if ((res.data.summary?.created || 0) > 0) onImported()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al importar')
+      toast.error(err?.response?.data?.error || t('imp.import_error'))
     } finally { setIsImporting(false) }
   }
 
@@ -139,8 +143,8 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
               <FileSpreadsheet className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900">Importar Préstamos desde CSV</h3>
-              <p className="text-xs text-slate-400">Migra préstamos existentes de otro sistema a PrestaMax</p>
+              <h3 className="font-bold text-slate-900">{t('imp.title')}</h3>
+              <p className="text-xs text-slate-400">{t('imp.subtitle')}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
@@ -152,31 +156,31 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
             <div className="space-y-5">
               {/* Step 1: Download template */}
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                <p className="font-semibold text-blue-800 mb-1">Paso 1 — Descarga la plantilla</p>
-                <p className="text-sm text-blue-600 mb-3">Usa nuestra plantilla CSV con el formato correcto. Puedes editarla en Excel, Google Sheets o cualquier hoja de cálculo.</p>
+                <p className="font-semibold text-blue-800 mb-1">{t('imp.step1_title')}</p>
+                <p className="text-sm text-blue-600 mb-3">{t('imp.step1_desc')}</p>
                 <button onClick={downloadTemplate} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-medium">
-                  <Download className="w-4 h-4" />Descargar plantilla.csv
+                  <Download className="w-4 h-4" />{t('imp.download_template')}
                 </button>
               </div>
 
               {/* Field reference */}
               <div>
                 <button onClick={() => setShowHelp(h => !h)} className="text-sm text-blue-600 hover:underline mb-2 block">
-                  {showHelp ? '▼' : '▶'} Ver descripción de columnas
+                  {showHelp ? '▼' : '▶'} {t('imp.see_columns')}
                 </button>
                 {showHelp && (
                   <div className="overflow-x-auto rounded-xl border border-slate-200">
                     <table className="w-full text-xs">
                       <thead className="bg-slate-50"><tr>
-                        <th className="text-left p-2 font-semibold text-slate-600">Columna</th>
-                        <th className="text-left p-2 font-semibold text-slate-600">Req.</th>
-                        <th className="text-left p-2 font-semibold text-slate-600">Descripción</th>
+                        <th className="text-left p-2 font-semibold text-slate-600">{t('imp.col_column')}</th>
+                        <th className="text-left p-2 font-semibold text-slate-600">{t('imp.col_req')}</th>
+                        <th className="text-left p-2 font-semibold text-slate-600">{t('imp.col_desc')}</th>
                       </tr></thead>
                       <tbody>{CSV_FIELD_HELP.map(f => (
                         <tr key={f.field} className="border-t border-slate-100">
                           <td className="p-2 font-mono text-blue-700">{f.field}</td>
-                          <td className="p-2">{f.req ? <span className="text-red-500 font-bold">Sí</span> : <span className="text-slate-400">No</span>}</td>
-                          <td className="p-2 text-slate-600">{f.desc}</td>
+                          <td className="p-2">{f.req ? <span className="text-red-500 font-bold">{t('imp.yes')}</span> : <span className="text-slate-400">{t('imp.no')}</span>}</td>
+                          <td className="p-2 text-slate-600">{t(f.descKey)}</td>
                         </tr>
                       ))}</tbody>
                     </table>
@@ -187,16 +191,16 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
               {/* Step 2: Upload */}
               <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-8 text-center">
                 <Upload className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                <p className="font-semibold text-slate-700 mb-1">Paso 2 — Sube tu archivo CSV</p>
-                <p className="text-sm text-slate-400 mb-4">Acepta archivos .csv con los datos de tus préstamos actuales</p>
+                <p className="font-semibold text-slate-700 mb-1">{t('imp.step2_title')}</p>
+                <p className="text-sm text-slate-400 mb-4">{t('imp.step2_desc')}</p>
                 <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1e3a5f] hover:bg-[#2a4d7a] text-white text-sm rounded-xl font-medium cursor-pointer">
-                  <Upload className="w-4 h-4" />Seleccionar archivo CSV
+                  <Upload className="w-4 h-4" />{t('imp.select_file')}
                   <input type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" />
                 </label>
               </div>
 
               <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm text-amber-700">
-                <strong>Importante:</strong> Si el cliente ya existe en el sistema (mismo teléfono o cédula), se vinculará el préstamo a ese cliente. De lo contrario, se creará un cliente nuevo.
+                <strong>{t('imp.important')}</strong> {t('imp.important_desc')}
               </div>
             </div>
           )}
@@ -205,20 +209,20 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
           {step === 'preview' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="font-semibold text-slate-800">Vista previa — {rows.length} registro{rows.length !== 1 ? 's' : ''} encontrado{rows.length !== 1 ? 's' : ''}</p>
-                <button onClick={() => setStep('upload')} className="text-sm text-blue-600 hover:underline">← Cargar otro archivo</button>
+                <p className="font-semibold text-slate-800">{t('imp.preview_n').replace('{n}', String(rows.length))}</p>
+                <button onClick={() => setStep('upload')} className="text-sm text-blue-600 hover:underline">{t('imp.load_another')}</button>
               </div>
               <div className="overflow-x-auto rounded-xl border border-slate-200 max-h-80">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50 sticky top-0"><tr>
                     <th className="p-2 text-left text-slate-600 font-semibold">#</th>
-                    <th className="p-2 text-left text-slate-600 font-semibold">Cliente</th>
-                    <th className="p-2 text-left text-slate-600 font-semibold">Moneda</th>
-                    <th className="p-2 text-left text-slate-600 font-semibold">Monto</th>
-                    <th className="p-2 text-left text-slate-600 font-semibold">Tasa</th>
-                    <th className="p-2 text-left text-slate-600 font-semibold">Plazo</th>
-                    <th className="p-2 text-left text-slate-600 font-semibold">Inicio</th>
-                    <th className="p-2 text-left text-slate-600 font-semibold">Ya pagado</th>
+                    <th className="p-2 text-left text-slate-600 font-semibold">{t('col.client')}</th>
+                    <th className="p-2 text-left text-slate-600 font-semibold">{t('col.currency')}</th>
+                    <th className="p-2 text-left text-slate-600 font-semibold">{t('col.amount')}</th>
+                    <th className="p-2 text-left text-slate-600 font-semibold">{t('col.rate')}</th>
+                    <th className="p-2 text-left text-slate-600 font-semibold">{t('col.term')}</th>
+                    <th className="p-2 text-left text-slate-600 font-semibold">{t('imp.start')}</th>
+                    <th className="p-2 text-left text-slate-600 font-semibold">{t('imp.paid')}</th>
                   </tr></thead>
                   <tbody>{rows.map((row, i) => {
                     const cur = (row.currency || 'DOP').toUpperCase()
@@ -244,9 +248,9 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
               <div className="flex gap-3 pt-2">
                 <button onClick={handleImport} disabled={isImporting}
                   className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-60">
-                  {isImporting ? <><span className="animate-spin">⏳</span>Importando...</> : <><Upload className="w-4 h-4" />Importar {rows.length} préstamo{rows.length !== 1 ? 's' : ''}</>}
+                  {isImporting ? <><span className="animate-spin">⏳</span>{t('imp.importing')}</> : <><Upload className="w-4 h-4" />{t('imp.import_n').replace('{n}', String(rows.length))}</>}
                 </button>
-                <button onClick={onClose} className="px-5 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50">Cancelar</button>
+                <button onClick={onClose} className="px-5 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50">{t('common.cancel')}</button>
               </div>
             </div>
           )}
@@ -258,15 +262,15 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
               <div className="grid grid-cols-3 gap-3">
                 <div className="text-center p-4 bg-slate-50 rounded-xl">
                   <p className="text-2xl font-bold text-slate-700">{summary.total}</p>
-                  <p className="text-xs text-slate-400 mt-1">Total procesados</p>
+                  <p className="text-xs text-slate-400 mt-1">{t('imp.total_processed')}</p>
                 </div>
                 <div className="text-center p-4 bg-emerald-50 rounded-xl">
                   <p className="text-2xl font-bold text-emerald-700">{summary.created}</p>
-                  <p className="text-xs text-emerald-500 mt-1">Importados ✓</p>
+                  <p className="text-xs text-emerald-500 mt-1">{t('imp.imported_ok')}</p>
                 </div>
                 <div className={`text-center p-4 rounded-xl ${summary.errors > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
                   <p className={`text-2xl font-bold ${summary.errors > 0 ? 'text-red-700' : 'text-slate-400'}`}>{summary.errors}</p>
-                  <p className={`text-xs mt-1 ${summary.errors > 0 ? 'text-red-500' : 'text-slate-400'}`}>Con errores</p>
+                  <p className={`text-xs mt-1 ${summary.errors > 0 ? 'text-red-500' : 'text-slate-400'}`}>{t('imp.with_errors')}</p>
                 </div>
               </div>
               {/* Details */}
@@ -275,7 +279,7 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
                   <div key={i} className={`flex items-center gap-3 p-2.5 rounded-lg text-sm ${r.status === 'created' ? 'bg-emerald-50' : 'bg-red-50'}`}>
                     {r.status === 'created' ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />}
                     <span className="flex-1">
-                      <span className="font-medium">{r.clientName || `Fila ${r.row}`}</span>
+                      <span className="font-medium">{r.clientName || t('imp.row').replace('{n}', String(r.row))}</span>
                       {r.loanNumber && <span className="text-slate-400 ml-2">({r.loanNumber})</span>}
                       {r.error && <span className="text-red-600 ml-2">— {r.error}</span>}
                     </span>
@@ -283,7 +287,7 @@ const LoanImportModal: React.FC<{ onClose: () => void; onImported: () => void }>
                 ))}
               </div>
               <button onClick={onClose} className="w-full py-3 bg-[#1e3a5f] hover:bg-[#2a4d7a] text-white rounded-xl font-semibold">
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           )}
@@ -317,15 +321,15 @@ interface LoanRow {
 }
 
 const STATUS_FILTER_OPTIONS = [
-  { value: '', label: 'Todos' },
-  { value: 'active', label: 'Activo' },
-  { value: 'in_mora', label: 'En Mora' },
-  { value: 'approved', label: 'Aprobado' },
-  { value: 'liquidated', label: 'Liquidado' },
-  { value: 'written_off', label: 'Incobrable' },
-  { value: 'voided', label: 'Anulado' },
-  { value: 'rejected', label: 'Rechazado' },
-  { value: 'draft', label: 'Borrador' },
+  { value: '', key: 'common.all' },
+  { value: 'active', key: 'status.active' },
+  { value: 'in_mora', key: 'status.in_mora' },
+  { value: 'approved', key: 'status.approved' },
+  { value: 'liquidated', key: 'status.liquidated' },
+  { value: 'written_off', key: 'status.written_off' },
+  { value: 'voided', key: 'status.voided' },
+  { value: 'rejected', key: 'status.rejected' },
+  { value: 'draft', key: 'status.draft' },
 ]
 
 type SortKey = 'loanNumber' | 'clientName' | 'disbursedAmount' | 'totalBalance' | 'rate' | 'term' | 'status' | 'daysOverdue'
@@ -333,6 +337,7 @@ type SortKey = 'loanNumber' | 'clientName' | 'disbursedAmount' | 'totalBalance' 
 const LoansPage: React.FC = () => {
   const navigate = useNavigate()
   const { can } = usePermission()
+  const t = useT()
   const [loans, setLoans] = useState<LoanRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -360,7 +365,7 @@ const LoansPage: React.FC = () => {
         const res = await api.get(`/loans?${params.toString()}`)
         setLoans(res.data.data || [])
       } catch (err) {
-        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar préstamos')
+        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(t('loan.load_error'))
       } finally {
         setIsLoading(false)
       }
@@ -389,21 +394,21 @@ const LoansPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="page-title">Préstamos</h1>
-          <p className="text-slate-600 text-sm mt-1">Gestiona tu cartera de préstamos</p>
+          <h1 className="page-title">{t('nav.loans')}</h1>
+          <p className="text-slate-600 text-sm mt-1">{t('loan.subtitle')}</p>
         </div>
         <div className="flex gap-2">
           {can('loans.import') && (
             <button onClick={() => setShowImport(true)}
               className="flex items-center gap-2 px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors">
               <Upload className="w-4 h-4" />
-              Importar CSV
+              {t('loan.import_csv')}
             </button>
           )}
           {can('loans.create') && (
             <Button onClick={() => navigate('/loans/new')} className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
-              Nuevo Préstamo
+              {t('dash.quick.new_loan')}
             </Button>
           )}
         </div>
@@ -414,7 +419,7 @@ const LoansPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-3">
           <Input
             type="text"
-            placeholder="Buscar por número o cliente..."
+            placeholder={t('loan.search_ph')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1"
@@ -425,7 +430,7 @@ const LoansPage: React.FC = () => {
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {STATUS_FILTER_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+              <option key={opt.value} value={opt.value}>{t(opt.key)}</option>
             ))}
           </select>
         </div>
@@ -439,13 +444,13 @@ const LoansPage: React.FC = () => {
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
                   {([
-                    { key: 'loanNumber', label: 'Préstamo', align: 'left' },
-                    { key: 'clientName', label: 'Cliente', align: 'left' },
-                    { key: 'disbursedAmount', label: 'Monto', align: 'right' },
-                    { key: 'rate', label: 'Tasa', align: 'left' },
-                    { key: 'term', label: 'Plazo', align: 'left' },
-                    { key: 'totalBalance', label: 'Saldo', align: 'right' },
-                    { key: 'status', label: 'Estado', align: 'center' },
+                    { key: 'loanNumber', label: t('col.loan'), align: 'left' },
+                    { key: 'clientName', label: t('col.client'), align: 'left' },
+                    { key: 'disbursedAmount', label: t('col.amount'), align: 'right' },
+                    { key: 'rate', label: t('col.rate'), align: 'left' },
+                    { key: 'term', label: t('col.term'), align: 'left' },
+                    { key: 'totalBalance', label: t('col.balance'), align: 'right' },
+                    { key: 'status', label: t('col.status'), align: 'center' },
                   ] as { key: SortKey; label: string; align: string }[]).map(col => (
                     <th key={col.key}
                       className={`text-${col.align} py-3 px-4 font-semibold text-slate-700 cursor-pointer hover:bg-slate-50 select-none`}
@@ -485,15 +490,15 @@ const LoansPage: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      {loan.rate}% {loan.rateType === 'monthly' ? 'mens.' : 'anual'}
+                      {loan.rate}% {loan.rateType === 'monthly' ? t('loan.rate_monthly') : t('loan.rate_annual')}
                     </td>
                     <td className="py-3 px-4">
                       {loan.term} {
-                        loan.termUnit === 'months'   ? 'meses' :
-                        loan.termUnit === 'biweekly' ? 'quinc.' :
-                        loan.termUnit === 'weeks'    ? 'sem.' :
-                        loan.termUnit === 'days'     ? 'días' :
-                        loan.termUnit === 'years'    ? 'años' :
+                        loan.termUnit === 'months'   ? t('loan.unit.months') :
+                        loan.termUnit === 'biweekly' ? t('loan.unit.biweekly') :
+                        loan.termUnit === 'weeks'    ? t('loan.unit.weeks') :
+                        loan.termUnit === 'days'     ? t('loan.unit.days') :
+                        loan.termUnit === 'years'    ? t('loan.unit.years') :
                         loan.termUnit
                       }
                     </td>
@@ -502,7 +507,7 @@ const LoansPage: React.FC = () => {
                         {formatCurrency(loan.totalBalance, loan.currency || 'DOP')}
                       </span>
                       {loan.moraBalance > 0 && (
-                        <p className="text-xs text-red-500">mora: {formatCurrency(loan.moraBalance, loan.currency || 'DOP')}</p>
+                        <p className="text-xs text-red-500">{t('loan.mora_label')}: {formatCurrency(loan.moraBalance, loan.currency || 'DOP')}</p>
                       )}
                     </td>
                     <td className="py-3 px-4 text-center">
@@ -519,15 +524,15 @@ const LoansPage: React.FC = () => {
             </table>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-200 text-sm text-slate-500">
-            Mostrando {filtered.length} de {loans.length} préstamos
+            {t('loan.showing').replace('{n}', String(filtered.length)).replace('{m}', String(loans.length))}
           </div>
         </Card>
       ) : (
         <EmptyState
           icon={DollarSign}
-          title="Sin préstamos"
-          description={searchTerm || statusFilter ? 'No hay préstamos que coincidan con tu búsqueda' : 'Comienza creando tu primer préstamo'}
-          action={{ label: 'Nuevo Préstamo', onClick: () => navigate('/loans/new') }}
+          title={t('loan.empty_title')}
+          description={searchTerm || statusFilter ? t('loan.empty_filtered') : t('loan.empty_start')}
+          action={{ label: t('dash.quick.new_loan'), onClick: () => navigate('/loans/new') }}
         />
       )}
 
