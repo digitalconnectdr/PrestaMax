@@ -9,6 +9,7 @@ import { ClipboardList, Plus, X, CheckCircle, Clock, AlertCircle, MapPin, Eye } 
 import { formatCurrency, formatDate } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { useT } from '@/lib/i18n'
 
 interface Promise {
   id: string
@@ -32,14 +33,15 @@ interface ActiveLoan {
   totalBalance: number
 }
 
-const STATUS_INFO: Record<string, { label: string; cls: string; icon: React.FC<any> }> = {
-  pending: { label: 'Pendiente', cls: 'bg-amber-100 text-amber-700', icon: Clock },
-  fulfilled: { label: 'Cumplida', cls: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
-  broken: { label: 'Incumplida', cls: 'bg-red-100 text-red-700', icon: AlertCircle },
+const STATUS_INFO: Record<string, { labelKey: string; cls: string; icon: React.FC<any> }> = {
+  pending: { labelKey: 'prom.st_pending', cls: 'bg-amber-100 text-amber-700', icon: Clock },
+  fulfilled: { labelKey: 'prom.st_fulfilled', cls: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
+  broken: { labelKey: 'prom.st_broken', cls: 'bg-red-100 text-red-700', icon: AlertCircle },
 }
 
 const PaymentPromisesPage: React.FC = () => {
   const navigate = useNavigate()
+  const t = useT()
   const [promises, setPromises] = useState<Promise[]>([])
   const [activeLoans, setActiveLoans] = useState<ActiveLoan[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -57,7 +59,7 @@ const PaymentPromisesPage: React.FC = () => {
       const res = await api.get('/collections/promises')
       setPromises(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
-      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar promesas de pago')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(t('prom.load_error'))
     } finally {
       setIsLoading(false)
     }
@@ -70,7 +72,7 @@ const PaymentPromisesPage: React.FC = () => {
 
   const handleCreatePromise = async () => {
     if (!promiseForm.loanId || !promiseForm.promisedDate || !promiseForm.promisedAmount) {
-      toast.error('Completa todos los campos requeridos')
+      toast.error(t('prom.required_fields'))
       return
     }
     try {
@@ -82,12 +84,12 @@ const PaymentPromisesPage: React.FC = () => {
         notes: promiseForm.notes || null,
         requiresVisit: promiseForm.requiresVisit,
       })
-      toast.success('Promesa de pago registrada')
+      toast.success(t('coll.promise_saved'))
       setShowModal(false)
       setPromiseForm({ loanId: '', promisedDate: '', promisedAmount: '', notes: '', requiresVisit: false })
       fetchPromises()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al registrar promesa')
+      toast.error(err?.response?.data?.error || t('coll.promise_error'))
     } finally {
       setIsSubmitting(false)
     }
@@ -102,12 +104,12 @@ const PaymentPromisesPage: React.FC = () => {
         visitedAt: new Date().toISOString(),
         status: visitForm.status,
       })
-      toast.success('Visita registrada')
+      toast.success(t('prom.visit_saved'))
       setShowVisitModal(null)
       setVisitForm({ visitNotes: '', status: 'pending' })
       fetchPromises()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al registrar visita')
+      toast.error(err?.response?.data?.error || t('prom.visit_error'))
     } finally {
       setIsSubmitting(false)
     }
@@ -116,10 +118,10 @@ const PaymentPromisesPage: React.FC = () => {
   const handleUpdateStatus = async (id: string, status: string) => {
     try {
       await api.put(`/collections/promises/${id}`, { status })
-      toast.success('Estado actualizado')
+      toast.success(t('prom.status_updated'))
       fetchPromises()
     } catch (err: any) {
-      toast.error('Error al actualizar estado')
+      toast.error(t('prom.status_error'))
     }
   }
 
@@ -142,34 +144,34 @@ const PaymentPromisesPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="page-title">Promesas de Pago</h1>
-          <p className="text-slate-600 text-sm mt-1">Seguimiento de compromisos y visitas</p>
+          <h1 className="page-title">{t('nav.promises')}</h1>
+          <p className="text-slate-600 text-sm mt-1">{t('prom.subtitle')}</p>
         </div>
         <Button onClick={() => setShowModal(true)} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />Nueva Promesa
+          <Plus className="w-4 h-4" />{t('prom.new')}
         </Button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="text-center p-4 bg-amber-50 border-amber-200">
-          <p className="text-xs text-slate-500 uppercase font-medium">Pendientes</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('prom.pending')}</p>
           <p className="text-2xl font-bold text-amber-700 mt-1">{pendingCount}</p>
         </Card>
         <Card className="text-center p-4 bg-emerald-50 border-emerald-200">
-          <p className="text-xs text-slate-500 uppercase font-medium">Cumplidas</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('prom.fulfilled')}</p>
           <p className="text-2xl font-bold text-emerald-700 mt-1">{fulfilledCount}</p>
         </Card>
         <Card className="text-center p-4 bg-red-50 border-red-200">
-          <p className="text-xs text-slate-500 uppercase font-medium">Incumplidas</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('prom.broken')}</p>
           <p className="text-2xl font-bold text-red-700 mt-1">{brokenCount}</p>
         </Card>
         <Card className="text-center p-4 bg-purple-50 border-purple-200">
-          <p className="text-xs text-slate-500 uppercase font-medium">Visitas Pendientes</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('prom.visits_pending')}</p>
           <p className="text-2xl font-bold text-purple-700 mt-1">{visitRequired}</p>
         </Card>
         <Card className="text-center p-4">
-          <p className="text-xs text-slate-500 uppercase font-medium">Monto Prometido</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('prom.promised_amount')}</p>
           <p className="text-lg font-bold text-blue-700 mt-1">{formatCurrency(totalPending)}</p>
         </Card>
       </div>
@@ -177,17 +179,17 @@ const PaymentPromisesPage: React.FC = () => {
       {/* Filters */}
       <Card>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Input type="text" placeholder="Buscar por cliente o préstamo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <Input type="text" placeholder={t('prom.search_ph')} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">Todos los estados</option>
-            <option value="pending">Pendientes</option>
-            <option value="fulfilled">Cumplidas</option>
-            <option value="broken">Incumplidas</option>
+            <option value="">{t('cli.all_status')}</option>
+            <option value="pending">{t('prom.pending')}</option>
+            <option value="fulfilled">{t('prom.fulfilled')}</option>
+            <option value="broken">{t('prom.broken')}</option>
           </select>
           <select value={visitFilter} onChange={e => setVisitFilter(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">Todas</option>
-            <option value="yes">Requieren visita</option>
-            <option value="no">Sin visita requerida</option>
+            <option value="">{t('prom.all_visits')}</option>
+            <option value="yes">{t('prom.requires_visit')}</option>
+            <option value="no">{t('prom.no_visit')}</option>
           </select>
         </div>
       </Card>
@@ -199,14 +201,14 @@ const PaymentPromisesPage: React.FC = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200">
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Cliente</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Préstamo</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Fecha Prometida</th>
-                  <th className="text-right py-3 px-4 font-semibold text-slate-700">Monto</th>
-                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Visita</th>
-                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Estado</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Notas</th>
-                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Acciones</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.client')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.loan')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('prom.promised_date_col')}</th>
+                  <th className="text-right py-3 px-4 font-semibold text-slate-700">{t('col.amount')}</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">{t('prom.visit')}</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">{t('col.status')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('pay.notes')}</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">{t('col.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,15 +226,15 @@ const PaymentPromisesPage: React.FC = () => {
                       <td className="py-3 px-4 font-mono text-xs">{promise.loanNumber}</td>
                       <td className="py-3 px-4">
                         <span className={isOverdue ? 'text-red-600 font-medium' : ''}>{formatDate(promise.promisedDate)}</span>
-                        {isOverdue && <span className="ml-1 text-xs text-red-500">(vencida)</span>}
+                        {isOverdue && <span className="ml-1 text-xs text-red-500">{t('prom.overdue')}</span>}
                       </td>
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(promise.promisedAmount)}</td>
                       <td className="py-3 px-4 text-center">
                         {promise.requiresVisit ? (
                           promise.visitedAt ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle className="w-3.5 h-3.5"/>Visitado</span>
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle className="w-3.5 h-3.5"/>{t('prom.visited')}</span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-xs text-purple-700 font-medium"><MapPin className="w-3.5 h-3.5"/>Pendiente</span>
+                            <span className="inline-flex items-center gap-1 text-xs text-purple-700 font-medium"><MapPin className="w-3.5 h-3.5"/>{t('prom.pending_visit')}</span>
                           )
                         ) : (
                           <span className="text-xs text-slate-400">—</span>
@@ -240,23 +242,23 @@ const PaymentPromisesPage: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${info.cls}`}>
-                          <Icon className="w-3 h-3"/>{info.label}
+                          <Icon className="w-3 h-3"/>{t(info.labelKey)}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-slate-500 text-xs max-w-xs truncate">{promise.notes || '—'}</td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
                           {promise.requiresVisit && !promise.visitedAt && (
-                            <button onClick={()=>{setShowVisitModal(promise);setVisitForm({visitNotes:'',status:'pending'})}} className="p-1 hover:bg-purple-100 rounded text-purple-600" title="Registrar visita">
+                            <button onClick={()=>{setShowVisitModal(promise);setVisitForm({visitNotes:'',status:'pending'})}} className="p-1 hover:bg-purple-100 rounded text-purple-600" title={t('prom.register_visit_title')}>
                               <MapPin className="w-4 h-4"/>
                             </button>
                           )}
                           {promise.status === 'pending' && (
                             <>
-                              <button onClick={()=>handleUpdateStatus(promise.id,'fulfilled')} className="p-1 hover:bg-emerald-100 rounded text-emerald-600" title="Marcar cumplida">
+                              <button onClick={()=>handleUpdateStatus(promise.id,'fulfilled')} className="p-1 hover:bg-emerald-100 rounded text-emerald-600" title={t('prom.mark_fulfilled')}>
                                 <CheckCircle className="w-4 h-4"/>
                               </button>
-                              <button onClick={()=>handleUpdateStatus(promise.id,'broken')} className="p-1 hover:bg-red-100 rounded text-red-500" title="Marcar incumplida">
+                              <button onClick={()=>handleUpdateStatus(promise.id,'broken')} className="p-1 hover:bg-red-100 rounded text-red-500" title={t('prom.mark_broken')}>
                                 <AlertCircle className="w-4 h-4"/>
                               </button>
                             </>
@@ -274,7 +276,7 @@ const PaymentPromisesPage: React.FC = () => {
           </div>
         </Card>
       ) : (
-        <EmptyState icon={ClipboardList} title="Sin promesas de pago" description={searchTerm || statusFilter ? 'No coincide con los filtros' : 'Registra compromisos de pago de tus clientes'} action={{label:'Nueva Promesa',onClick:()=>setShowModal(true)}} />
+        <EmptyState icon={ClipboardList} title={t('prom.empty_title')} description={searchTerm || statusFilter ? t('prom.empty_filtered') : t('prom.empty_desc')} action={{label:t('prom.new'),onClick:()=>setShowModal(true)}} />
       )}
 
       {/* Create Promise Modal */}
@@ -282,46 +284,46 @@ const PaymentPromisesPage: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="section-title">Nueva Promesa de Pago</h2>
+              <h2 className="section-title">{t('prom.new_title')}</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Préstamo *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('pay.loan_label')}</label>
                 <select value={promiseForm.loanId} onChange={e => {
                   const loan = activeLoans.find(l => l.id === e.target.value)
                   setPromiseForm(f => ({ ...f, loanId: e.target.value, promisedAmount: loan ? String(loan.totalBalance) : f.promisedAmount }))
                 }} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">-- Selecciona el préstamo --</option>
+                  <option value="">{t('prom.select_loan')}</option>
                   {activeLoans.map(l => <option key={l.id} value={l.id}>{l.loanNumber} – {l.clientName} ({formatCurrency(l.totalBalance)})</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Fecha de la Promesa *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('prom.promise_date')}</label>
                 <input type="date" value={promiseForm.promisedDate} min={new Date().toISOString().split('T')[0]}
                   onChange={e => setPromiseForm(f => ({ ...f, promisedDate: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Monto Prometido *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('coll.promised_amount')}</label>
                 <input type="number" step="0.01" value={promiseForm.promisedAmount}
                   onChange={e => setPromiseForm(f => ({ ...f, promisedAmount: e.target.value }))}
                   placeholder="0.00" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Notas (opcional)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('pay.notes')} ({t('common.optional')})</label>
                 <textarea value={promiseForm.notes} onChange={e => setPromiseForm(f => ({ ...f, notes: e.target.value }))} rows={2}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="requires-visit" checked={promiseForm.requiresVisit} onChange={e => setPromiseForm(f => ({ ...f, requiresVisit: e.target.checked }))} className="rounded text-blue-600" />
-                <label htmlFor="requires-visit" className="text-sm font-medium text-slate-700 flex items-center gap-1"><MapPin className="w-4 h-4 text-purple-600"/>Requiere visita del cobrador</label>
+                <label htmlFor="requires-visit" className="text-sm font-medium text-slate-700 flex items-center gap-1"><MapPin className="w-4 h-4 text-purple-600"/>{t('prom.requires_visit_label')}</label>
               </div>
             </div>
             <div className="flex gap-2 mt-5">
-              <Button variant="outline" className="flex-1" onClick={() => setShowModal(false)} disabled={isSubmitting}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowModal(false)} disabled={isSubmitting}>{t('common.cancel')}</Button>
               <Button className="flex-1" onClick={handleCreatePromise} disabled={isSubmitting || !promiseForm.loanId || !promiseForm.promisedDate || !promiseForm.promisedAmount}>
-                {isSubmitting ? 'Guardando...' : 'Registrar Promesa'}
+                {isSubmitting ? t('pay.saving') : t('coll.register_promise')}
               </Button>
             </div>
           </Card>
@@ -333,28 +335,28 @@ const PaymentPromisesPage: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title flex items-center gap-2"><MapPin className="w-5 h-5 text-purple-600"/>Registrar Visita</h2>
+              <h2 className="section-title flex items-center gap-2"><MapPin className="w-5 h-5 text-purple-600"/>{t('prom.register_visit')}</h2>
               <button onClick={() => setShowVisitModal(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-sm text-slate-600 mb-4">Cliente: <strong>{showVisitModal.clientName}</strong> · {showVisitModal.loanNumber}</p>
+            <p className="text-sm text-slate-600 mb-4">{t('prom.client')}: <strong>{showVisitModal.clientName}</strong> · {showVisitModal.loanNumber}</p>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Resultado de la visita</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('prom.visit_result')}</label>
                 <select value={visitForm.status} onChange={e => setVisitForm(f => ({ ...f, status: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="pending">Pendiente de pago</option>
-                  <option value="fulfilled">Pagó (cumplida)</option>
-                  <option value="broken">No pagó (incumplida)</option>
+                  <option value="pending">{t('prom.vr_pending')}</option>
+                  <option value="fulfilled">{t('prom.vr_fulfilled')}</option>
+                  <option value="broken">{t('prom.vr_broken')}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Notas de la visita</label>
-                <textarea value={visitForm.visitNotes} onChange={e => setVisitForm(f => ({ ...f, visitNotes: e.target.value }))} rows={3} placeholder="¿Qué ocurrió en la visita?" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('prom.visit_notes')}</label>
+                <textarea value={visitForm.visitNotes} onChange={e => setVisitForm(f => ({ ...f, visitNotes: e.target.value }))} rows={3} placeholder={t('prom.visit_notes_ph')} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
             <div className="flex gap-2 mt-5">
-              <Button variant="outline" className="flex-1" onClick={() => setShowVisitModal(null)} disabled={isSubmitting}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowVisitModal(null)} disabled={isSubmitting}>{t('common.cancel')}</Button>
               <Button className="flex-1 bg-purple-600 hover:bg-purple-700" onClick={handleRegisterVisit} disabled={isSubmitting}>
-                {isSubmitting ? 'Registrando...' : 'Registrar Visita'}
+                {isSubmitting ? t('pay.registering') : t('prom.register_visit')}
               </Button>
             </div>
           </Card>
