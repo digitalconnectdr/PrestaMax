@@ -11,6 +11,7 @@ import { FileCheck, Eye, PenLine, Plus, CheckCircle, Clock, Printer, Trash2 } fr
 import { formatDate } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { useT } from '@/lib/i18n'
 
 interface Contract {
   id: string
@@ -33,16 +34,17 @@ interface Loan {
   status: string
 }
 
-const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  generated: { label: 'Generado', cls: 'bg-amber-100 text-amber-700' },
-  signed: { label: 'Firmado', cls: 'bg-emerald-100 text-emerald-700' },
-  voided: { label: 'Anulado', cls: 'bg-slate-100 text-slate-500' },
+const STATUS_LABELS: Record<string, { labelKey: string; cls: string }> = {
+  generated: { labelKey: 'ctr.st_generated', cls: 'bg-amber-100 text-amber-700' },
+  signed: { labelKey: 'ctr.st_signed', cls: 'bg-emerald-100 text-emerald-700' },
+  voided: { labelKey: 'ctr.st_voided', cls: 'bg-slate-100 text-slate-500' },
 }
 
 const ContractsPage: React.FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { can } = usePermission()
+  const t = useT()
   const { confirm, ConfirmHost } = useConfirm()
   const [contracts, setContracts] = useState<Contract[]>([])
   const [loans, setLoans] = useState<Loan[]>([])
@@ -60,7 +62,7 @@ const ContractsPage: React.FC = () => {
       const res = await api.get('/contracts')
       setContracts(res.data || [])
     } catch (err) {
-      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar contratos')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(t('ctr.load_error'))
     } finally {
       setIsLoading(false)
     }
@@ -87,18 +89,18 @@ const ContractsPage: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!selectedLoanId) {
-      toast.error('Selecciona un préstamo')
+      toast.error(t('ctr.select_loan_err'))
       return
     }
     try {
       setIsGenerating(true)
       await api.post('/contracts', { loanId: selectedLoanId })
-      toast.success('Contrato generado exitosamente')
+      toast.success(t('ctr.generated_ok'))
       setShowGenerateModal(false)
       setSelectedLoanId('')
       fetchContracts()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al generar contrato')
+      toast.error(err?.response?.data?.error || t('ctr.generate_error'))
     } finally {
       setIsGenerating(false)
     }
@@ -107,7 +109,7 @@ const ContractsPage: React.FC = () => {
   const handlePrintContract = (contract: Contract) => {
     const win = window.open('', '_blank', 'width=900,height=700')
     if (!win) {
-      toast.error('Por favor permite las ventanas emergentes para imprimir')
+      toast.error(t('ctr.popup_err'))
       return
     }
 
@@ -138,29 +140,29 @@ const ContractsPage: React.FC = () => {
   }
 
   const handleDelete = async (contract: Contract) => {
-    const ok_ = await confirm({ title: 'Confirmar', message: `¿Eliminar contrato ${contract.contractNumber}? Esta acción no se puede deshacer.`, variant: 'warning' })
+    const ok_ = await confirm({ title: t('common.confirm'), message: t('ctr.delete_confirm').replace('{n}', contract.contractNumber), variant: 'warning' })
     if (!ok_) return
     try {
       await api.delete(`/contracts/${contract.id}`)
-      toast.success('Contrato eliminado')
+      toast.success(t('ctr.deleted'))
       fetchContracts()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al eliminar contrato')
+      toast.error(err?.response?.data?.error || t('ctr.delete_error'))
     }
   }
 
   const handleSign = async (contract: Contract) => {
-    const signedBy = prompt('Nombre del firmante (o deja vacío para firma digital):')
+    const signedBy = prompt(t('ctr.sign_prompt'))
     if (signedBy === null) return
     try {
       await api.post(`/contracts/${contract.id}/sign`, {
-        signedBy: signedBy || 'Firma digital',
+        signedBy: signedBy || t('ctr.digital_sign'),
         signatureEvidenceUrl: null,
       })
-      toast.success('Contrato firmado')
+      toast.success(t('ctr.signed_ok'))
       fetchContracts()
     } catch (err) {
-      toast.error('Error al firmar contrato')
+      toast.error(t('ctr.sign_error'))
     }
   }
 
@@ -170,13 +172,13 @@ const ContractsPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="page-title">Contratos</h1>
-          <p className="text-slate-600 text-sm mt-1">Gestión de contratos de préstamos</p>
+          <h1 className="page-title">{t('nav.contracts')}</h1>
+          <p className="text-slate-600 text-sm mt-1">{t('ctr.subtitle')}</p>
         </div>
         {can('contracts.create') && (
           <Button onClick={() => setShowGenerateModal(true)} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
-            Generar Contrato
+            {t('ctr.generate')}
           </Button>
         )}
       </div>
@@ -186,7 +188,7 @@ const ContractsPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Input
             type="text"
-            placeholder="Buscar por número, cliente o préstamo..."
+            placeholder={t('ctr.search_ph')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -195,19 +197,19 @@ const ContractsPage: React.FC = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">Todos los estados</option>
-            <option value="generated">Generados</option>
-            <option value="signed">Firmados</option>
-            <option value="voided">Anulados</option>
+            <option value="">{t('cli.all_status')}</option>
+            <option value="generated">{t('ctr.f_generated')}</option>
+            <option value="signed">{t('ctr.f_signed')}</option>
+            <option value="voided">{t('ctr.f_voided')}</option>
           </select>
           <select
             value={signatureFilter}
             onChange={(e) => setSignatureFilter(e.target.value)}
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">Todas las firmas</option>
-            <option value="physical">Física</option>
-            <option value="digital">Digital</option>
+            <option value="">{t('ctr.all_signatures')}</option>
+            <option value="physical">{t('ctr.sig_physical')}</option>
+            <option value="digital">{t('ctr.sig_digital')}</option>
           </select>
         </div>
       </Card>
@@ -219,13 +221,13 @@ const ContractsPage: React.FC = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200">
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Número</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Fecha</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Cliente</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Préstamo</th>
-                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Firma</th>
-                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Estado</th>
-                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Acciones</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.number')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.date')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.client')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.loan')}</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">{t('ctr.signature')}</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">{t('col.status')}</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">{t('col.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -245,11 +247,11 @@ const ContractsPage: React.FC = () => {
                         </button>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <span className="text-xs capitalize">{contract.signatureMode === 'physical' ? 'Física' : 'Digital'}</span>
+                        <span className="text-xs capitalize">{contract.signatureMode === 'physical' ? t('ctr.sig_physical') : t('ctr.sig_digital')}</span>
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusInfo.cls}`}>
-                          {statusInfo.label}
+                          {t(statusInfo.labelKey)}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -259,14 +261,14 @@ const ContractsPage: React.FC = () => {
                               <button
                                 onClick={() => setShowContentModal(contract)}
                                 className="p-1 hover:bg-blue-100 rounded text-blue-600 transition-colors"
-                                title="Ver contrato"
+                                title={t('ctr.view')}
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handlePrintContract(contract)}
                                 className="p-1 hover:bg-slate-100 rounded text-slate-600 transition-colors"
-                                title="Imprimir / Guardar PDF"
+                                title={t('ctr.print')}
                               >
                                 <Printer className="w-4 h-4" />
                               </button>
@@ -278,7 +280,7 @@ const ContractsPage: React.FC = () => {
                                 <button
                                   onClick={() => handleSign(contract)}
                                   className="p-1 hover:bg-green-100 rounded text-green-600 transition-colors"
-                                  title="Firmar"
+                                  title={t('ctr.sign')}
                                 >
                                   <PenLine className="w-4 h-4" />
                                 </button>
@@ -287,7 +289,7 @@ const ContractsPage: React.FC = () => {
                                 <button
                                   onClick={() => handleDelete(contract)}
                                   className="p-1 hover:bg-red-100 rounded text-red-500 transition-colors"
-                                  title="Eliminar contrato"
+                                  title={t('ctr.delete')}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -297,7 +299,7 @@ const ContractsPage: React.FC = () => {
                           {contract.status === 'signed' && (
                             <span className="flex items-center gap-1 text-xs text-emerald-600">
                               <CheckCircle className="w-3 h-3" />
-                              {contract.signedAt ? formatDate(contract.signedAt) : 'Firmado'}
+                              {contract.signedAt ? formatDate(contract.signedAt) : t('ctr.signed_word')}
                             </span>
                           )}
                         </div>
@@ -312,9 +314,9 @@ const ContractsPage: React.FC = () => {
       ) : (
         <EmptyState
           icon={FileCheck}
-          title="Sin contratos"
-          description={searchTerm || statusFilter ? 'No hay contratos que coincidan' : 'Los contratos generados aparecerán aquí'}
-          action={can('contracts.create') ? { label: 'Generar Contrato', onClick: () => setShowGenerateModal(true) } : undefined}
+          title={t('ctr.empty_title')}
+          description={searchTerm || statusFilter ? t('ctr.empty_filtered') : t('ctr.empty_desc')}
+          action={can('contracts.create') ? { label: t('ctr.generate'), onClick: () => setShowGenerateModal(true) } : undefined}
         />
       )}
 
@@ -323,37 +325,37 @@ const ContractsPage: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title">Generar Contrato</h2>
+              <h2 className="section-title">{t('ctr.generate')}</h2>
               <button onClick={() => setShowGenerateModal(false)} className="p-1 hover:bg-slate-100 rounded">
                 ✕
               </button>
             </div>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Seleccionar Préstamo</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('ctr.select_loan_label')}</label>
               <select
                 value={selectedLoanId}
                 onChange={(e) => setSelectedLoanId(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">-- Selecciona un préstamo activo --</option>
+                <option value="">{t('ctr.select_loan_opt')}</option>
                 {loans.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.loanNumber} – {l.clientName}
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-slate-400 mt-1">Solo se muestran préstamos activos</p>
+              <p className="text-xs text-slate-400 mt-1">{t('ctr.only_active')}</p>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => setShowGenerateModal(false)}>
-                Cancelar
+                {t('common.cancel')}
               </Button>
               <Button
                 className="flex-1 bg-blue-600"
                 onClick={handleGenerate}
                 disabled={isGenerating || !selectedLoanId}
               >
-                {isGenerating ? 'Generando...' : 'Generar'}
+                {isGenerating ? t('ctr.generating') : t('ctr.generate_btn')}
               </Button>
             </div>
           </Card>
@@ -383,8 +385,8 @@ const ContractsPage: React.FC = () => {
                 <div className="flex items-center justify-center h-32 text-slate-400">
                   <div className="text-center">
                     <FileCheck className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Contrato sin contenido (plantilla no configurada)</p>
-                    <p className="text-xs mt-1">Ve a Configuración → Plantillas para configurar el contenido</p>
+                    <p className="text-sm">{t('ctr.no_content')}</p>
+                    <p className="text-xs mt-1">{t('ctr.no_content_hint')}</p>
                   </div>
                 </div>
               )}
@@ -394,13 +396,13 @@ const ContractsPage: React.FC = () => {
                 {showContentModal.signedAt && (
                   <span className="flex items-center gap-1 text-emerald-600">
                     <CheckCircle className="w-4 h-4" />
-                    Firmado {formatDate(showContentModal.signedAt)} por {showContentModal.signedBy}
+                    {t('ctr.signed_by').replace('{date}', formatDate(showContentModal.signedAt)).replace('{name}', showContentModal.signedBy || '')}
                   </span>
                 )}
                 {!showContentModal.signedAt && (
                   <span className="flex items-center gap-1 text-amber-600">
                     <Clock className="w-4 h-4" />
-                    Pendiente de firma
+                    {t('ctr.pending_sign')}
                   </span>
                 )}
               </div>
@@ -412,10 +414,10 @@ const ContractsPage: React.FC = () => {
                     onClick={() => handlePrintContract(showContentModal)}
                   >
                     <Printer className="w-4 h-4" />
-                    Imprimir / PDF
+                    {t('ctr.print_pdf')}
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => setShowContentModal(null)}>Cerrar</Button>
+                <Button variant="outline" onClick={() => setShowContentModal(null)}>{t('common.close')}</Button>
               </div>
             </div>
           </Card>
