@@ -520,13 +520,14 @@ const LandingPage: React.FC = () => {
             <div>
               <h4 className="text-sm font-semibold text-white">{t('lp.footer.contact')}</h4>
               <ul className="mt-3 space-y-2 text-sm">
+                <li><Link to="/contact" className="hover:text-white">{t('lp.footer.contact_us')}</Link></li>
                 <li>
                   <span className="block text-xs text-slate-500">{t('lp.footer.sales')}</span>
-                  <a href="mailto:prestamax@digitalconnectdr.com" className="hover:text-white break-all">prestamax@digitalconnectdr.com</a>
+                  <a href="mailto:prestamax@digitalconnectdr.com" className="hover:text-white text-xs">prestamax@digitalconnectdr.com</a>
                 </li>
                 <li>
                   <span className="block text-xs text-slate-500">{t('lp.footer.support')}</span>
-                  <a href="mailto:prestamaxsupport@digitalconnectdr.com" className="hover:text-white break-all">prestamaxsupport@digitalconnectdr.com</a>
+                  <a href="mailto:prestamaxsupport@digitalconnectdr.com" className="hover:text-white text-xs">prestamaxsupport@digitalconnectdr.com</a>
                 </li>
               </ul>
             </div>

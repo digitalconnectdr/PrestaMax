@@ -418,6 +418,19 @@ const TR: Record<string, Tri> = {
   'lp.footer.contact': { es: 'Contacto', en: 'Contact', pt: 'Contato' },
   'lp.footer.sales':   { es: 'Ventas e información', en: 'Sales & info', pt: 'Vendas e informações' },
   'lp.footer.support': { es: 'Soporte', en: 'Support', pt: 'Suporte' },
+  'lp.footer.contact_us': { es: 'Contáctanos', en: 'Contact us', pt: 'Fale conosco' },
+
+  // ── Página Contáctanos ───────────────────────────────────────────────────────
+  'contact.title':        { es: 'Contáctanos', en: 'Contact us', pt: 'Fale conosco' },
+  'contact.subtitle':     { es: 'Estamos aquí para ayudarte. Escríbenos y te respondemos lo antes posible.', en: "We're here to help. Write to us and we'll reply as soon as possible.", pt: 'Estamos aqui para ajudar. Escreva-nos e responderemos o quanto antes.' },
+  'contact.sales_title':  { es: 'Ventas e información', en: 'Sales & info', pt: 'Vendas e informações' },
+  'contact.sales_desc':   { es: '¿Quieres conocer los planes, precios o agendar una demostración? Escríbenos.', en: 'Want to know about plans, pricing or schedule a demo? Write to us.', pt: 'Quer conhecer planos, preços ou agendar uma demonstração? Escreva-nos.' },
+  'contact.support_title':{ es: 'Soporte técnico', en: 'Technical support', pt: 'Suporte técnico' },
+  'contact.support_desc': { es: '¿Ya eres cliente y necesitas ayuda con la plataforma? Estamos para asistirte.', en: 'Already a customer and need help with the platform? We are here to assist.', pt: 'Já é cliente e precisa de ajuda com a plataforma? Estamos para ajudar.' },
+  'contact.write_btn':    { es: 'Enviar correo', en: 'Send email', pt: 'Enviar e-mail' },
+  'contact.back_home':    { es: 'Volver al inicio', en: 'Back to home', pt: 'Voltar ao início' },
+  'contact.response_note':{ es: 'Respondemos en un máximo de 24 horas hábiles.', en: 'We reply within 24 business hours.', pt: 'Respondemos em até 24 horas úteis.' },
+  'contact.hours':        { es: 'Horario: Lun–Vie, 9:00–18:00 (GMT-4)', en: 'Hours: Mon–Fri, 9:00 AM–6:00 PM (GMT-4)', pt: 'Horário: Seg–Sex, 9:00–18:00 (GMT-4)' },
 }
 
 // Diccionarios derivados por locale (compatibilidad con el lookup existente)

@@ -44,6 +44,7 @@ import LoanRequestPublicPage from '@/pages/public/LoanRequestPublicPage'
 import TermsPage from '@/pages/public/TermsPage'
 import PrivacyPage from '@/pages/public/PrivacyPage'
 import LandingPage from '@/pages/public/LandingPage'
+import ContactPage from '@/pages/public/ContactPage'
 import HelpPage from '@/pages/help/HelpPage'
 import LoanRequestsPage from '@/pages/requests/LoanRequestsPage'
 import LoanCalculatorPage from '@/pages/calculator/LoanCalculatorPage'
@@ -133,6 +134,7 @@ const AppRoutes: React.FC = () => {
         </Route>
       )}
 
+      <Route path="/contact" element={<ContactPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
 

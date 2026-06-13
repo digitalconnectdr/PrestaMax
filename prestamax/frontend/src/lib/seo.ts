@@ -5,7 +5,7 @@
 // para crawlers que ejecutan JS (Googlebot).
 
 // Rutas públicas indexables (todo lo demás → noindex)
-const PUBLIC_INDEXABLE = new Set<string>(['/', '/terms', '/privacy'])
+const PUBLIC_INDEXABLE = new Set<string>(['/', '/terms', '/privacy', '/contact'])
 
 function setMetaRobots(content: string) {
   let el = document.querySelector('meta[name="robots"]') as HTMLMetaElement | null
