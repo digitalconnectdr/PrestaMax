@@ -8,6 +8,7 @@
 import { Router, Response } from 'express';
 import { getDb } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { getReportLang, reportT } from '../lib/reportI18n';
 
 const router = Router();
 
@@ -58,9 +59,10 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
+    const tr = reportT(getReportLang(req));
     // FIX (Jun 2026): agregar columna Moneda para multi-tenant DOP+USD.
     // Header cambia: Debe = entradas a la caja; Haber = salidas.
-    let csv = csvLine(['Fecha', 'Hora', 'Tipo', 'Concepto', 'Cliente', 'Prestamo', 'Moneda', 'Debe (entrada)', 'Haber (salida)', 'Cuenta Bancaria', 'Referencia']);
+    let csv = csvLine([tr('col.date'), tr('col.time'), tr('col.type'), tr('col.concept'), tr('col.client'), tr('col.loan'), tr('col.currency'), tr('col.debit'), tr('col.credit'), tr('col.bank'), tr('col.reference')]);
 
     // FIX: usar date() para que BETWEEN funcione con fechas ISO completas
     // (sin date() '2026-06-30T15:00:00Z' > '2026-06-30' lexicograficamente).
@@ -77,7 +79,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
     `).all(req.tenant.id, from, to) as any[];
     for (const d of disbursements) {
       // FIX: desembolso es SALIDA de banco → Haber, no Debe (estaba invertido).
-      csv += csvLine([formatDate(d.fecha), formatTime(d.fecha), 'Desembolso', `Préstamo ${d.loan_number}`, d.cliente || '', d.loan_number, d.currency || 'DOP', 0, d.monto, d.cuenta || '', d.loan_number]);
+      csv += csvLine([formatDate(d.fecha), formatTime(d.fecha), tr('type.disbursement'), `${tr('concept.loan')} ${d.loan_number}`, d.cliente || '', d.loan_number, d.currency || 'DOP', 0, d.monto, d.cuenta || '', d.loan_number]);
     }
 
     // FIX: filtrar pagos contra prestamos anulados (l.is_voided=0).
@@ -96,7 +98,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
     `).all(req.tenant.id, from, to) as any[];
     for (const p of payments) {
       // FIX: pago recibido es ENTRADA al banco → Debe, no Haber (estaba invertido).
-      csv += csvLine([formatDate(p.fecha), formatTime(p.fecha), 'Pago Recibido', `Pago ${p.payment_number}`, p.cliente || '', p.loan_number || '', p.currency || 'DOP', p.monto, 0, p.cuenta || '', p.payment_number]);
+      csv += csvLine([formatDate(p.fecha), formatTime(p.fecha), tr('type.payment'), `${tr('concept.payment')} ${p.payment_number}`, p.cliente || '', p.loan_number || '', p.currency || 'DOP', p.monto, 0, p.cuenta || '', p.payment_number]);
     }
 
     const incomes = db.prepare(`
@@ -110,7 +112,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
     `).all(req.tenant.id, from, to) as any[];
     for (const i of incomes) {
       // Ingreso es entrada al banco → Debe (esto ya estaba correcto en la version vieja como Haber, ahora coherente con desembolso/pago).
-      csv += csvLine([formatDate(i.fecha), formatTime(i.fecha), 'Ingreso', `${i.category}${i.description ? ': '+i.description : ''}`, '', '', i.currency, i.monto, 0, i.cuenta || '', '']);
+      csv += csvLine([formatDate(i.fecha), formatTime(i.fecha), tr('type.income'), `${i.category}${i.description ? ': '+i.description : ''}`, '', '', i.currency, i.monto, 0, i.cuenta || '', '']);
     }
 
     const expenses = db.prepare(`
@@ -124,10 +126,10 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
     `).all(req.tenant.id, from, to) as any[];
     for (const e of expenses) {
       // Gasto es salida del banco → Haber (coherente).
-      csv += csvLine([formatDate(e.fecha), formatTime(e.fecha), 'Gasto', `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.currency, 0, e.monto, e.cuenta || '', '']);
+      csv += csvLine([formatDate(e.fecha), formatTime(e.fecha), tr('type.expense'), `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.currency, 0, e.monto, e.cuenta || '', '']);
     }
 
-    sendCsv(res, `libro-diario_${from}_${to}.csv`, csv);
+    sendCsv(res, `${tr('file.journal')}_${from}_${to}.csv`, csv);
   } catch (e: any) {
     console.error('journal export error:', e);
     res.status(500).json({ error: e.message || 'Failed' });
@@ -138,9 +140,10 @@ router.get('/by-account', authenticate, requireTenant, requirePermission('report
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
+    const tr = reportT(getReportLang(req));
     // FIX (Jun 2026): header generico 'Monto' en vez de 'RD$' fijo. Cada cuenta
     // tiene su propia moneda y los totales NO se convierten (saldos en su moneda nativa).
-    let csv = csvLine(['Cuenta Bancaria', 'Banco', 'Moneda', 'Entradas', 'Salidas', 'Neto', '# Movimientos', 'Saldo Inicial', 'Saldo Actual']);
+    let csv = csvLine([tr('col.bank'), tr('col.bank_name'), tr('col.currency'), tr('col.inflows'), tr('col.outflows'), tr('col.net'), tr('col.movements'), tr('col.opening'), tr('col.closing')]);
 
     const accounts = db.prepare(`SELECT id, bank_name, account_number, currency, initial_balance, current_balance FROM bank_accounts WHERE tenant_id=?`).all(req.tenant.id) as any[];
     for (const acc of accounts) {
@@ -185,7 +188,7 @@ router.get('/by-account', authenticate, requireTenant, requirePermission('report
       ]);
     }
 
-    sendCsv(res, `mayor-por-cuenta_${from}_${to}.csv`, csv);
+    sendCsv(res, `${tr('file.by_account')}_${from}_${to}.csv`, csv);
   } catch (e: any) {
     console.error('by-account export error:', e);
     res.status(500).json({ error: e.message || 'Failed' });
@@ -196,6 +199,7 @@ router.get('/summary', authenticate, requireTenant, requirePermission('reports.d
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
+    const tr = reportT(getReportLang(req));
 
     // FIX (Jun 2026): agrupar por moneda. NO sumamos DOP+USD.
     // FIX: date() en BETWEEN. Filtrar pagos contra prestamos anulados.
@@ -214,8 +218,8 @@ router.get('/summary', authenticate, requireTenant, requirePermission('reports.d
     const currencies = currenciesRows.map(r => r.currency).filter(Boolean);
     if (currencies.length === 0) currencies.push('DOP');
 
-    let csv = csvLine(['Concepto', 'Moneda', 'Monto', 'Detalle']);
-    csv += csvLine([`PERIODO: ${from} a ${to}`, '', '', '']);
+    let csv = csvLine([tr('col.concept'), tr('col.currency'), tr('col.amount'), tr('col.detail')]);
+    csv += csvLine([`${from} → ${to}`, '', '', '']);
     csv += '\n';
 
     for (const cur of currencies) {
@@ -276,27 +280,27 @@ router.get('/summary', authenticate, requireTenant, requirePermission('reports.d
       if (grossIncome === 0 && totalExpenses === 0 && (desembolsos.v || 0) === 0 && (capital.v || 0) === 0) continue;
 
       csv += csvLine([`=== ${cur} ===`, '', '', '']);
-      csv += csvLine(['INGRESOS', cur, '', '']);
-      csv += csvLine(['  Interés cobrado', cur, (interestMora.interest || 0).toFixed(2), `${interestMora.cnt} pagos`]);
-      csv += csvLine(['  Mora cobrada', cur, (interestMora.mora || 0).toFixed(2), '']);
-      csv += csvLine(['  Otros ingresos', cur, (otherIncomes.v || 0).toFixed(2), `${otherIncomes.c || 0} entradas`]);
-      csv += csvLine(['TOTAL INGRESOS BRUTOS', cur, grossIncome.toFixed(2), '']);
+      csv += csvLine([tr('sum.income'), cur, '', '']);
+      csv += csvLine([tr('sum.interest'), cur, (interestMora.interest || 0).toFixed(2), tr('d.payments', interestMora.cnt)]);
+      csv += csvLine([tr('sum.mora'), cur, (interestMora.mora || 0).toFixed(2), '']);
+      csv += csvLine([tr('sum.other_income'), cur, (otherIncomes.v || 0).toFixed(2), tr('d.entries', otherIncomes.c || 0)]);
+      csv += csvLine([tr('sum.total_gross'), cur, grossIncome.toFixed(2), '']);
       csv += '\n';
-      csv += csvLine(['GASTOS POR CATEGORIA', cur, '', '']);
+      csv += csvLine([tr('sum.expenses_cat'), cur, '', '']);
       for (const e of expenses) {
-        csv += csvLine([`  ${e.category}`, cur, (e.v || 0).toFixed(2), `${e.c} movimientos`]);
+        csv += csvLine([`  ${e.category}`, cur, (e.v || 0).toFixed(2), tr('d.movements', e.c)]);
       }
-      csv += csvLine(['TOTAL GASTOS', cur, totalExpenses.toFixed(2), '']);
+      csv += csvLine([tr('sum.total_expenses'), cur, totalExpenses.toFixed(2), '']);
       csv += '\n';
-      csv += csvLine(['UTILIDAD NETA', cur, netIncome.toFixed(2), grossIncome ? `${((netIncome/grossIncome)*100).toFixed(1)}% margen` : '']);
+      csv += csvLine([tr('sum.net'), cur, netIncome.toFixed(2), grossIncome ? tr('d.margin', ((netIncome/grossIncome)*100).toFixed(1)) : '']);
       csv += '\n';
-      csv += csvLine(['INFORMACION ADICIONAL', cur, '', '']);
-      csv += csvLine(['  Capital desembolsado', cur, (desembolsos.v || 0).toFixed(2), `${desembolsos.c} préstamos`]);
-      csv += csvLine(['  Capital recuperado', cur, (capital.v || 0).toFixed(2), 'amortización a capital']);
+      csv += csvLine([tr('sum.additional'), cur, '', '']);
+      csv += csvLine([tr('sum.capital_out'), cur, (desembolsos.v || 0).toFixed(2), tr('d.loans', desembolsos.c)]);
+      csv += csvLine([tr('sum.capital_back'), cur, (capital.v || 0).toFixed(2), tr('d.amortization')]);
       csv += '\n';
     }
 
-    sendCsv(res, `resumen-financiero_${from}_${to}.csv`, csv);
+    sendCsv(res, `${tr('file.summary')}_${from}_${to}.csv`, csv);
   } catch (e: any) {
     console.error('summary export error:', e);
     res.status(500).json({ error: e.message || 'Failed' });

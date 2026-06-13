@@ -47,6 +47,8 @@ const TR: Record<string, Tri> = {
   'common.loading':  { es: 'Cargando...', en: 'Loading...', pt: 'Carregando...' },
   'common.language': { es: 'Idioma',     en: 'Language',    pt: 'Idioma' },
   'common.logout':   { es: 'Cerrar sesión', en: 'Sign out', pt: 'Sair' },
+  'common.from':     { es: 'Desde', en: 'From', pt: 'De' },
+  'common.to':       { es: 'Hasta', en: 'To',   pt: 'Até' },
 
   // ── Header ─────────────────────────────────────────────────────────────────
   'header.search_placeholder': { es: 'Buscar clientes, préstamos…', en: 'Search clients, loans…', pt: 'Buscar clientes, empréstimos…' },
@@ -150,6 +152,28 @@ const TR: Record<string, Tri> = {
   'dash.quick.new_client':    { es: 'Nuevo Cliente',    en: 'New Client',       pt: 'Novo Cliente' },
   'dash.quick.new_loan':      { es: 'Nuevo Préstamo',   en: 'New Loan',         pt: 'Novo Empréstimo' },
   'dash.quick.register_payment': { es: 'Registrar Pago', en: 'Register Payment', pt: 'Registrar Pagamento' },
+
+  // ── Reportes / exportaciones (chrome comun de PDF/CSV) ───────────────────────
+  'report.generated_on':  { es: 'Generado el', en: 'Generated on', pt: 'Gerado em' },
+  'report.footer':        { es: 'PrestaMax Sistema de Préstamos — Documento generado automáticamente', en: 'PrestaMax Loan System — Automatically generated document', pt: 'PrestaMax Sistema de Empréstimos — Documento gerado automaticamente' },
+  'report.popup_blocked': { es: 'Permite las ventanas emergentes para generar el PDF', en: 'Allow pop-ups to generate the PDF', pt: 'Permita pop-ups para gerar o PDF' },
+
+  // ── Exportar Contabilidad ────────────────────────────────────────────────────
+  'acct.subtitle':       { es: 'Descarga reportes en formato CSV para tu contador o para tus registros. Compatible con Excel, Google Sheets y cualquier hoja de cálculo.', en: 'Download CSV reports for your accountant or records. Works with Excel, Google Sheets and any spreadsheet.', pt: 'Baixe relatórios em CSV para seu contador ou registros. Compatível com Excel, Google Sheets e qualquer planilha.' },
+  'acct.period':         { es: 'Período',       en: 'Period',        pt: 'Período' },
+  'acct.current_month':  { es: 'Mes actual',    en: 'Current month', pt: 'Mês atual' },
+  'acct.prev_month':     { es: 'Mes anterior',  en: 'Previous month',pt: 'Mês anterior' },
+  'acct.current_year':   { es: 'Año actual',    en: 'Current year',  pt: 'Ano atual' },
+  'acct.download_csv':   { es: 'Descargar CSV', en: 'Download CSV',  pt: 'Baixar CSV' },
+  'acct.downloaded':     { es: 'Archivo descargado', en: 'File downloaded', pt: 'Arquivo baixado' },
+  'acct.download_error': { es: 'No se pudo descargar', en: 'Download failed', pt: 'Falha ao baixar' },
+  'acct.tip':            { es: 'Los archivos CSV incluyen un BOM UTF-8 para que Excel detecte correctamente los acentos. Si tu contador prefiere otro formato (XLSX nativo, JSON), escríbenos.', en: 'CSV files include a UTF-8 BOM so Excel renders accents correctly. If your accountant prefers another format (native XLSX, JSON), let us know.', pt: 'Os arquivos CSV incluem um BOM UTF-8 para que o Excel exiba os acentos corretamente. Se seu contador preferir outro formato (XLSX nativo, JSON), avise-nos.' },
+  'acct.journal.title':  { es: 'Libro Diario',  en: 'General Ledger', pt: 'Livro Diário' },
+  'acct.journal.desc':   { es: 'Todos los movimientos del período: desembolsos, pagos recibidos, ingresos extra y gastos. Cada línea con fecha, concepto, cliente, debe/haber y cuenta bancaria.', en: 'All movements in the period: disbursements, payments received, extra income and expenses. Each line with date, concept, client, debit/credit and bank account.', pt: 'Todos os movimentos do período: desembolsos, pagamentos recebidos, receitas extras e despesas. Cada linha com data, conceito, cliente, débito/crédito e conta bancária.' },
+  'acct.by_account.title':{ es: 'Mayor por Cuenta Bancaria', en: 'Ledger by Bank Account', pt: 'Razão por Conta Bancária' },
+  'acct.by_account.desc':{ es: 'Resumen por cada cuenta bancaria: entradas totales (pagos + ingresos), salidas (desembolsos + gastos), neto y cantidad de movimientos.', en: 'Summary per bank account: total inflows (payments + income), outflows (disbursements + expenses), net and number of movements.', pt: 'Resumo por conta bancária: entradas totais (pagamentos + receitas), saídas (desembolsos + despesas), líquido e número de movimentos.' },
+  'acct.summary.title':  { es: 'Resumen Financiero (P&L)', en: 'Financial Summary (P&L)', pt: 'Resumo Financeiro (P&L)' },
+  'acct.summary.desc':   { es: 'Estado de resultados del período: ingresos por interés y mora, gastos por categoría, utilidad neta y margen. Incluye capital desembolsado y recuperado.', en: 'Income statement for the period: interest and late-fee income, expenses by category, net profit and margin. Includes capital disbursed and recovered.', pt: 'Demonstração de resultados do período: receitas de juros e multa, despesas por categoria, lucro líquido e margem. Inclui capital desembolsado e recuperado.' },
 
   // ── Landing ──────────────────────────────────────────────────────────────────
   'landing.subtitle':          { es: 'Plataforma de gestión de préstamos personales y comerciales para prestamistas profesionales.', en: 'Personal and commercial loan management platform for professional lenders.', pt: 'Plataforma de gestão de empréstimos pessoais e comerciais para credores profissionais.' },

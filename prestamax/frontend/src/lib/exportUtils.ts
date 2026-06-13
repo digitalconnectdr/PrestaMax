@@ -1,6 +1,15 @@
 /**
  * exportUtils.ts — CSV and PDF export helpers for PrestaMax
+ *
+ * i18n (Jun 2026): el "chrome" de los exports (idioma del HTML, fecha, pie,
+ * aviso de popups) sigue el idioma activo de la app. Las etiquetas de columnas
+ * y títulos las traduce cada página al construir headers/title.
  */
+import { t, getLocale } from '@/lib/i18n'
+
+// Mapea el locale de la app al locale de Intl para fechas/montos.
+const INTL_LOCALE: Record<string, string> = { es: 'es-DO', en: 'en-US', pt: 'pt-BR' }
+function intlLocale(): string { return INTL_LOCALE[getLocale()] || 'es-DO' }
 
 // ── CSV ──────────────────────────────────────────────────────────────────────
 
@@ -70,7 +79,7 @@ export function printToPDF(options: PrintTableOptions): void {
   ` : ''
 
   const html = `<!DOCTYPE html>
-<html lang="es">
+<html lang="${getLocale()}">
 <head>
   <meta charset="UTF-8"/>
   <title>${title}</title>
@@ -96,7 +105,7 @@ export function printToPDF(options: PrintTableOptions): void {
   <div class="header">
     <h1>${title}</h1>
     ${subtitle ? `<p>${subtitle}</p>` : ''}
-    <span class="badge">PrestaMax · Generado el ${new Date().toLocaleDateString('es-DO', { dateStyle: 'full' })}</span>
+    <span class="badge">PrestaMax · ${t('report.generated_on')} ${new Date().toLocaleDateString(intlLocale(), { dateStyle: 'full' })}</span>
   </div>
   ${summaryHtml}
   <table>
@@ -109,7 +118,7 @@ export function printToPDF(options: PrintTableOptions): void {
       ${tableRows}
     </tbody>
   </table>
-  <div class="footer">PrestaMax Sistema de Préstamos &mdash; Documento generado automáticamente</div>
+  <div class="footer">${t('report.footer')}</div>
   <script>
     window.onload = () => { window.print(); }
   </script>
@@ -118,7 +127,7 @@ export function printToPDF(options: PrintTableOptions): void {
 
   const win = window.open('', '_blank', 'width=900,height=700')
   if (!win) {
-    alert('Permite las ventanas emergentes para generar el PDF')
+    alert(t('report.popup_blocked'))
     return
   }
   win.document.write(html)
@@ -127,14 +136,14 @@ export function printToPDF(options: PrintTableOptions): void {
 
 // ── Convenience formatters ────────────────────────────────────────────────────
 
-export function fmtCurrencyRaw(n: number | null | undefined): string {
+export function fmtCurrencyRaw(n: number | null | undefined, currency = 'DOP'): string {
   if (n == null) return ''
-  return new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(n)
+  return new Intl.NumberFormat(intlLocale(), { style: 'currency', currency }).format(n)
 }
 
 export function fmtDateRaw(s: string | null | undefined): string {
   if (!s) return ''
   try {
-    return new Date(s).toLocaleDateString('es-DO', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    return new Date(s).toLocaleDateString(intlLocale(), { year: 'numeric', month: '2-digit', day: '2-digit' })
   } catch { return s }
 }
