@@ -13,6 +13,7 @@ import { TenantContext } from '@/contexts/TenantContext'
 import { printPaymentReceipt, sendReceiptByWhatsApp } from '@/lib/printReceipt'
 import { Printer } from 'lucide-react'
 import CollectionTasksTab from './CollectionTasksTab'
+import { useT } from '@/lib/i18n'
 
 interface CollectionLoan {
   id: string
@@ -41,16 +42,11 @@ interface BankAccount {
 
 type FilterType = 'all' | 'overdue' | 'upcoming' | 'current'
 
-const UPCOMING_DAYS_OPTIONS = [
-  { value: 1, label: 'Mañana' },
-  { value: 3, label: '3 días' },
-  { value: 7, label: '7 días' },
-  { value: 15, label: '15 días' },
-  { value: 30, label: '30 días' },
-]
+const UPCOMING_DAYS_OPTIONS = [1, 3, 7, 15, 30]
 
 const CollectionsPage: React.FC = () => {
   const { can } = usePermission()
+  const t = useT()
   const { state: tenantState } = useContext(TenantContext)
   const [lastPayment, setLastPayment] = useState<any>(null)
   const [showPostPaymentModal, setShowPostPaymentModal] = useState(false)
@@ -90,7 +86,7 @@ const CollectionsPage: React.FC = () => {
       setScope(data.scope || 'all')
       setBankAccounts(Array.isArray(bankRes.data) ? bankRes.data : [])
     } catch (err) {
-      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar cartera de cobranza')
+      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(t('coll.load_error'))
     } finally {
       setIsLoading(false)
     }
@@ -136,17 +132,17 @@ const CollectionsPage: React.FC = () => {
     try {
       setIsSavingNote(true)
       await api.post('/collections/notes', { loanId: showNoteModal.id, type: noteType, note: noteText })
-      toast.success('Nota registrada')
+      toast.success(t('coll.note_saved'))
       // Refrescar notas si la tarjeta está expandida
       if (expandedId === showNoteModal.id) fetchNotes(showNoteModal.id)
       setShowNoteModal(null); setNoteText('')
-    } catch { toast.error('Error al registrar nota') }
+    } catch { toast.error(t('coll.note_error')) }
     finally { setIsSavingNote(false) }
   }
 
   const handleQuickPay = async () => {
-    if (!showPayModal || !payForm.amount) return toast.error('Ingresa el monto')
-    if (payForm.paymentMethod !== 'cash' && !payForm.bankAccountId) return toast.error('Selecciona la cuenta bancaria')
+    if (!showPayModal || !payForm.amount) return toast.error(t('coll.enter_amount'))
+    if (payForm.paymentMethod !== 'cash' && !payForm.bankAccountId) return toast.error(t('coll.select_bank'))
     try {
       setIsSavingPay(true)
       const payRes = await api.post('/payments', {
@@ -157,7 +153,7 @@ const CollectionsPage: React.FC = () => {
         reference: payForm.reference || null,
         paymentDate: new Date().toISOString(),
       })
-      toast.success('Pago registrado')
+      toast.success(t('pay.post_title'))
       const loanForReceipt = showPayModal
       setShowPayModal(null)
       setPayForm({ amount: '', paymentMethod: 'cash', bankAccountId: '', reference: '' })
@@ -178,13 +174,13 @@ const CollectionsPage: React.FC = () => {
         setShowPostPaymentModal(true)
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al registrar pago')
+      toast.error(err?.response?.data?.error || t('pay.register_error'))
     } finally { setIsSavingPay(false) }
   }
 
   const handleSavePromise = async () => {
     if (!showPromiseModal || !promiseForm.promisedDate || !promiseForm.amount) {
-      return toast.error('Fecha y monto son requeridos')
+      return toast.error(t('coll.date_amount_required'))
     }
     try {
       setIsSavingPromise(true)
@@ -194,12 +190,12 @@ const CollectionsPage: React.FC = () => {
         promisedAmount: parseFloat(promiseForm.amount),
         notes: promiseForm.notes || null,
       })
-      toast.success('Promesa de pago registrada')
+      toast.success(t('coll.promise_saved'))
       setShowPromiseModal(null)
       setPromiseForm({ promisedDate: '', amount: '', notes: '' })
       fetchLoans()
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al registrar promesa')
+      toast.error(err?.response?.data?.error || t('coll.promise_error'))
     } finally { setIsSavingPromise(false) }
   }
 
@@ -228,13 +224,13 @@ const CollectionsPage: React.FC = () => {
       return (
         <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-semibold whitespace-nowrap">
           <AlertCircle className="w-3 h-3"/>
-          {loan.daysOverdueReal > 0 ? `${loan.daysOverdueReal} días en mora` : 'En mora'}
+          {loan.daysOverdueReal > 0 ? t('coll.days_in_mora').replace('{n}', String(loan.daysOverdueReal)) : t('coll.in_mora_short')}
         </span>
       )
     }
     if (loan.collectionStatus === 'upcoming') {
       const d = loan.daysUntilDue
-      const label = d <= 0 ? 'Vence hoy' : d === 1 ? 'Vence mañana' : `Vence en ${d} días`
+      const label = d <= 0 ? t('coll.due_today') : d === 1 ? t('coll.due_tomorrow') : t('coll.due_in_days').replace('{n}', String(d))
       return (
         <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-semibold">
           <Clock className="w-3 h-3"/>{label}
@@ -243,7 +239,7 @@ const CollectionsPage: React.FC = () => {
     }
     return (
       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-semibold">
-        <CheckCircle className="w-3 h-3"/>Al día
+        <CheckCircle className="w-3 h-3"/>{t('coll.current_badge')}
       </span>
     )
   }
@@ -251,10 +247,10 @@ const CollectionsPage: React.FC = () => {
   if (isLoading && mainTab === 'portfolio') return <PageLoadingState />
 
   const FILTERS: { id: FilterType; label: string; color: string; activeColor: string }[] = [
-    { id: 'all',      label: 'Todos',             color: 'bg-slate-100 text-slate-600 hover:bg-slate-200',   activeColor: 'bg-[#1e3a5f] text-white' },
-    { id: 'overdue',  label: 'En Mora',            color: 'bg-red-50 text-red-600 hover:bg-red-100',          activeColor: 'bg-red-600 text-white' },
-    { id: 'upcoming', label: 'Próximos a Vencer',  color: 'bg-amber-50 text-amber-600 hover:bg-amber-100',    activeColor: 'bg-amber-500 text-white' },
-    { id: 'current',  label: 'Al Día',             color: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100', activeColor: 'bg-emerald-600 text-white' },
+    { id: 'all',      label: t('common.all'),       color: 'bg-slate-100 text-slate-600 hover:bg-slate-200',   activeColor: 'bg-[#1e3a5f] text-white' },
+    { id: 'overdue',  label: t('coll.in_mora'),     color: 'bg-red-50 text-red-600 hover:bg-red-100',          activeColor: 'bg-red-600 text-white' },
+    { id: 'upcoming', label: t('coll.f_upcoming'),  color: 'bg-amber-50 text-amber-600 hover:bg-amber-100',    activeColor: 'bg-amber-500 text-white' },
+    { id: 'current',  label: t('coll.current'),     color: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100', activeColor: 'bg-emerald-600 text-white' },
   ]
 
   return (
@@ -262,15 +258,15 @@ const CollectionsPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-title">Cobranzas</h1>
+          <h1 className="page-title">{t('coll.title')}</h1>
           <p className="text-slate-500 text-sm mt-0.5 flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5"/>
-            {scope === 'all' ? 'Vista completa del tenant' : 'Tu cartera asignada'}
+            {scope === 'all' ? t('coll.scope_all') : t('coll.scope_assigned')}
           </p>
         </div>
         {mainTab === 'portfolio' && (
           <Button variant="outline" size="sm" onClick={handleRefresh} className="flex items-center gap-1">
-            <RefreshCw className="w-4 h-4"/>Actualizar
+            <RefreshCw className="w-4 h-4"/>{t('common.refresh')}
           </Button>
         )}
       </div>
@@ -287,7 +283,7 @@ const CollectionsPage: React.FC = () => {
             }`}
           >
             <Briefcase className="w-4 h-4" />
-            Cartera de Cobranza
+            {t('coll.tab_portfolio')}
           </button>
           {(can('collections.tasks') || can('collections.tasks.manage')) && (
             <button
@@ -299,7 +295,7 @@ const CollectionsPage: React.FC = () => {
               }`}
             >
               <ClipboardList className="w-4 h-4" />
-              Agenda de Cobranza
+              {t('coll.tab_agenda')}
             </button>
           )}
         </div>
@@ -314,19 +310,19 @@ const CollectionsPage: React.FC = () => {
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-3 text-center">
-          <p className="text-xs text-slate-500 uppercase font-medium">Total</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('coll.total')}</p>
           <p className="text-2xl font-bold text-slate-900 mt-0.5">{counts.all}</p>
         </Card>
         <Card className="p-3 text-center bg-red-50">
-          <p className="text-xs text-slate-500 uppercase font-medium">En Mora</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('coll.in_mora')}</p>
           <p className="text-2xl font-bold text-red-600 mt-0.5">{counts.overdue}</p>
         </Card>
         <Card className="p-3 text-center bg-amber-50">
-          <p className="text-xs text-slate-500 uppercase font-medium">Próx. Vencer</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('coll.upcoming_short')}</p>
           <p className="text-2xl font-bold text-amber-600 mt-0.5">{counts.upcoming}</p>
         </Card>
         <Card className="p-3 text-center bg-emerald-50">
-          <p className="text-xs text-slate-500 uppercase font-medium">Al Día</p>
+          <p className="text-xs text-slate-500 uppercase font-medium">{t('coll.current')}</p>
           <p className="text-2xl font-bold text-emerald-600 mt-0.5">{counts.current}</p>
         </Card>
       </div>
@@ -348,11 +344,11 @@ const CollectionsPage: React.FC = () => {
         {/* Upcoming days selector — only shown when filter=upcoming */}
         {filter === 'upcoming' && (
           <div className="flex items-center gap-1 ml-2 border-l border-slate-200 pl-3">
-            <span className="text-xs text-slate-500 font-medium">Ventana:</span>
+            <span className="text-xs text-slate-500 font-medium">{t('coll.window')}</span>
             {UPCOMING_DAYS_OPTIONS.map(opt => (
-              <button key={opt.value} onClick={() => handleDaysChange(opt.value)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${upcomingDays === opt.value ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
-                {opt.label}
+              <button key={opt} onClick={() => handleDaysChange(opt)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${upcomingDays === opt ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
+                {opt === 1 ? t('coll.tomorrow') : t('coll.n_days').replace('{n}', String(opt))}
               </button>
             ))}
           </div>
@@ -360,15 +356,15 @@ const CollectionsPage: React.FC = () => {
       </div>
 
       {/* Search */}
-      <input type="text" placeholder="Buscar por nombre o número de préstamo..."
+      <input type="text" placeholder={t('coll.search_ph')}
         value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
 
       {/* Loan list */}
       {filtered.length === 0 ? (
         <EmptyState icon={CheckCircle}
-          title={searchTerm ? 'Sin resultados' : filter === 'overdue' ? 'Sin clientes en mora' : filter === 'upcoming' ? 'Sin vencimientos próximos' : filter === 'current' ? 'Sin clientes al día' : 'Sin préstamos activos'}
-          description={searchTerm ? 'Ningún préstamo coincide con la búsqueda.' : 'No hay préstamos en esta categoría.'} />
+          title={searchTerm ? t('coll.empty_no_results') : filter === 'overdue' ? t('coll.empty_no_overdue') : filter === 'upcoming' ? t('coll.empty_no_upcoming') : filter === 'current' ? t('coll.empty_no_current') : t('coll.empty_no_active')}
+          description={searchTerm ? t('coll.empty_desc_search') : t('coll.empty_desc_cat')} />
       ) : (
         <div className="space-y-3">
           {filtered.map(loan => (
@@ -381,13 +377,13 @@ const CollectionsPage: React.FC = () => {
                     {getStatusBadge(loan)}
                   </div>
                   <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:gap-4 gap-1 mt-1.5 text-sm">
-                    <span className="text-slate-500">Saldo: <strong className="text-slate-800">{formatCurrency(loan.totalBalance)}</strong></span>
+                    <span className="text-slate-500">{t('coll.balance')}: <strong className="text-slate-800">{formatCurrency(loan.totalBalance)}</strong></span>
                     {(loan.moraBalance || 0) > 0 && (
-                      <span className="text-red-600 font-semibold">Mora: {formatCurrency(loan.moraBalance)}</span>
+                      <span className="text-red-600 font-semibold">{t('pay.mora_label')}: {formatCurrency(loan.moraBalance)}</span>
                     )}
                     {loan.nextDueDate && (
                       <span className="text-slate-500">
-                        Próx. cuota: <strong className="text-slate-700">
+                        {t('coll.next_installment')}: <strong className="text-slate-700">
                           {new Date(loan.nextDueDate).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })}
                           {loan.nextInstallmentAmount > 0 && ` — ${formatCurrency(loan.nextInstallmentAmount)}`}
                         </strong>
@@ -403,7 +399,7 @@ const CollectionsPage: React.FC = () => {
                       {/* Próximas cuotas */}
                       {loan.nextInstallments?.length > 0 && (
                         <div>
-                          <p className="text-xs font-semibold text-slate-400 uppercase mb-2">Próximas Cuotas</p>
+                          <p className="text-xs font-semibold text-slate-400 uppercase mb-2">{t('coll.next_installments')}</p>
                           <div className="space-y-1">
                             {loan.nextInstallments.map((inst: any, i: number) => (
                               <div key={inst.id || i} className={`flex justify-between text-sm py-1 px-2 rounded ${inst.status === 'overdue' ? 'bg-red-50 text-red-700' : 'bg-slate-50 text-slate-600'}`}>
@@ -418,14 +414,14 @@ const CollectionsPage: React.FC = () => {
                       {/* Historial de notas */}
                       <div>
                         <p className="text-xs font-semibold text-slate-400 uppercase mb-2 flex items-center gap-1">
-                          <StickyNote className="w-3 h-3"/>Historial de Gestiones
+                          <StickyNote className="w-3 h-3"/>{t('coll.history')}
                         </p>
                         {(loanNotes[loan.id] || []).length === 0 ? (
-                          <p className="text-xs text-slate-400 italic px-2">Sin notas registradas</p>
+                          <p className="text-xs text-slate-400 italic px-2">{t('coll.no_notes')}</p>
                         ) : (
                           <div className="space-y-2">
                             {(loanNotes[loan.id] || []).map((n: any) => {
-                              const typeLabels: Record<string, string> = { call: '📞 Llamada', visit: '🚶 Visita', whatsapp: '💬 WhatsApp', other: '📝 Otro' }
+                              const typeLabels: Record<string, string> = { call: t('coll.nt_call'), visit: t('coll.nt_visit'), whatsapp: t('coll.nt_whatsapp'), other: t('coll.nt_other') }
                               return (
                                 <div key={n.id} className="bg-slate-50 rounded-lg px-3 py-2 text-xs">
                                   <div className="flex items-center justify-between mb-0.5">
@@ -433,7 +429,7 @@ const CollectionsPage: React.FC = () => {
                                     <span className="text-slate-400">{new Date(n.createdAt || n.created_at).toLocaleDateString('es-DO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                   </div>
                                   <p className="text-slate-700">{n.note}</p>
-                                  {n.userName && <p className="text-slate-400 mt-0.5">por {n.userName}</p>}
+                                  {n.userName && <p className="text-slate-400 mt-0.5">{t('coll.by')} {n.userName}</p>}
                                 </div>
                               )
                             })}
@@ -447,33 +443,33 @@ const CollectionsPage: React.FC = () => {
                 {/* Actions */}
                 <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-start sm:justify-end mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                   {loan.phonePersonal && (
-                    <a href={`tel:${loan.phonePersonal}`} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title="Llamar">
+                    <a href={`tel:${loan.phonePersonal}`} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title={t('coll.call')}>
                       <Phone className="w-4 h-4"/>
                     </a>
                   )}
                   {(loan.whatsapp || loan.phonePersonal) && (
                     <a href={`https://wa.me/${(loan.whatsapp || loan.phonePersonal || '').replace(/\D/g,'')}`}
                       target="_blank" rel="noreferrer"
-                      className="p-2 rounded-lg hover:bg-green-50 text-green-600" title="WhatsApp">
+                      className="p-2 rounded-lg hover:bg-green-50 text-green-600" title={t('pay.send_whatsapp')}>
                       <MessageCircle className="w-4 h-4"/>
                     </a>
                   )}
                   {can('collections.notes') && (
                     <button onClick={() => setShowNoteModal(loan)}
-                      className="p-2 rounded-lg hover:bg-blue-50 text-blue-600" title="Registrar nota">
+                      className="p-2 rounded-lg hover:bg-blue-50 text-blue-600" title={t('coll.add_note')}>
                       <FileText className="w-4 h-4"/>
                     </button>
                   )}
                   {can('collections.promises') && (
                     <button onClick={() => { setShowPromiseModal(loan); setPromiseForm({ promisedDate: loan.nextDueDate?.split('T')[0] || '', amount: String(loan.nextInstallmentAmount || loan.totalBalance || ''), notes: '' }) }}
                       className="flex items-center gap-1 px-2 py-1.5 bg-amber-500 text-white rounded-lg text-xs hover:bg-amber-600">
-                      <Calendar className="w-3 h-3"/>Promesa
+                      <Calendar className="w-3 h-3"/>{t('coll.promise')}
                     </button>
                   )}
                   {can('payments.create') && (
                     <button onClick={() => { setShowPayModal(loan); setPayForm(f => ({ ...f, amount: String(loan.nextInstallmentAmount || '') })) }}
                       className="flex items-center gap-1 px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700">
-                      <DollarSign className="w-3 h-3"/>Cobrar
+                      <DollarSign className="w-3 h-3"/>{t('coll.collect')}
                     </button>
                   )}
                   <button onClick={() => handleToggleExpand(loan.id)}
@@ -492,25 +488,25 @@ const CollectionsPage: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-lg max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title">Nota — {showNoteModal.clientName}</h2>
+              <h2 className="section-title">{t('coll.note_title')} — {showNoteModal.clientName}</h2>
               <button onClick={() => setShowNoteModal(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5"/></button>
             </div>
             <div className="space-y-3">
               <select value={noteType} onChange={e => setNoteType(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="call">Llamada</option>
-                <option value="visit">Visita</option>
+                <option value="call">{t('coll.opt_call')}</option>
+                <option value="visit">{t('coll.opt_visit')}</option>
                 <option value="whatsapp">WhatsApp</option>
-                <option value="other">Otro</option>
+                <option value="other">{t('coll.opt_other')}</option>
               </select>
               <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3}
-                placeholder="Detalle de la gestión realizada..."
+                placeholder={t('coll.note_ph')}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" className="flex-1" onClick={() => setShowNoteModal(null)}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowNoteModal(null)}>{t('common.cancel')}</Button>
               <Button className="flex-1" onClick={handleSaveNote} disabled={isSavingNote || !noteText.trim()}>
-                {isSavingNote ? 'Guardando...' : 'Guardar Nota'}
+                {isSavingNote ? t('pay.saving') : t('coll.save_note')}
               </Button>
             </div>
           </Card>
@@ -522,32 +518,32 @@ const CollectionsPage: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title flex items-center gap-2"><Calendar className="w-5 h-5"/>Promesa de Pago — {showPromiseModal.clientName}</h2>
+              <h2 className="section-title flex items-center gap-2"><Calendar className="w-5 h-5"/>{t('coll.promise_title')} — {showPromiseModal.clientName}</h2>
               <button onClick={() => setShowPromiseModal(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5"/></button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Fecha Prometida *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('coll.promised_date')}</label>
                 <input type="date" value={promiseForm.promisedDate} onChange={e => setPromiseForm(f => ({ ...f, promisedDate: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Monto Prometido *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('coll.promised_amount')}</label>
                 <input type="number" step="0.01" value={promiseForm.amount} onChange={e => setPromiseForm(f => ({ ...f, amount: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Notas (opcional)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('pay.notes')} ({t('common.optional')})</label>
                 <textarea value={promiseForm.notes} onChange={e => setPromiseForm(f => ({ ...f, notes: e.target.value }))} rows={2}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Compromiso del cliente..."/>
+                  placeholder={t('coll.promise_ph')}/>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" className="flex-1" onClick={() => setShowPromiseModal(null)}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowPromiseModal(null)}>{t('common.cancel')}</Button>
               <Button className="flex-1 bg-amber-500 hover:bg-amber-600" onClick={handleSavePromise}
                 disabled={isSavingPromise || !promiseForm.promisedDate || !promiseForm.amount}>
-                {isSavingPromise ? 'Guardando...' : 'Registrar Promesa'}
+                {isSavingPromise ? t('pay.saving') : t('coll.register_promise')}
               </Button>
             </div>
           </Card>
@@ -559,32 +555,32 @@ const CollectionsPage: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-2 sm:p-4 overflow-y-auto">
           <Card className="w-full max-w-lg my-2 sm:my-4 max-h-[95vh] sm:max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="section-title">Registrar Pago — {showPayModal.clientName}</h2>
+              <h2 className="section-title">{t('pay.register')} — {showPayModal.clientName}</h2>
               <button onClick={() => setShowPayModal(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5"/></button>
             </div>
             <div className="bg-slate-50 rounded-lg p-3 mb-4 text-sm">
-              <span className="text-slate-600">Préstamo: </span><span className="font-mono font-bold">{showPayModal.loanNumber}</span>
-              <span className="ml-4 text-slate-600">Saldo: </span><span className="font-bold text-red-600">{formatCurrency(showPayModal.totalBalance)}</span>
+              <span className="text-slate-600">{t('col.loan')}: </span><span className="font-mono font-bold">{showPayModal.loanNumber}</span>
+              <span className="ml-4 text-slate-600">{t('coll.balance')}: </span><span className="font-bold text-red-600">{formatCurrency(showPayModal.totalBalance)}</span>
             </div>
 
             {/* Tabla de cuotas pendientes/vencidas */}
             {payLoanDetail?.installments && payLoanDetail.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived').length > 0 && (
               <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
                 <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Estado de cuotas</span>
+                  <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{t('pay.installments_status')}</span>
                   <div className="flex gap-1.5 flex-wrap text-[10px]">
                     {(() => {
                       const overdueCount = payLoanDetail.installments.filter((i: any) => i.status !== 'paid' && i.status !== 'waived' && (i.moraDays || 0) > 0).length
                       const totalMoraInst = payLoanDetail.installments.reduce((s: number, i: any) => s + (i.status !== 'paid' && i.status !== 'waived' ? (i.moraAmount || 0) : 0), 0)
                       return (<>
                         {overdueCount > 0 && (
-                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{overdueCount} vencida{overdueCount > 1 ? 's' : ''}</span>
+                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{t('pay.overdue_badge').replace('{n}', String(overdueCount))}</span>
                         )}
                         {totalMoraInst > 0 && (
-                          <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">Mora: {formatCurrency(totalMoraInst)}</span>
+                          <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">{t('pay.mora_label')}: {formatCurrency(totalMoraInst)}</span>
                         )}
                         {(payLoanDetail.prorrogaFee || 0) > 0 && (
-                          <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Prorroga: {formatCurrency(payLoanDetail.prorrogaFee)}</span>
+                          <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">{t('pay.prorroga_label')}: {formatCurrency(payLoanDetail.prorrogaFee)}</span>
                         )}
                       </>)
                     })()}
@@ -595,11 +591,11 @@ const CollectionsPage: React.FC = () => {
                     <thead className="bg-slate-50 sticky top-0">
                       <tr>
                         <th className="text-left px-3 py-1.5 font-semibold text-slate-600">#</th>
-                        <th className="text-left px-3 py-1.5 font-semibold text-slate-600">Vence</th>
-                        <th className="text-center px-3 py-1.5 font-semibold text-slate-600">Días</th>
-                        <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Cuota</th>
-                        <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Mora</th>
-                        <th className="text-right px-3 py-1.5 font-semibold text-slate-600">Pendiente</th>
+                        <th className="text-left px-3 py-1.5 font-semibold text-slate-600">{t('pay.due')}</th>
+                        <th className="text-center px-3 py-1.5 font-semibold text-slate-600">{t('col.days')}</th>
+                        <th className="text-right px-3 py-1.5 font-semibold text-slate-600">{t('pay.cuota')}</th>
+                        <th className="text-right px-3 py-1.5 font-semibold text-slate-600">{t('pay.mora_label')}</th>
+                        <th className="text-right px-3 py-1.5 font-semibold text-slate-600">{t('pay.pending')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -615,9 +611,9 @@ const CollectionsPage: React.FC = () => {
                             <td className="px-3 py-1.5 text-slate-700">{inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('es-DO') : '—'}</td>
                             <td className="px-3 py-1.5 text-center">
                               {isOverdue
-                                ? <span className="text-red-700 font-semibold">{moraDays}d atraso</span>
+                                ? <span className="text-red-700 font-semibold">{t('pay.days_overdue').replace('{n}', String(moraDays))}</span>
                                 : isPartial
-                                  ? <span className="text-amber-700">parcial</span>
+                                  ? <span className="text-amber-700">{t('pay.partial')}</span>
                                   : <span className="text-slate-400">—</span>}
                             </td>
                             <td className="px-3 py-1.5 text-right text-slate-700">{formatCurrency(cuota)}</td>
@@ -637,40 +633,40 @@ const CollectionsPage: React.FC = () => {
             )}
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Monto *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('col.amount')} *</label>
                 <input type="number" step="0.01" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
                   placeholder="0.00" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Método de Pago</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('pay.method_label').replace(' *','')}</label>
                 <select value={payForm.paymentMethod} onChange={e => setPayForm(f => ({ ...f, paymentMethod: e.target.value, bankAccountId: e.target.value === 'cash' ? '' : f.bankAccountId }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="cash">Efectivo</option>
-                  <option value="transfer">Transferencia</option>
-                  <option value="check">Cheque</option>
+                  <option value="cash">{t('method.cash')}</option>
+                  <option value="transfer">{t('method.transfer')}</option>
+                  <option value="check">{t('method.check')}</option>
                 </select>
               </div>
               {payForm.paymentMethod !== 'cash' && bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Cuenta Bancaria</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('col.bank')}</label>
                   <select value={payForm.bankAccountId} onChange={e => setPayForm(f => ({ ...f, bankAccountId: e.target.value }))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">-- Selecciona cuenta --</option>
+                    <option value="">{t('coll.select_account')}</option>
                     {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.bankName} {a.accountNumber ? `- ${a.accountNumber}` : ''}</option>)}
                   </select>
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Referencia (opcional)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('pay.reference')} ({t('common.optional')})</label>
                 <input type="text" value={payForm.reference} onChange={e => setPayForm(f => ({ ...f, reference: e.target.value }))}
-                  placeholder="Num. transferencia o cheque..."
+                  placeholder={t('pay.reference_ph')}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" className="flex-1" onClick={() => setShowPayModal(null)}>Cancelar</Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowPayModal(null)}>{t('common.cancel')}</Button>
               <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={handleQuickPay} disabled={isSavingPay || !payForm.amount}>
-                {isSavingPay ? 'Registrando...' : 'Registrar Pago'}
+                {isSavingPay ? t('pay.registering') : t('pay.register')}
               </Button>
             </div>
           </Card>
@@ -687,20 +683,20 @@ const CollectionsPage: React.FC = () => {
                   <CheckCircle className="w-6 h-6 text-emerald-600" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900">Pago registrado</h3>
-                  <p className="text-xs text-slate-500">Recibo {lastPayment.receiptNumber || lastPayment.paymentNumber} · {formatCurrency(lastPayment.amount || 0)}</p>
+                  <h3 className="font-bold text-slate-900">{t('pay.post_title')}</h3>
+                  <p className="text-xs text-slate-500">{t('pay.receipt_word')} {lastPayment.receiptNumber || lastPayment.paymentNumber} · {formatCurrency(lastPayment.amount || 0)}</p>
                 </div>
               </div>
             </div>
             <div className="p-5 space-y-3">
-              <p className="text-sm text-slate-600">¿Qué quieres hacer con el recibo?</p>
-              <button type="button" onClick={async () => { const t = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; await printPaymentReceipt(lastPayment, t); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition">
-                <Printer className="w-4 h-4" /> Imprimir recibo
+              <p className="text-sm text-slate-600">{t('pay.post_question')}</p>
+              <button type="button" onClick={async () => { const tn = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; await printPaymentReceipt(lastPayment, tn); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition">
+                <Printer className="w-4 h-4" /> {t('pay.print_receipt')}
               </button>
-              <button type="button" onClick={() => { const t = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; const phone = lastPayment.clientWhatsapp || ''; if (!phone) toast('El cliente no tiene WhatsApp/telefono', { icon: '⚠️' }); sendReceiptByWhatsApp(phone, lastPayment, t, { principalBalance: lastPayment.principalBalance, interestBalance: lastPayment.interestBalance, moraBalance: lastPayment.moraBalance }); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition">
-                <MessageCircle className="w-4 h-4" /> Enviar por WhatsApp
+              <button type="button" onClick={() => { const tn = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; const phone = lastPayment.clientWhatsapp || ''; if (!phone) toast(t('pay.no_whatsapp'), { icon: '⚠️' }); sendReceiptByWhatsApp(phone, lastPayment, tn, { principalBalance: lastPayment.principalBalance, interestBalance: lastPayment.interestBalance, moraBalance: lastPayment.moraBalance }); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition">
+                <MessageCircle className="w-4 h-4" /> {t('pay.send_whatsapp')}
               </button>
-              <button type="button" onClick={() => setShowPostPaymentModal(false)} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cerrar</button>
+              <button type="button" onClick={() => setShowPostPaymentModal(false)} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-900">{t('common.close')}</button>
             </div>
           </div>
         </div>
