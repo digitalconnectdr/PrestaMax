@@ -8,6 +8,7 @@ import { PageLoadingState } from '@/components/ui/Loading'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { useT } from '@/lib/i18n'
 import {
   BarChart,
   Bar,
@@ -88,6 +89,7 @@ const DashboardPage: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const navigate = useNavigate()
+  const t = useT()
 
   useEffect(() => {
     const fetchData = async () => {
@@ -95,7 +97,7 @@ const DashboardPage: React.FC = () => {
         const res = await api.get('/reports/dashboard')
         setDashboard(res.data)
       } catch (error: any) {
-        if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error('Error al cargar el dashboard')
+        if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error(t('dash.load_error'))
         // Empty fallback when API fails
         setDashboard({
           kpis: {
@@ -130,7 +132,7 @@ const DashboardPage: React.FC = () => {
   const { kpis, statusDistribution, recentPayments, topOverdue, dailyCollections } = dashboard
 
   const pieData = statusDistribution.map((s) => ({
-    name: STATUS_LABELS[s.status] || s.status,
+    name: t('status.' + s.status, STATUS_LABELS[s.status] || s.status),
     value: s.count,
     fill: STATUS_COLORS[s.status] || '#6b7280',
   }))
@@ -144,39 +146,39 @@ const DashboardPage: React.FC = () => {
     <div className="space-y-6">
       {/* Page Title */}
       <div>
-        <h1 className="page-title">Dashboard</h1>
-        <p className="text-slate-600 text-sm mt-1">Resumen general de tu cartera de préstamos</p>
+        <h1 className="page-title">{t('nav.dashboard')}</h1>
+        <p className="text-slate-600 text-sm mt-1">{t('dash.subtitle')}</p>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat
           icon={DollarSign}
-          title="Cartera Total"
+          title={t('dash.kpi.total_portfolio')}
           value={formatCurrency(kpis.totalPortfolio)}
           color="blue"
-          footer={`${kpis.totalLoans} préstamos`}
+          footer={t('dash.foot.loans').replace('{n}', String(kpis.totalLoans))}
         />
         <Stat
           icon={TrendingUp}
-          title="Cartera Activa"
+          title={t('dash.kpi.active_portfolio')}
           value={formatCurrency(kpis.activePortfolio)}
           color="green"
-          footer={`${kpis.activeLoans} préstamos activos`}
+          footer={t('dash.foot.active_loans').replace('{n}', String(kpis.activeLoans))}
         />
         <Stat
           icon={AlertCircle}
-          title="Mora Pendiente"
+          title={t('dash.kpi.mora_pending')}
           value={formatCurrency(kpis.moraBalance)}
           color="red"
-          footer={`${kpis.overdueLoans} en mora/vencidos`}
+          footer={t('dash.foot.overdue').replace('{n}', String(kpis.overdueLoans))}
         />
         <Stat
           icon={Calendar}
-          title="Cobros del Día"
+          title={t('dash.kpi.today_collections')}
           value={formatCurrency(kpis.todayPayments)}
           color="amber"
-          footer={`${kpis.todayCount} cobros realizados`}
+          footer={t('dash.foot.today_count').replace('{n}', String(kpis.todayCount))}
         />
       </div>
 
@@ -184,24 +186,24 @@ const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Stat
           icon={Users}
-          title="Total Clientes"
+          title={t('dash.kpi.total_clients')}
           value={kpis.totalClients.toString()}
           color="blue"
-          footer="Clientes registrados"
+          footer={t('dash.foot.clients_registered')}
         />
         <Stat
           icon={FileText}
-          title="Préstamos Activos"
+          title={t('dash.kpi.active_loans')}
           value={kpis.activeLoans.toString()}
           color="green"
-          footer={`de ${kpis.totalLoans} préstamos totales`}
+          footer={t('dash.foot.of_total_loans').replace('{n}', String(kpis.totalLoans))}
         />
         <Stat
           icon={AlertCircle}
-          title="Liquidados"
+          title={t('dash.kpi.liquidated')}
           value={kpis.liquidated.toString()}
           color="amber"
-          footer="Préstamos completados"
+          footer={t('dash.foot.loans_completed')}
         />
       </div>
 
@@ -210,29 +212,29 @@ const DashboardPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Briefcase className="w-5 h-5 text-slate-600" />
-            <h2 className="text-lg font-semibold text-slate-700">Inversionistas</h2>
+            <h2 className="text-lg font-semibold text-slate-700">{t('nav.investors')}</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Stat
               icon={Wallet}
-              title="Cartera Propia"
+              title={t('dash.inv.own')}
               value={formatCurrency(kpis.carteraPropia ?? 0)}
               color="blue"
-              footer="Financiada con capital propio"
+              footer={t('dash.inv.own_foot')}
             />
             <Stat
               icon={Briefcase}
-              title="Cartera de Terceros"
+              title={t('dash.inv.third')}
               value={formatCurrency(kpis.carteraTerceros ?? 0)}
               color="purple"
-              footer="Financiada por inversionistas"
+              footer={t('dash.inv.third_foot')}
             />
             <Stat
               icon={ArrowDownCircle}
-              title="Pasivo a Inversionistas"
+              title={t('dash.inv.liability')}
               value={formatCurrency(kpis.pasivoInversionistas ?? 0)}
               color="red"
-              footer="Neto pendiente de liquidar"
+              footer={t('dash.inv.liability_foot')}
             />
           </div>
         </div>
@@ -242,7 +244,7 @@ const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Distribución por estado */}
         <Card>
-          <h3 className="section-title mb-4">Préstamos por Estado</h3>
+          <h3 className="section-title mb-4">{t('dash.chart.by_status')}</h3>
           {pieData.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
@@ -259,18 +261,18 @@ const DashboardPage: React.FC = () => {
                     <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: any, name: any) => [`${value} préstamo(s)`, name]} />
+                <Tooltip formatter={(value: any, name: any) => [t('dash.chart.loans_unit').replace('{n}', String(value)), name]} />
                 <Legend verticalAlign="bottom" height={60} iconSize={10} wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }} formatter={(value: string, entry: any) => `${value}: ${entry.payload?.value || 0}`} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-slate-500 text-sm py-4">Sin datos disponibles</p>
+            <p className="text-slate-500 text-sm py-4">{t('dash.chart.no_data')}</p>
           )}
         </Card>
 
         {/* Recaudación reciente */}
         <Card>
-          <h3 className="section-title mb-4">Recaudación Últimos 7 Días</h3>
+          <h3 className="section-title mb-4">{t('dash.chart.collections_7d')}</h3>
           {barData.length > 0 ? (
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={barData}>
@@ -279,11 +281,11 @@ const DashboardPage: React.FC = () => {
                 <YAxis />
                 <Tooltip formatter={(value) => formatCurrency(value as number)} />
                 <Legend />
-                <Bar dataKey="total" fill="#1e3a5f" name="Recaudado" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="total" fill="#1e3a5f" name={t('dash.chart.collected')} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-slate-500 text-sm py-4 text-center">Sin cobros registrados en los últimos días</p>
+            <p className="text-slate-500 text-sm py-4 text-center">{t('dash.chart.no_collections')}</p>
           )}
         </Card>
       </div>
@@ -292,15 +294,15 @@ const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top préstamos en mora */}
         <Card>
-          <h3 className="section-title mb-4">Préstamos en Mora (Top)</h3>
+          <h3 className="section-title mb-4">{t('dash.tbl.top_overdue')}</h3>
           {topOverdue.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left py-2 px-2 font-semibold text-slate-700">Cliente</th>
-                    <th className="text-left py-2 px-2 font-semibold text-slate-700">Saldo</th>
-                    <th className="text-left py-2 px-2 font-semibold text-slate-700">Días</th>
+                    <th className="text-left py-2 px-2 font-semibold text-slate-700">{t('col.client')}</th>
+                    <th className="text-left py-2 px-2 font-semibold text-slate-700">{t('col.balance')}</th>
+                    <th className="text-left py-2 px-2 font-semibold text-slate-700">{t('col.days')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -323,21 +325,21 @@ const DashboardPage: React.FC = () => {
               </table>
             </div>
           ) : (
-            <p className="text-slate-500 text-sm py-4 text-center">Sin préstamos en mora 🎉</p>
+            <p className="text-slate-500 text-sm py-4 text-center">{t('dash.tbl.no_overdue')}</p>
           )}
         </Card>
 
         {/* Cobros recientes */}
         <Card>
-          <h3 className="section-title mb-4">Cobros Recientes</h3>
+          <h3 className="section-title mb-4">{t('dash.tbl.recent')}</h3>
           {recentPayments.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200">
-                    <th className="text-left py-2 px-2 font-semibold text-slate-700">Cliente</th>
-                    <th className="text-left py-2 px-2 font-semibold text-slate-700">Monto</th>
-                    <th className="text-left py-2 px-2 font-semibold text-slate-700">Fecha</th>
+                    <th className="text-left py-2 px-2 font-semibold text-slate-700">{t('col.client')}</th>
+                    <th className="text-left py-2 px-2 font-semibold text-slate-700">{t('col.amount')}</th>
+                    <th className="text-left py-2 px-2 font-semibold text-slate-700">{t('col.date')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -352,7 +354,7 @@ const DashboardPage: React.FC = () => {
               </table>
             </div>
           ) : (
-            <p className="text-slate-500 text-sm py-4 text-center">Sin cobros recientes</p>
+            <p className="text-slate-500 text-sm py-4 text-center">{t('dash.tbl.no_recent')}</p>
           )}
         </Card>
       </div>
@@ -361,18 +363,18 @@ const DashboardPage: React.FC = () => {
       <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <h3 className="section-title">Acciones Rápidas</h3>
-            <p className="text-slate-600 text-sm">Realiza las operaciones más comunes</p>
+            <h3 className="section-title">{t('dash.quick.title')}</h3>
+            <p className="text-slate-600 text-sm">{t('dash.quick.subtitle')}</p>
           </div>
           <div className="flex gap-3 flex-wrap justify-center">
             <Button size="md" onClick={() => navigate('/clients')}>
-              Nuevo Cliente
+              {t('dash.quick.new_client')}
             </Button>
             <Button size="md" variant="secondary" onClick={() => navigate('/loans')}>
-              Nuevo Préstamo
+              {t('dash.quick.new_loan')}
             </Button>
             <Button size="md" variant="outline" onClick={() => navigate('/payments')}>
-              Registrar Pago
+              {t('dash.quick.register_payment')}
             </Button>
           </div>
         </div>
