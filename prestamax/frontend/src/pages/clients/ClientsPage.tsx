@@ -12,6 +12,7 @@ import { Client } from '@/types'
 import { formatDate } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { useT } from '@/lib/i18n'
 
 const ClientsPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([])
@@ -21,6 +22,7 @@ const ClientsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const navigate = useNavigate()
   const { can } = usePermission()
+  const t = useT()
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -28,7 +30,7 @@ const ClientsPage: React.FC = () => {
         const response = await api.get('/clients?limit=200')
         setClients(response.data.data || [])
       } catch (error) {
-        if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error('Error al cargar clientes')
+        if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error(t('cli.load_error'))
       } finally {
         setIsLoading(false)
       }
@@ -65,13 +67,13 @@ const ClientsPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="page-title">Clientes</h1>
-          <p className="text-slate-600 text-sm mt-1">Gestiona tu base de clientes</p>
+          <h1 className="page-title">{t('nav.clients')}</h1>
+          <p className="text-slate-600 text-sm mt-1">{t('cli.subtitle')}</p>
         </div>
         {can('clients.create') && (
           <Button onClick={() => navigate('/clients/new')} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
-            Nuevo Cliente
+            {t('dash.quick.new_client')}
           </Button>
         )}
       </div>
@@ -81,7 +83,7 @@ const ClientsPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Input
             type="text"
-            placeholder="Buscar por nombre, cédula o teléfono..."
+            placeholder={t('cli.search_ph')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="md:col-span-1"
@@ -91,21 +93,21 @@ const ClientsPage: React.FC = () => {
             onChange={(e) => setScoreFilter(e.target.value)}
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">Todos los scores</option>
-            <option value="excelente">Excelente (85-100)</option>
-            <option value="muy_bueno">Muy Bueno (70-84)</option>
-            <option value="bueno">Bueno (50-69)</option>
-            <option value="regular">Regular (30-49)</option>
-            <option value="deficiente">Deficiente (0-29)</option>
+            <option value="">{t('cli.all_scores')}</option>
+            <option value="excelente">{t('cli.score.excelente')}</option>
+            <option value="muy_bueno">{t('cli.score.muy_bueno')}</option>
+            <option value="bueno">{t('cli.score.bueno')}</option>
+            <option value="regular">{t('cli.score.regular')}</option>
+            <option value="deficiente">{t('cli.score.deficiente')}</option>
           </select>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">Todos los estados</option>
-            <option value="active">Activos</option>
-            <option value="inactive">Inactivos</option>
+            <option value="">{t('cli.all_status')}</option>
+            <option value="active">{t('cli.status_active')}</option>
+            <option value="inactive">{t('cli.status_inactive')}</option>
           </select>
         </div>
       </Card>
@@ -118,12 +120,12 @@ const ClientsPage: React.FC = () => {
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-3 px-4 font-semibold text-slate-700">#</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Nombre</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Cédula</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Teléfono</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Score</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Estado</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Acciones</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.name')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.id_number')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.phone')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.score')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.status')}</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">{t('col.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -145,7 +147,7 @@ const ClientsPage: React.FC = () => {
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {isActive ? 'Activo' : 'Inactivo'}
+                        {isActive ? t('common.active') : t('common.inactive')}
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -153,7 +155,7 @@ const ClientsPage: React.FC = () => {
                         <button
                           onClick={() => navigate(`/clients/${client.id}`)}
                           className="p-1 hover:bg-blue-100 rounded transition-colors text-blue-600"
-                          title="Ver detalle"
+                          title={t('cli.view_detail')}
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -161,7 +163,7 @@ const ClientsPage: React.FC = () => {
                           <button
                             onClick={() => navigate(`/clients/${client.id}/edit`)}
                             className="p-1 hover:bg-amber-100 rounded transition-colors text-amber-600"
-                            title="Editar cliente"
+                            title={t('cli.edit_title')}
                           >
                             <Edit className="w-4 h-4" />
                           </button>
@@ -178,9 +180,9 @@ const ClientsPage: React.FC = () => {
       ) : (
         <EmptyState
           icon={Users}
-          title="Sin clientes"
-          description={searchTerm || scoreFilter || statusFilter ? 'No hay clientes que coincidan con los filtros' : 'Comienza agregando tu primer cliente'}
-          action={{ label: 'Nuevo Cliente', onClick: () => navigate('/clients/new') }}
+          title={t('cli.empty_title')}
+          description={searchTerm || scoreFilter || statusFilter ? t('cli.empty_filtered') : t('cli.empty_start')}
+          action={{ label: t('dash.quick.new_client'), onClick: () => navigate('/clients/new') }}
         />
       )}
     </div>
