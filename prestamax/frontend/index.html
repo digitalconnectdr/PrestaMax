@@ -7,6 +7,19 @@
     <meta name="theme-color" content="#1e3a5f" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Google tag (gtag.js) — GA4. Estático en el <head> para que la
+         recolección de datos y la verificación de Search Console (método
+         Google Analytics) funcionen de forma confiable. El Measurement ID
+         no es secreto. send_page_view:false → las vistas las envía el SPA
+         en cada cambio de ruta (src/lib/analytics.ts). -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W9245V6FR6"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-W9245V6FR6', { send_page_view: false });
+    </script>
+
     <!-- ── SEO (landing público). Las rutas privadas de la app fijan noindex
          dinámicamente en runtime (ver src/lib/seo.ts) y robots.txt las bloquea. ── -->
     <title>PrestaMax — Software de gestión de préstamos | Multi-moneda y multi-país</title>

@@ -5,8 +5,8 @@ import { ArrowLeft, Lock, Eye, Database, Share2, ShieldCheck, Bell, Trash2, Mail
 const LAST_UPDATED = '24 de mayo de 2026'
 const COMPANY = 'JPRS Digital Connect'
 const APP = 'PrestaMax'
-const EMAIL_PRIVACY = 'privacidad@prestamax.com'
-const EMAIL_SUPPORT = 'soporte@prestamax.com'
+const EMAIL_PRIVACY = 'prestamax@digitalconnectdr.com'
+const EMAIL_SUPPORT = 'prestamaxsupport@digitalconnectdr.com'
 const JURISDICTION = 'República Dominicana'
 
 const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (

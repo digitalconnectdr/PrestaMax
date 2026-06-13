@@ -415,6 +415,9 @@ const TR: Record<string, Tri> = {
   'lp.footer.terms':   { es: 'Términos y condiciones', en: 'Terms and conditions', pt: 'Termos e condições' },
   'lp.footer.privacy': { es: 'Política de privacidad', en: 'Privacy policy', pt: 'Política de privacidade' },
   'lp.footer.rights':  { es: 'Todos los derechos reservados.', en: 'All rights reserved.', pt: 'Todos os direitos reservados.' },
+  'lp.footer.contact': { es: 'Contacto', en: 'Contact', pt: 'Contato' },
+  'lp.footer.sales':   { es: 'Ventas e información', en: 'Sales & info', pt: 'Vendas e informações' },
+  'lp.footer.support': { es: 'Soporte', en: 'Support', pt: 'Suporte' },
 }
 
 // Diccionarios derivados por locale (compatibilidad con el lookup existente)

@@ -479,7 +479,7 @@ const LandingPage: React.FC = () => {
       {/* Footer */}
       <footer className="bg-slate-900 text-slate-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] rounded-lg flex items-center justify-center">
@@ -514,6 +514,20 @@ const LandingPage: React.FC = () => {
               <ul className="mt-3 space-y-2 text-sm">
                 <li><Link to="/terms" className="hover:text-white">{t('lp.footer.terms')}</Link></li>
                 <li><Link to="/privacy" className="hover:text-white">{t('lp.footer.privacy')}</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-white">{t('lp.footer.contact')}</h4>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li>
+                  <span className="block text-xs text-slate-500">{t('lp.footer.sales')}</span>
+                  <a href="mailto:prestamax@digitalconnectdr.com" className="hover:text-white break-all">prestamax@digitalconnectdr.com</a>
+                </li>
+                <li>
+                  <span className="block text-xs text-slate-500">{t('lp.footer.support')}</span>
+                  <a href="mailto:prestamaxsupport@digitalconnectdr.com" className="hover:text-white break-all">prestamaxsupport@digitalconnectdr.com</a>
+                </li>
               </ul>
             </div>
           </div>
