@@ -61,6 +61,16 @@ test_bang.html
 *.pptx
 *.docx
 
+# ─── Notas/contexto interno (pueden contener credenciales) ────
+CONTEXTO_PRESTAMAX.txt
+PRESTAMAX_CONTEXTO_COMPLETO.txt
+PRESTAMAX_CONTEXTO_DEPLOY.txt
+Creacion PrestaMax.txt
+Inicio del sistema.txt
+RUTA-DEL-PROYECTO.txt
+REVISION-SEGURIDAD.md
+CHANGES_WATERFALL_PAGOS.md
+
 # ─── Generated Prisma client ──────────────────────────────────
 **/generated/
 prisma/migrations/
