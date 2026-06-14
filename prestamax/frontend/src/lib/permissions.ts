@@ -40,87 +40,71 @@ export type PermKey =
   | 'investors.view' | 'investors.create' | 'investors.edit' | 'investors.delete'
   | 'investors.assign' | 'investors.payouts' | 'investors.portal'
 
+import { t as tg } from '@/lib/i18n'
+
 export interface PermDef {
   key: PermKey
-  label: string
-  description: string
+  readonly label: string         // getter → traducción del idioma actual
+  readonly description: string   // getter → traducción del idioma actual
   module: string
-  moduleLabel: string
+  readonly moduleLabel: string   // getter → traducción del idioma actual
 }
 
-export const PERM_DEFS: PermDef[] = [
-  { key:'clients.view',     module:'clients',    moduleLabel:'Clientes',      label:'Ver clientes',          description:'Acceder al listado y detalle de clientes' },
-  { key:'clients.create',   module:'clients',    moduleLabel:'Clientes',      label:'Crear clientes',        description:'Registrar nuevos clientes en el sistema' },
-  { key:'clients.edit',     module:'clients',    moduleLabel:'Clientes',      label:'Editar clientes',       description:'Modificar información de clientes existentes' },
-  { key:'clients.delete',   module:'clients',    moduleLabel:'Clientes',      label:'Desactivar clientes',   description:'Desactivar clientes del sistema' },
-  { key:'loans.view',       module:'loans',      moduleLabel:'Préstamos',     label:'Ver préstamos',         description:'Acceder al listado y detalle de préstamos' },
-  { key:'loans.create',     module:'loans',      moduleLabel:'Préstamos',     label:'Crear préstamos',       description:'Registrar nuevos préstamos' },
-  { key:'loans.edit',       module:'loans',      moduleLabel:'Préstamos',     label:'Editar préstamos',      description:'Modificar condiciones de préstamos existentes' },
-  { key:'loans.approve',    module:'loans',      moduleLabel:'Préstamos',     label:'Aprobar préstamos',     description:'Aprobar solicitudes de préstamo pendientes' },
-  { key:'loans.reject',     module:'loans',      moduleLabel:'Préstamos',     label:'Rechazar préstamos',    description:'Rechazar solicitudes de préstamo' },
-  { key:'loans.disburse',   module:'loans',      moduleLabel:'Préstamos',     label:'Desembolsar préstamos', description:'Marcar préstamos como desembolsados' },
-  { key:'loans.write_off',  module:'loans',      moduleLabel:'Préstamos',     label:'Marcar incobrable',     description:'Marcar un préstamo como incobrable' },
-  { key:'loans.void',       module:'loans',      moduleLabel:'Préstamos',     label:'Anular préstamos',      description:'Anular/cancelar préstamos activos' },
-  { key:'loans.import',     module:'loans',      moduleLabel:'Préstamos',     label:'Importar CSV',          description:'Importar préstamos desde archivo CSV' },
-  { key:'payments.view',    module:'payments',   moduleLabel:'Pagos',         label:'Ver pagos',             description:'Acceder al historial de pagos' },
-  { key:'payments.create',  module:'payments',   moduleLabel:'Pagos',         label:'Registrar pagos',       description:'Registrar nuevos pagos de clientes' },
-  { key:'payments.void',    module:'payments',   moduleLabel:'Pagos',         label:'Anular pagos',          description:'Anular pagos registrados' },
-  { key:'payments.edit',    module:'payments',   moduleLabel:'Pagos',         label:'Editar pagos',          description:'Modificar metadatos de pagos' },
-  { key:'receipts.view',    module:'receipts',   moduleLabel:'Recibos',       label:'Ver recibos',           description:'Acceder al listado de recibos' },
-  { key:'receipts.reprint', module:'receipts',   moduleLabel:'Recibos',       label:'Reimprimir recibos',    description:'Marcar recibos como reimpresos' },
-  { key:'contracts.view',   module:'contracts',  moduleLabel:'Contratos',     label:'Ver contratos',         description:'Acceder al listado de contratos' },
-  { key:'contracts.create', module:'contracts',  moduleLabel:'Contratos',     label:'Generar contratos',     description:'Generar contratos de préstamo' },
-  { key:'contracts.sign',   module:'contracts',  moduleLabel:'Contratos',     label:'Firmar contratos',      description:'Marcar contratos como firmados' },
-  { key:'contracts.delete', module:'contracts',  moduleLabel:'Contratos',     label:'Eliminar contratos',    description:'Eliminar/anular contratos' },
-  { key:'collections.view',         module:'collections', moduleLabel:'Cobros',   label:'Ver cartera de cobros',          description:'Acceder a la cartera y préstamos vencidos' },
-  { key:'collections.notes',        module:'collections', moduleLabel:'Cobros',   label:'Notas de cobro',                description:'Agregar notas de gestión de cobro' },
-  { key:'collections.promises',     module:'collections', moduleLabel:'Cobros',   label:'Promesas de pago',               description:'Gestionar promesas de pago y visitas' },
-  { key:'collections.manage',       module:'collections', moduleLabel:'Cobros',   label:'Ver todos los préstamos',        description:'Ver toda la cartera del tenant (no solo préstamos asignados)' },
-  { key:'collections.tasks',        module:'collections', moduleLabel:'Cobros',   label:'Ver tareas asignadas',           description:'Ver y actualizar el estado de las tareas de cobranza asignadas al usuario' },
-  { key:'collections.tasks.manage', module:'collections', moduleLabel:'Cobros',   label:'Administrar agenda de cobros',   description:'Crear, asignar, editar y eliminar tareas de cobranza para todos los cobradores' },
-  { key:'requests.view',    module:'requests',   moduleLabel:'Solicitudes',   label:'Ver solicitudes',       description:'Acceder al listado de solicitudes' },
-  { key:'requests.approve', module:'requests',   moduleLabel:'Solicitudes',   label:'Aprobar solicitudes',   description:'Aprobar solicitudes de préstamo' },
-  { key:'requests.reject',  module:'requests',   moduleLabel:'Solicitudes',   label:'Rechazar solicitudes',  description:'Rechazar solicitudes de préstamo' },
-  { key:'requests.convert', module:'requests',   moduleLabel:'Solicitudes',   label:'Convertir solicitudes', description:'Convertir solicitudes en préstamos activos' },
-  { key:'reports.dashboard',   module:'reports', moduleLabel:'Reportes',      label:'Dashboard',             description:'Ver el panel principal con KPIs' },
-  { key:'reports.portfolio',   module:'reports', moduleLabel:'Reportes',      label:'Reporte de cartera',    description:'Ver el reporte de cartera' },
-  { key:'reports.mora',        module:'reports', moduleLabel:'Reportes',      label:'Reporte de mora',       description:'Ver préstamos en mora' },
-  { key:'reports.collections', module:'reports', moduleLabel:'Reportes',      label:'Reporte de cobros',     description:'Ver cobros por cobrador' },
-  { key:'reports.advanced',    module:'reports', moduleLabel:'Reportes',      label:'Analítica avanzada',    description:'Ver reportes avanzados y tendencias' },
-  { key:'reports.income',      module:'reports', moduleLabel:'Reportes',      label:'Ingresos y gastos',     description:'Ver reporte de ingresos y gastos' },
-  { key:'reports.projection',  module:'reports', moduleLabel:'Reportes',      label:'Proyección de cobros',  description:'Ver proyección de ingresos a cobrar por fecha o rango' },
-  { key:'reports.datacredito', module:'reports', moduleLabel:'Reportes',      label:'Reporte DataCrédito',   description:'Generar y descargar el reporte mensual para DataCrédito' },
-  { key:'whatsapp.view',      module:'whatsapp', moduleLabel:'WhatsApp',      label:'Ver mensajes',          description:'Ver historial de mensajes de WhatsApp' },
-  { key:'whatsapp.send',      module:'whatsapp', moduleLabel:'WhatsApp',      label:'Enviar mensajes',       description:'Enviar mensajes por WhatsApp a clientes' },
-  { key:'whatsapp.templates', module:'whatsapp', moduleLabel:'WhatsApp',      label:'Gestionar plantillas',  description:'Crear y editar plantillas de WhatsApp' },
-  { key:'income.view',   module:'income', moduleLabel:'Ingresos/Gastos',      label:'Ver entradas',          description:'Ver el registro de ingresos y gastos' },
-  { key:'income.create', module:'income', moduleLabel:'Ingresos/Gastos',      label:'Crear entradas',        description:'Registrar nuevas entradas' },
-  { key:'income.edit',   module:'income', moduleLabel:'Ingresos/Gastos',      label:'Editar entradas',       description:'Modificar entradas existentes' },
-  { key:'income.delete', module:'income', moduleLabel:'Ingresos/Gastos',      label:'Eliminar entradas',     description:'Eliminar entradas de ingreso/gasto' },
-  { key:'settings.general',       module:'settings', moduleLabel:'Configuración', label:'Configuración general', description:'Ver y editar datos de la empresa' },
-  { key:'settings.users',         module:'settings', moduleLabel:'Configuración', label:'Gestionar usuarios',    description:'Invitar y gestionar usuarios del tenant' },
-  { key:'settings.branches',      module:'settings', moduleLabel:'Configuración', label:'Gestionar sucursales',  description:'Crear y editar sucursales' },
-  { key:'settings.products',      module:'settings', moduleLabel:'Configuración', label:'Gestionar productos',   description:'Crear y editar productos de préstamo' },
-  { key:'settings.bank_accounts', module:'settings', moduleLabel:'Configuración', label:'Cuentas bancarias',     description:'Gestionar cuentas bancarias y transferencias' },
-  { key:'templates.view',   module:'templates',  moduleLabel:'Plantillas',     label:'Ver plantillas',       description:'Ver plantillas de contrato disponibles' },
-  { key:'templates.create', module:'templates',  moduleLabel:'Plantillas',     label:'Crear plantillas',     description:'Crear nuevas plantillas de contrato' },
-  { key:'templates.edit',   module:'templates',  moduleLabel:'Plantillas',     label:'Editar plantillas',    description:'Modificar plantillas de contrato existentes' },
-  { key:'templates.delete', module:'templates',  moduleLabel:'Plantillas',     label:'Eliminar plantillas',  description:'Eliminar plantillas de contrato' },
-  { key:'calculator.use',   module:'calculator', moduleLabel:'Calculadora',    label:'Usar calculadora',      description:'Usar la calculadora de préstamos' },
-  { key:'investors.view',    module:'investors', moduleLabel:'Inversionistas', label:'Ver inversionistas',     description:'Acceder al listado y detalle de inversionistas' },
-  { key:'investors.create',  module:'investors', moduleLabel:'Inversionistas', label:'Crear inversionistas',   description:'Registrar nuevos inversionistas' },
-  { key:'investors.edit',    module:'investors', moduleLabel:'Inversionistas', label:'Editar inversionistas',  description:'Modificar datos de inversionistas' },
-  { key:'investors.delete',  module:'investors', moduleLabel:'Inversionistas', label:'Desactivar inversionistas', description:'Desactivar inversionistas existentes' },
-  { key:'investors.assign',  module:'investors', moduleLabel:'Inversionistas', label:'Asignar préstamos',      description:'Vincular/desvincular préstamos a un inversionista' },
-  { key:'investors.payouts', module:'investors', moduleLabel:'Inversionistas', label:'Ver/generar payouts',    description:'Generar y consultar reportes de liquidación a inversionistas' },
-  { key:'investors.portal',  module:'investors', moduleLabel:'Inversionistas', label:'Portal del inversionista', description:'Acceder al portal de solo-lectura del inversionista' },
+// Pares (key, module). Los textos viven en i18n (perm.<key>, perm.<key>_d, pmod.<module>).
+const PERM_PAIRS: { key: PermKey; module: string }[] = [
+  { key:'clients.view', module:'clients' }, { key:'clients.create', module:'clients' },
+  { key:'clients.edit', module:'clients' }, { key:'clients.delete', module:'clients' },
+  { key:'loans.view', module:'loans' }, { key:'loans.create', module:'loans' },
+  { key:'loans.edit', module:'loans' }, { key:'loans.approve', module:'loans' },
+  { key:'loans.reject', module:'loans' }, { key:'loans.disburse', module:'loans' },
+  { key:'loans.write_off', module:'loans' }, { key:'loans.void', module:'loans' },
+  { key:'loans.import', module:'loans' },
+  { key:'payments.view', module:'payments' }, { key:'payments.create', module:'payments' },
+  { key:'payments.void', module:'payments' }, { key:'payments.edit', module:'payments' },
+  { key:'receipts.view', module:'receipts' }, { key:'receipts.reprint', module:'receipts' },
+  { key:'contracts.view', module:'contracts' }, { key:'contracts.create', module:'contracts' },
+  { key:'contracts.sign', module:'contracts' }, { key:'contracts.delete', module:'contracts' },
+  { key:'collections.view', module:'collections' }, { key:'collections.notes', module:'collections' },
+  { key:'collections.promises', module:'collections' }, { key:'collections.manage', module:'collections' },
+  { key:'collections.tasks', module:'collections' }, { key:'collections.tasks.manage', module:'collections' },
+  { key:'requests.view', module:'requests' }, { key:'requests.approve', module:'requests' },
+  { key:'requests.reject', module:'requests' }, { key:'requests.convert', module:'requests' },
+  { key:'reports.dashboard', module:'reports' }, { key:'reports.portfolio', module:'reports' },
+  { key:'reports.mora', module:'reports' }, { key:'reports.collections', module:'reports' },
+  { key:'reports.advanced', module:'reports' }, { key:'reports.income', module:'reports' },
+  { key:'reports.projection', module:'reports' }, { key:'reports.datacredito', module:'reports' },
+  { key:'whatsapp.view', module:'whatsapp' }, { key:'whatsapp.send', module:'whatsapp' },
+  { key:'whatsapp.templates', module:'whatsapp' },
+  { key:'income.view', module:'income' }, { key:'income.create', module:'income' },
+  { key:'income.edit', module:'income' }, { key:'income.delete', module:'income' },
+  { key:'settings.general', module:'settings' }, { key:'settings.users', module:'settings' },
+  { key:'settings.branches', module:'settings' }, { key:'settings.products', module:'settings' },
+  { key:'settings.bank_accounts', module:'settings' },
+  { key:'templates.view', module:'templates' }, { key:'templates.create', module:'templates' },
+  { key:'templates.edit', module:'templates' }, { key:'templates.delete', module:'templates' },
+  { key:'calculator.use', module:'calculator' },
+  { key:'investors.view', module:'investors' }, { key:'investors.create', module:'investors' },
+  { key:'investors.edit', module:'investors' }, { key:'investors.delete', module:'investors' },
+  { key:'investors.assign', module:'investors' }, { key:'investors.payouts', module:'investors' },
+  { key:'investors.portal', module:'investors' },
 ]
 
-// Group definitions by module for UI rendering
+const makePermDef = (key: PermKey, module: string): PermDef => ({
+  key,
+  module,
+  get label() { return tg(`perm.${key}`) },
+  get description() { return tg(`perm.${key}_d`) },
+  get moduleLabel() { return tg(`pmod.${module}`) },
+})
+
+export const PERM_DEFS: PermDef[] = PERM_PAIRS.map(p => makePermDef(p.key, p.module))
+
+// Group definitions by module for UI rendering. `label` es getter para seguir el idioma.
 export const PERM_BY_MODULE = PERM_DEFS.reduce<Record<string, { label: string; perms: PermDef[] }>>(
   (acc, p) => {
-    if (!acc[p.module]) acc[p.module] = { label: p.moduleLabel, perms: [] }
-    acc[p.module].perms.push(p)
+    const mod = p.module
+    if (!acc[mod]) acc[mod] = { get label() { return tg(`pmod.${mod}`) }, perms: [] }
+    acc[mod].perms.push(p)
     return acc
   },
   {}

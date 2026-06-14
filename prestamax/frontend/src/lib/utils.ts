@@ -3,6 +3,7 @@ import { twMerge } from 'tailwind-merge'
 import { format, differenceInDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { LoanStatus } from '@/types'
+import { t as tg } from '@/lib/i18n'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -92,11 +93,11 @@ export function getScoreBgColor(score: number): string {
 }
 
 export function getScoreLabel(score: number): string {
-  if (score >= 85) return 'Excelente'
-  if (score >= 70) return 'Muy Bueno'
-  if (score >= 50) return 'Bueno'
-  if (score >= 30) return 'Regular'
-  return 'Deficiente'
+  if (score >= 85) return tg('cd.score_excellent')
+  if (score >= 70) return tg('cd.score_vgood')
+  if (score >= 50) return tg('cd.score_good')
+  if (score >= 30) return tg('cd.score_regular')
+  return tg('cd.score_deficient')
 }
 
 export function getScoreBarColor(score: number): string {
