@@ -134,6 +134,68 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Contenido estático para crawlers/IA que no ejecutan JavaScript.
+         Los usuarios con JS ven la SPA normal y nunca ven esto (cero parpadeo);
+         los crawlers que leen el HTML crudo (ChatGPT, Claude, Perplexity, Grok,
+         Gemini, Google) obtienen aquí el contenido real del producto. -->
+    <noscript>
+      <main style="max-width:900px;margin:0 auto;padding:24px;font-family:system-ui,Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <h1>PrestaMax — Software de gestión de préstamos</h1>
+        <p><strong>PrestaMax</strong> es un sistema en la nube (100% web, sin instalación) para
+        prestamistas, financieras, cooperativas y casas de préstamo en Latinoamérica. Permite
+        administrar clientes, préstamos, cobranzas, pagos, recibos, contratos e inversionistas.
+        Es <strong>multi-moneda</strong> (12 monedas latinoamericanas más USD y EUR),
+        multiusuario y multi-sucursal, con interfaz en <strong>español, inglés y portugués</strong>.
+        Reemplaza Excel, el papel y los sistemas dispersos.</p>
+
+        <h2>Funciones principales</h2>
+        <ul>
+          <li><strong>Clientes:</strong> base de datos con historial crediticio, referencias, garantes y score interno automático.</li>
+          <li><strong>Préstamos:</strong> amortización francesa (cuota fija), interés flat o solo interés; tasa mensual, anual, quincenal, semanal o diaria; frecuencias de pago configurables; aprobación, desembolso y migración de cartera existente.</li>
+          <li><strong>Cobranzas:</strong> asignación de carteras a cobradores, promesas de pago, agenda de tareas y mora en tiempo real.</li>
+          <li><strong>Pagos y recibos:</strong> pagos parciales o completos aplicados a capital/interés/mora, con recibos en PDF e imprimibles y envío por WhatsApp.</li>
+          <li><strong>Contratos:</strong> generación de contratos y pagarés notariales desde plantillas con variables y firma digital.</li>
+          <li><strong>Reportes:</strong> dashboard ejecutivo, cartera vencida, proyección de cobros, rentabilidad, ingresos/gastos y reporte DataCrédito.</li>
+          <li><strong>Inversionistas:</strong> registro, asignación de préstamos, liquidaciones y portal de solo lectura.</li>
+          <li><strong>WhatsApp:</strong> plantillas y mensajes automáticos (recordatorios de pago, mora, bienvenida).</li>
+        </ul>
+
+        <h2>Planes y precios</h2>
+        <ul>
+          <li>Starter — US$29.99/mes</li>
+          <li>Básico — US$59.99/mes</li>
+          <li>Profesional — US$119.99/mes</li>
+          <li>Enterprise — US$249.99/mes</li>
+          <li>Prueba gratis de hasta 14 días, sin tarjeta de crédito. Cancelación en cualquier momento.</li>
+        </ul>
+
+        <h2>Monedas y países</h2>
+        <p>Soporta 12 monedas: Peso Dominicano (DOP), Dólar Estadounidense (USD), Euro (EUR),
+        Gourde Haitiano (HTG), Peso Mexicano (MXN), Peso Colombiano (COP), Sol Peruano (PEN),
+        Peso Chileno (CLP), Boliviano (BOB), Peso Uruguayo (UYU), Real Brasileño (BRL) y
+        Quetzal Guatemalteco (GTQ). Ideal para República Dominicana y toda Latinoamérica.</p>
+
+        <h2>Preguntas frecuentes</h2>
+        <h3>¿Hay prueba gratis?</h3>
+        <p>Sí. Ofrecemos hasta 14 días de prueba gratis, sin tarjeta de crédito.</p>
+        <h3>¿Necesito instalar algo?</h3>
+        <p>No. PrestaMax es 100% web; funciona desde cualquier navegador en computadora, tableta o celular.</p>
+        <h3>¿Mis datos están seguros?</h3>
+        <p>Sí. Cifrado en tránsito (HTTPS/TLS), almacenamiento aislado por empresa (multi-tenant) y respaldos diarios.</p>
+        <h3>¿En qué idiomas está?</h3>
+        <p>Interfaz completa en español, inglés y portugués.</p>
+        <h3>¿Puedo cancelar cuando quiera?</h3>
+        <p>Sí. No hay contratos a largo plazo; cancelas con un clic.</p>
+
+        <h2>Contacto</h2>
+        <p>Solicita tu plan o una demostración en
+        <a href="https://prestamax-umber.vercel.app/contact">prestamax-umber.vercel.app/contact</a>.
+        Ventas: prestamax@digitalconnectdr.com · Soporte: prestamaxsupport@digitalconnectdr.com.
+        Desarrollado por JPRS Digital Connect.</p>
+
+        <p><a href="https://prestamax-umber.vercel.app/">Ir a PrestaMax</a></p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
 
     <script>
