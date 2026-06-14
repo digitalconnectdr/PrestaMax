@@ -1059,6 +1059,19 @@ const TR: Record<string, Tri> = {
   'set.perms_active_of':{ es: 'permisos activos de', en: 'active permissions of', pt: 'permissões ativas de' },
   'set.perms_possible': { es: 'posibles en tu plan', en: 'possible in your plan', pt: 'possíveis no seu plano' },
   'set.save_perms':     { es: 'Guardar Permisos', en: 'Save Permissions', pt: 'Salvar Permissões' },
+  // Confirms nativos
+  'set.reset_pwd_confirm':{ es: '¿Restablecer la contraseña de {name}? Se generará una contraseña temporal.', en: 'Reset the password of {name}? A temporary password will be generated.', pt: 'Redefinir a senha de {name}? Será gerada uma senha temporária.' },
+  'set.transfer_rate_confirm':{ es: '⚠️ El tipo de cambio ingresado ({rate}) parece estar al revés.\nLa convención es: 1 {strong} = TC {local}, así que TC debe ser mayor a 1.\n\n¿Deseas continuar de todas formas?', en: '⚠️ The entered exchange rate ({rate}) seems reversed.\nThe convention is: 1 {strong} = rate {local}, so the rate must be greater than 1.\n\nDo you want to continue anyway?', pt: '⚠️ A taxa de câmbio informada ({rate}) parece estar invertida.\nA convenção é: 1 {strong} = taxa {local}, então a taxa deve ser maior que 1.\n\nDeseja continuar mesmo assim?' },
+  'set.bank_deact_confirm':{ es: '¿Desactivar esta cuenta bancaria?', en: 'Deactivate this bank account?', pt: 'Desativar esta conta bancária?' },
+  'set.tpl_del_confirm':{ es: '¿Eliminar esta plantilla?', en: 'Delete this template?', pt: 'Excluir este modelo?' },
+  // Grupos de variables de plantilla
+  'set.vg.debtor':      { es: 'Datos del Deudor', en: 'Debtor Data', pt: 'Dados do Devedor' },
+  'set.vg.lender':      { es: 'Datos del Prestamista', en: 'Lender Data', pt: 'Dados do Credor' },
+  'set.vg.loan':        { es: 'Datos del Préstamo', en: 'Loan Data', pt: 'Dados do Empréstimo' },
+  'set.vg.payment_plan':{ es: 'Plan de Pagos', en: 'Payment Plan', pt: 'Plano de Pagamentos' },
+  'set.vg.amounts_words':{ es: 'Montos en Palabras (Pagaré)', en: 'Amounts in Words (Promissory Note)', pt: 'Valores por Extenso (Nota Promissória)' },
+  'set.vg.dates_words': { es: 'Fechas en Palabras (Pagaré)', en: 'Dates in Words (Promissory Note)', pt: 'Datas por Extenso (Nota Promissória)' },
+  'set.vg.notary':      { es: 'Notaría y Testigos', en: 'Notary and Witnesses', pt: 'Cartório e Testemunhas' },
 
   // ── Agenda de cobranza (tareas) ──────────────────────────────────────────────
   'task.type.call':     { es: '📞 Llamada', en: '📞 Call', pt: '📞 Ligação' },
