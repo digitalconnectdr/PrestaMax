@@ -4,6 +4,7 @@
 import React from 'react'
 import { X, Info } from 'lucide-react'
 import { AMORTIZATION_TYPES } from '@/lib/amortization'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   open: boolean
@@ -12,6 +13,7 @@ interface Props {
 }
 
 const AmortizationHelpModal: React.FC<Props> = ({ open, onClose, highlight }) => {
+  const t = useT()
   if (!open) return null
 
   return (
@@ -27,16 +29,16 @@ const AmortizationHelpModal: React.FC<Props> = ({ open, onClose, highlight }) =>
               <Info className="w-4 h-4 text-[#1e3a5f]" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900">Tipos de Amortización</h3>
+              <h3 className="font-bold text-slate-900">{t('amort.modal_title')}</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Cómo se calcula la cuota según el método elegido
+                {t('amort.modal_subtitle')}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="p-1 hover:bg-slate-100 rounded-md text-slate-500"
-            aria-label="Cerrar"
+            aria-label={t('amort.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -44,11 +46,11 @@ const AmortizationHelpModal: React.FC<Props> = ({ open, onClose, highlight }) =>
 
         {/* Body */}
         <div className="p-5 space-y-4">
-          {AMORTIZATION_TYPES.map((t) => {
-            const isHighlight = highlight === t.value
+          {AMORTIZATION_TYPES.map((at) => {
+            const isHighlight = highlight === at.value
             return (
               <div
-                key={t.value}
+                key={at.value}
                 className={`rounded-xl border p-4 transition ${
                   isHighlight
                     ? 'border-[#f59e0b] bg-amber-50/50'
@@ -56,22 +58,22 @@ const AmortizationHelpModal: React.FC<Props> = ({ open, onClose, highlight }) =>
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <h4 className="font-semibold text-slate-900">{t.label}</h4>
+                  <h4 className="font-semibold text-slate-900">{at.label}</h4>
                   {isHighlight && (
                     <span className="text-[10px] uppercase tracking-wide font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                      Seleccionado
+                      {t('amort.selected')}
                     </span>
                   )}
                 </div>
                 <p className="text-sm text-slate-600 leading-relaxed mb-3">
-                  {t.longDesc}
+                  {at.longDesc}
                 </p>
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5">
-                    Ejemplo
+                    {t('amort.example')}
                   </p>
                   <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                    {t.example}
+                    {at.example}
                   </pre>
                 </div>
               </div>
@@ -79,8 +81,7 @@ const AmortizationHelpModal: React.FC<Props> = ({ open, onClose, highlight }) =>
           })}
 
           <div className="text-xs text-slate-500 italic pt-2 border-t border-slate-100">
-            Los cálculos usan tasa mensual. Si trabajas con tasas semanales o quincenales,
-            el sistema las convierte automáticamente.
+            {t('amort.modal_note')}
           </div>
         </div>
 
@@ -90,7 +91,7 @@ const AmortizationHelpModal: React.FC<Props> = ({ open, onClose, highlight }) =>
             onClick={onClose}
             className="px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#152a45] transition"
           >
-            Entendido
+            {t('amort.understood')}
           </button>
         </div>
       </div>
