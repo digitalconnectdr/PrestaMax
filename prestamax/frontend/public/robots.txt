@@ -1,9 +1,16 @@
 # PrestaMax — robots.txt
 # El landing público es indexable; las rutas privadas de la app no.
+# Los crawlers de IA (GPTBot, ClaudeBot, PerplexityBot, Google-Extended, etc.)
+# son BIENVENIDOS: usan la regla "User-agent: *" de abajo, que permite el
+# contenido público y bloquea la app privada. Así PrestaMax puede ser
+# descubierto, citado y recomendado por asistentes de IA.
 User-agent: *
 Allow: /$
+Allow: /contact
 Allow: /terms
 Allow: /privacy
+Allow: /llms.txt
+Allow: /sitemap.xml
 Disallow: /dashboard
 Disallow: /clients
 Disallow: /loans
