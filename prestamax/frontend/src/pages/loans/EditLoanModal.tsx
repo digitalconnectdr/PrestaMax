@@ -23,8 +23,11 @@ const FREQ_OPTIONS = [
 // AMORT_OPTIONS importado de @/lib/amortization (AMORTIZATION_TYPES)
 
 const RATE_TYPE_OPTIONS = [
-  { value: 'monthly', labelKey: 'elm.rate_monthly' },
-  { value: 'annual',  labelKey: 'elm.rate_annual' },
+  { value: 'monthly',  labelKey: 'elm.rate_monthly' },
+  { value: 'annual',   labelKey: 'elm.rate_annual' },
+  { value: 'daily',    labelKey: 'elm.rate_daily' },
+  { value: 'weekly',   labelKey: 'elm.rate_weekly' },
+  { value: 'biweekly', labelKey: 'elm.rate_biweekly' },
 ]
 
 type Tab = 'terminos' | 'fechas' | 'mora' | 'otros'

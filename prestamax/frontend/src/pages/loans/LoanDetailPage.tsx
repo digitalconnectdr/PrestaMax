@@ -889,7 +889,7 @@ const LoanDetailPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-slate-500 font-medium">{t('ld.rate_label')}</p>
-                    <p className="font-semibold text-slate-900">{loan.rate}% {loan.rateType === 'monthly' ? t('ld.monthly') : t('ld.annual')}</p>
+                    <p className="font-semibold text-slate-900">{loan.rate}% {t(`rate.${loan.rateType}`, loan.rateType)}</p>
                   </div>
                   <div>
                     <p className="text-slate-500 font-medium">{t('ld.term')}</p>
@@ -1183,7 +1183,7 @@ const LoanDetailPage: React.FC = () => {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-500">{t('ld.rate')}</span>
-                <span className="font-semibold text-blue-700">{loan.rate}% {loan.rateType === 'monthly' ? t('ld.monthly') : t('ld.annual')}</span>
+                <span className="font-semibold text-blue-700">{loan.rate}% {t(`rate.${loan.rateType}`, loan.rateType)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">{t('ld.amort')}</span>

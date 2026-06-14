@@ -487,7 +487,7 @@ const LoanCreatePage: React.FC = () => {
                   )}
                 </div>
                 <div className="text-sm text-slate-600 space-y-1">
-                  <p>{t('lc.p_rate')} <strong>{product.rate}% {product.rateType === 'monthly' ? t('lc.p_monthly') : t('lc.p_annual')}</strong></p>
+                  <p>{t('lc.p_rate')} <strong>{product.rate}% {t(`rate.${product.rateType}`, product.rateType)}</strong></p>
                   <p>{t('lc.p_amount')} <strong>{formatCurrency(product.minAmount)} – {formatCurrency(product.maxAmount)}</strong></p>
                   <p>{t('lc.p_term')} <strong>{product.minTerm} – {product.maxTerm} {unitLabel(product.termUnit)}</strong></p>
                   <p>{t('lc.p_freq')} <strong>{freqLabel(product.paymentFrequency)}</strong></p>
@@ -937,7 +937,7 @@ const LoanCreatePage: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">{t('lc.c_rate')}</span>
-                    <span className="font-medium">{form.rate}% {form.rateType === 'monthly' ? t('lc.p_monthly') : t('lc.p_annual')}</span>
+                    <span className="font-medium">{form.rate}% {t(`rate.${form.rateType}`, form.rateType)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">{t('lc.c_freq')}</span>

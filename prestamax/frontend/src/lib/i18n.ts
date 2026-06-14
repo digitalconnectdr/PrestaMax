@@ -1331,6 +1331,9 @@ const TR: Record<string, Tri> = {
   'elm.freq_quarterly': { es: 'Trimestral', en: 'Quarterly', pt: 'Trimestral' },
   'elm.rate_monthly':   { es: 'Mensual', en: 'Monthly', pt: 'Mensal' },
   'elm.rate_annual':    { es: 'Anual', en: 'Annual', pt: 'Anual' },
+  'elm.rate_daily':     { es: 'Diaria', en: 'Daily', pt: 'Diária' },
+  'elm.rate_weekly':    { es: 'Semanal', en: 'Weekly', pt: 'Semanal' },
+  'elm.rate_biweekly':  { es: 'Quincenal', en: 'Biweekly', pt: 'Quinzenal' },
   'elm.restructure_confirm':{ es: '⚠️ REESTRUCTURACIÓN DE PRÉSTAMO\n\nEstás cambiando tasa/plazo/frecuencia/amortización de un préstamo activo.\n\nEl sistema:\n* MANTENDRÁ intactas las cuotas ya pagadas o parciales.\n* REGENERARÁ las cuotas pendientes con base en el saldo principal restante.\n* Registrará esta acción en el historial de auditoría.\n\n¿Confirmas la reestructuración?', en: '⚠️ LOAN RESTRUCTURING\n\nYou are changing rate/term/frequency/amortization of an active loan.\n\nThe system will:\n* KEEP paid or partial installments intact.\n* REGENERATE pending installments based on the remaining principal balance.\n* Record this action in the audit history.\n\nDo you confirm the restructuring?', pt: '⚠️ REESTRUTURAÇÃO DE EMPRÉSTIMO\n\nVocê está alterando taxa/prazo/frequência/amortização de um empréstimo ativo.\n\nO sistema:\n* MANTERÁ intactas as parcelas já pagas ou parciais.\n* REGENERARÁ as parcelas pendentes com base no saldo principal restante.\n* Registrará esta ação no histórico de auditoria.\n\nVocê confirma a reestruturação?' },
   'elm.updated_ok':     { es: 'Préstamo actualizado correctamente', en: 'Loan updated successfully', pt: 'Empréstimo atualizado com sucesso' },
   'elm.update_error':   { es: 'Error al actualizar préstamo', en: 'Error updating loan', pt: 'Erro ao atualizar empréstimo' },
@@ -1550,6 +1553,13 @@ const TR: Record<string, Tri> = {
   'lc.requires_approval':{ es: 'Este producto requiere aprobación. El préstamo quedará en estado En Revisión hasta que sea aprobado.', en: 'This product requires approval. The loan will stay Under Review until approved.', pt: 'Este produto requer aprovação. O empréstimo ficará Em Análise até ser aprovado.' },
   'lc.creating':        { es: 'Creando...', en: 'Creating...', pt: 'Criando...' },
   'lc.create_loan':     { es: 'Crear Préstamo', en: 'Create Loan', pt: 'Criar Empréstimo' },
+
+  // ── Tipo de tasa (adjetivo para "10% ___") — 5 casos del selector ────────────
+  'rate.monthly':       { es: 'mensual', en: 'monthly', pt: 'mensal' },
+  'rate.annual':        { es: 'anual', en: 'annual', pt: 'anual' },
+  'rate.daily':         { es: 'diaria', en: 'daily', pt: 'diária' },
+  'rate.weekly':        { es: 'semanal', en: 'weekly', pt: 'semanal' },
+  'rate.biweekly':      { es: 'quincenal', en: 'biweekly', pt: 'quinzenal' },
 
   // ── Detalle de préstamo (LoanDetailPage) ─────────────────────────────────────
   // Freq / installment status / payment types / methods
