@@ -13,6 +13,7 @@ import { AMORTIZATION_TYPES, AMORT_LABELS, DEFAULT_AMORTIZATION, getAmortLabel }
 import AmortizationHelpModal from '@/components/shared/AmortizationHelpModal'
 import { HelpCircle } from 'lucide-react'
 import { generateSchedule as generateLoanSchedule, getNextDate } from '@/lib/loanMath'
+import { useT } from '@/lib/i18n'
 
 interface Client {
   id: string
@@ -47,19 +48,20 @@ interface LoanProduct {
 
 // AMORT_LABELS movido a @/lib/amortization
 
-const FREQ_LABELS: Record<string, string> = {
-  daily: 'Diaria',
-  weekly: 'Semanal',
-  biweekly: 'Quincenal',
-  monthly: 'Mensual',
-  quarterly: 'Trimestral',
+// freq/type → i18n key maps; resolved with t() at use sites
+const FREQ_KEYS: Record<string, string> = {
+  daily: 'lc.freq.daily',
+  weekly: 'lc.freq.weekly',
+  biweekly: 'lc.freq.biweekly',
+  monthly: 'lc.freq.monthly',
+  quarterly: 'lc.freq.quarterly',
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  personal: 'Personal',
-  commercial: 'Comercial',
-  san: 'Tipo San',
-  secured: 'Con Garantía',
+const TYPE_KEYS: Record<string, string> = {
+  personal: 'lc.type.personal',
+  commercial: 'lc.type.commercial',
+  san: 'lc.type.san',
+  secured: 'lc.type.secured',
 }
 
 interface BankAccount {
@@ -94,8 +96,12 @@ interface LoanFormData {
 }
 
 const LoanCreatePage: React.FC = () => {
+  const t = useT()
   const navigate = useNavigate()
   const { can } = usePermission()
+  const freqLabel = (f: string) => FREQ_KEYS[f] ? t(FREQ_KEYS[f]) : f
+  const typeLabel = (ty: string) => TYPE_KEYS[ty] ? t(TYPE_KEYS[ty]) : ty
+  const unitLabel = (u: string) => ({ months: t('lc.unit.months'), biweekly: t('lc.unit.biweekly'), weeks: t('lc.unit.weeks'), days: t('lc.unit.days'), years: t('lc.unit.years') } as Record<string,string>)[u] || u
   const [step, setStep] = useState(1)
   const [showAmortHelp, setShowAmortHelp] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
@@ -153,7 +159,7 @@ const LoanCreatePage: React.FC = () => {
         if (clientsResult.status === 'fulfilled') {
           setClients(clientsResult.value.data.data || [])
         } else if (!isAccessDenied(clientsResult.reason)) {
-          toast.error('Error al cargar clientes')
+          toast.error(t('lc.err_clients'))
         }
 
         // Products — graceful degradation if user lacks settings.products perm
@@ -185,7 +191,7 @@ const LoanCreatePage: React.FC = () => {
           } catch(_) { /* keep default ['DOP'] */ }
         }
       } catch (err) {
-        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error('Error al cargar datos')
+        if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(t('lc.err_data'))
       } finally {
         setIsLoading(false)
       }
@@ -260,22 +266,22 @@ const LoanCreatePage: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!form.clientId || !form.productId || !form.requestedAmount || !form.term) {
-      toast.error('Completa todos los campos requeridos')
+      toast.error(t('lc.err_required'))
       return
     }
     if (!form.disbursementBankAccountId) {
-      toast.error('Debes seleccionar la cuenta bancaria de desembolso')
+      toast.error(t('lc.err_account'))
       return
     }
     if (form.currency !== 'DOP' && (!form.exchangeRateToDop || parseFloat(form.exchangeRateToDop) <= 0)) {
-      toast.error('Ingresa la tasa de cambio respecto al peso dominicano')
+      toast.error(t('lc.err_rate'))
       return
     }
 
     // Validate sufficient funds in selected account
     const selectedAccount = bankAccounts.find(a => a.id === form.disbursementBankAccountId)
     if (selectedAccount && selectedAccount.currentBalance < parseFloat(form.requestedAmount)) {
-      toast.error(`Fondos insuficientes en ${selectedAccount.bankName}. Disponible: ${formatCurrency(selectedAccount.currentBalance, selectedAccount.currency || 'DOP')}`)
+      toast.error(t('lc.err_funds').replace('{bank}', selectedAccount.bankName).replace('{amount}', formatCurrency(selectedAccount.currentBalance, selectedAccount.currency || 'DOP')))
       return
     }
 
@@ -316,16 +322,16 @@ const LoanCreatePage: React.FC = () => {
             firstPaymentDate: firstPayDate,
             bankAccountId: form.disbursementBankAccountId,
           })
-          toast.success('Préstamo desembolsado exitosamente')
+          toast.success(t('lc.disbursed_ok'))
         } catch (disbErr: any) {
-          toast.error(disbErr?.response?.data?.error || 'Préstamo creado pero error al desembolsar')
+          toast.error(disbErr?.response?.data?.error || t('lc.disburse_error'))
         }
       } else {
-        toast.success('Solicitud creada — pendiente de aprobación')
+        toast.success(t('lc.request_created'))
       }
       navigate(`/loans/${loanId}`)
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al crear préstamo')
+      toast.error(err?.response?.data?.error || t('lc.create_error'))
     } finally {
       setIsSubmitting(false)
     }
@@ -334,10 +340,10 @@ const LoanCreatePage: React.FC = () => {
   if (isLoading) return <PageLoadingState />
 
   const steps = [
-    { num: 1, label: 'Cliente', icon: User },
-    { num: 2, label: 'Producto', icon: Settings },
-    { num: 3, label: 'Condiciones', icon: DollarSign },
-    { num: 4, label: 'Confirmar', icon: Check },
+    { num: 1, label: t('lc.step_client'), icon: User },
+    { num: 2, label: t('lc.step_product'), icon: Settings },
+    { num: 3, label: t('lc.step_conditions'), icon: DollarSign },
+    { num: 4, label: t('lc.step_confirm'), icon: Check },
   ]
 
   return (
@@ -351,8 +357,8 @@ const LoanCreatePage: React.FC = () => {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="page-title">Nuevo Préstamo</h1>
-          <p className="text-slate-600 text-sm mt-1">Solicitud de préstamo paso a paso</p>
+          <h1 className="page-title">{t('lc.title')}</h1>
+          <p className="text-slate-600 text-sm mt-1">{t('lc.subtitle')}</p>
         </div>
       </div>
 
@@ -387,10 +393,10 @@ const LoanCreatePage: React.FC = () => {
       {/* Step 1: Select Client */}
       {step === 1 && (
         <Card>
-          <h2 className="section-title mb-4">Seleccionar Cliente</h2>
+          <h2 className="section-title mb-4">{t('lc.select_client')}</h2>
           <Input
             type="text"
-            placeholder="Buscar por nombre, cédula o teléfono..."
+            placeholder={t('lc.search_client')}
             value={clientSearch}
             onChange={(e) => setClientSearch(e.target.value)}
             className="mb-4"
@@ -406,7 +412,7 @@ const LoanCreatePage: React.FC = () => {
           )}
           <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
             {filteredClients.length === 0 && (
-              <p className="py-8 text-center text-slate-500">No se encontraron clientes</p>
+              <p className="py-8 text-center text-slate-500">{t('lc.no_clients')}</p>
             )}
             {filteredClients.map((client) => (
               <div
@@ -433,14 +439,14 @@ const LoanCreatePage: React.FC = () => {
           </div>
           <div className="flex justify-between mt-4 pt-4 border-t border-slate-200">
             <Button variant="outline" onClick={() => navigate('/clients/new')}>
-              + Nuevo Cliente
+              {t('lc.new_client')}
             </Button>
             <Button
               onClick={() => setStep(2)}
               disabled={!selectedClient}
               className="flex items-center gap-2"
             >
-              Siguiente <ArrowRight className="w-4 h-4" />
+              {t('lc.next')} <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
         </Card>
@@ -449,12 +455,12 @@ const LoanCreatePage: React.FC = () => {
       {/* Step 2: Select Product */}
       {step === 2 && (
         <Card>
-          <h2 className="section-title mb-4">Seleccionar Producto de Préstamo</h2>
+          <h2 className="section-title mb-4">{t('lc.select_product')}</h2>
           {products.length === 0 && (
             <div className="py-8 text-center text-slate-500">
-              <p>No hay productos configurados.</p>
+              <p>{t('lc.no_products')}</p>
               <button onClick={() => navigate('/settings?tab=products')} className="text-blue-600 text-sm hover:underline mt-1">
-                Configurar productos →
+                {t('lc.config_products')}
               </button>
             </div>
           )}
@@ -473,7 +479,7 @@ const LoanCreatePage: React.FC = () => {
                   <div>
                     <p className="font-semibold text-slate-900">{product.name}</p>
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                      {TYPE_LABELS[product.type] || product.type}
+                      {typeLabel(product.type)}
                     </span>
                   </div>
                   {selectedProduct?.id === product.id && (
@@ -481,33 +487,26 @@ const LoanCreatePage: React.FC = () => {
                   )}
                 </div>
                 <div className="text-sm text-slate-600 space-y-1">
-                  <p>Tasa: <strong>{product.rate}% {product.rateType === 'monthly' ? 'mensual' : 'anual'}</strong></p>
-                  <p>Monto: <strong>{formatCurrency(product.minAmount)} – {formatCurrency(product.maxAmount)}</strong></p>
-                  <p>Plazo: <strong>{product.minTerm} – {product.maxTerm} {
-                    product.termUnit === 'months'   ? 'meses' :
-                    product.termUnit === 'biweekly' ? 'quincenas' :
-                    product.termUnit === 'weeks'    ? 'semanas' :
-                    product.termUnit === 'days'     ? 'días' :
-                    product.termUnit === 'years'    ? 'años' :
-                    product.termUnit
-                  }</strong></p>
-                  <p>Frecuencia: <strong>{FREQ_LABELS[product.paymentFrequency] || product.paymentFrequency}</strong></p>
-                  {product.isReditos && <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Réditos</span>}
-                  {product.isSanType && <span className="inline-block text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full ml-1">San</span>}
+                  <p>{t('lc.p_rate')} <strong>{product.rate}% {product.rateType === 'monthly' ? t('lc.p_monthly') : t('lc.p_annual')}</strong></p>
+                  <p>{t('lc.p_amount')} <strong>{formatCurrency(product.minAmount)} – {formatCurrency(product.maxAmount)}</strong></p>
+                  <p>{t('lc.p_term')} <strong>{product.minTerm} – {product.maxTerm} {unitLabel(product.termUnit)}</strong></p>
+                  <p>{t('lc.p_freq')} <strong>{freqLabel(product.paymentFrequency)}</strong></p>
+                  {product.isReditos && <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{t('lc.reditos')}</span>}
+                  {product.isSanType && <span className="inline-block text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full ml-1">{t('lc.san')}</span>}
                 </div>
               </div>
             ))}
           </div>
           <div className="flex justify-between mt-4 pt-4 border-t border-slate-200">
             <Button variant="outline" onClick={() => setStep(1)} className="flex items-center gap-2">
-              <ArrowLeft className="w-4 h-4" /> Atrás
+              <ArrowLeft className="w-4 h-4" /> {t('lc.back')}
             </Button>
             <Button
               onClick={() => setStep(3)}
               disabled={!selectedProduct}
               className="flex items-center gap-2"
             >
-              Siguiente <ArrowRight className="w-4 h-4" />
+              {t('lc.next')} <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
         </Card>
@@ -517,11 +516,11 @@ const LoanCreatePage: React.FC = () => {
       {step === 3 && selectedProduct && (
         <div className="space-y-4">
           <Card>
-            <h2 className="section-title mb-4">Condiciones del Préstamo</h2>
+            <h2 className="section-title mb-4">{t('lc.conditions')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Monto Solicitado *
+                  {t('lc.requested_amount')}
                   <span className="text-slate-400 ml-1 font-normal">
                     ({formatCurrency(selectedProduct.minAmount)} – {formatCurrency(selectedProduct.maxAmount)})
                   </span>
@@ -540,7 +539,7 @@ const LoanCreatePage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Plazo *
+                  {t('lc.term')}
                   <span className="text-slate-400 ml-1 font-normal">
                     ({selectedProduct.minTerm} – {selectedProduct.maxTerm})
                   </span>
@@ -570,16 +569,16 @@ const LoanCreatePage: React.FC = () => {
                     }}
                     className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="months">Meses</option>
-                    <option value="biweekly">Quincenal</option>
-                    <option value="weeks">Semanas</option>
-                    <option value="days">Días</option>
+                    <option value="months">{t('lc.u_months')}</option>
+                    <option value="biweekly">{t('lc.u_biweekly')}</option>
+                    <option value="weeks">{t('lc.u_weeks')}</option>
+                    <option value="days">{t('lc.u_days')}</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tasa de Interés (%)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('lc.rate')}</label>
                 <div className="flex gap-2">
                   <input
                     type="number"
@@ -593,38 +592,38 @@ const LoanCreatePage: React.FC = () => {
                     onChange={(e) => setForm({ ...form, rateType: e.target.value })}
                     className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="monthly">Mensual</option>
-                    <option value="annual">Anual</option>
-                    <option value="daily">Diario</option>
-                    <option value="weekly">Semanal</option>
-                    <option value="biweekly">Quincenal</option>
+                    <option value="monthly">{t('lc.r_monthly')}</option>
+                    <option value="annual">{t('lc.r_annual')}</option>
+                    <option value="daily">{t('lc.r_daily')}</option>
+                    <option value="weekly">{t('lc.r_weekly')}</option>
+                    <option value="biweekly">{t('lc.r_biweekly')}</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Frecuencia de Pago</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('lc.pay_freq')}</label>
                 <select
                   value={form.paymentFrequency}
                   onChange={(e) => setForm({ ...form, paymentFrequency: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {Object.entries(FREQ_LABELS).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
+                  {Object.keys(FREQ_KEYS).map((val) => (
+                    <option key={val} value={val}>{freqLabel(val)}</option>
                   ))}
                 </select>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-sm font-medium text-slate-700">Tipo de Amortización</label>
+                  <label className="block text-sm font-medium text-slate-700">{t('lc.amort_type')}</label>
                   <button
                     type="button"
                     onClick={() => setShowAmortHelp(true)}
                     className="text-xs text-[#1e3a5f] hover:text-[#152a45] flex items-center gap-1"
-                    title="Ver explicación de cada tipo"
+                    title={t('lc.amort_help_title')}
                   >
-                    <HelpCircle className="w-3.5 h-3.5" /> ¿Qué significa?
+                    <HelpCircle className="w-3.5 h-3.5" /> {t('lc.what_means')}
                   </button>
                 </div>
 <select
@@ -639,7 +638,7 @@ const LoanCreatePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Primer Pago (opcional)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('lc.first_payment')}</label>
                 <input
                   type="date"
                   value={form.firstPaymentDate}
@@ -652,7 +651,7 @@ const LoanCreatePage: React.FC = () => {
               {availableCurrencies.length > 1 && (
                 <div className="col-span-full">
                   <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-1.5">
-                    <Globe className="w-4 h-4 text-blue-500"/>Moneda del Préstamo
+                    <Globe className="w-4 h-4 text-blue-500"/>{t('lc.loan_currency')}
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {availableCurrencies.map(code => {
@@ -678,7 +677,7 @@ const LoanCreatePage: React.FC = () => {
                   {form.currency !== 'DOP' && (
                     <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <label className="block text-sm font-medium text-amber-800 mb-1">
-                        Tasa de Cambio: 1 {form.currency} = ? DOP *
+                        {t('lc.exchange_rate').replace('{cur}', form.currency)}
                       </label>
                       <div className="flex items-center gap-2">
                         <input type="number" step="0.01" min="0.01"
@@ -689,11 +688,11 @@ const LoanCreatePage: React.FC = () => {
                         />
                         <span className="text-sm text-amber-700">
                           {form.requestedAmount && form.exchangeRateToDop
-                            ? `= ${formatCurrency(parseFloat(form.requestedAmount) * parseFloat(form.exchangeRateToDop), 'DOP')} equivalente`
-                            : 'Ingresa el monto para ver el equivalente en DOP'}
+                            ? t('lc.equivalent').replace('{amount}', formatCurrency(parseFloat(form.requestedAmount) * parseFloat(form.exchangeRateToDop), 'DOP'))
+                            : t('lc.enter_amount_eq')}
                         </span>
                       </div>
-                      <p className="text-xs text-amber-600 mt-1">Esta tasa se guarda con el préstamo para reportes consolidados. No afecta los cálculos de cuotas.</p>
+                      <p className="text-xs text-amber-600 mt-1">{t('lc.rate_note')}</p>
                     </div>
                   )}
                 </div>
@@ -701,10 +700,10 @@ const LoanCreatePage: React.FC = () => {
 
               <div className="col-span-full">
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Cuenta de Desembolso *
-                  <span className="text-xs text-slate-400 font-normal ml-1">— cuenta desde donde saldrá el dinero</span>
+                  {t('lc.disb_account')}
+                  <span className="text-xs text-slate-400 font-normal ml-1">{t('lc.disb_account_hint')}</span>
                   {availableCurrencies.length > 1 && (
-                    <span className="text-xs text-blue-600 font-normal ml-1">· mostrando cuentas en {form.currency}</span>
+                    <span className="text-xs text-blue-600 font-normal ml-1">{t('lc.showing_accounts').replace('{cur}', form.currency)}</span>
                   )}
                 </label>
                 {/* Always filter accounts by loan currency */}
@@ -720,13 +719,13 @@ const LoanCreatePage: React.FC = () => {
                           if (can('settings.bank_accounts')) {
                             navigate('/settings/bank-accounts')
                           } else {
-                            toast.error('No tienes permisos para crear cuentas bancarias. Pídele al administrador del tenant que las configure.')
+                            toast.error(t('lc.no_perm_accounts'))
                           }
                         }
                         if (bankAccounts.length === 0) {
-                          return <>No hay cuentas bancarias configuradas. <button type="button" onClick={handleAddAccount} className="underline font-medium hover:text-amber-900">Agregar cuenta →</button></>
+                          return <>{t('lc.no_accounts')} <button type="button" onClick={handleAddAccount} className="underline font-medium hover:text-amber-900">{t('lc.add_account')}</button></>
                         }
-                        return <>No tienes cuentas bancarias en <strong>{form.currency}</strong>. <button type="button" onClick={handleAddAccount} className="underline font-medium hover:text-amber-900">Agregar cuenta {form.currency} →</button></>
+                        return <>{t('lc.no_accounts_cur')} <strong>{form.currency}</strong>. <button type="button" onClick={handleAddAccount} className="underline font-medium hover:text-amber-900">{t('lc.add_account_cur').replace('{cur}', form.currency)}</button></>
                       })()}
                     </p>
                   )
@@ -758,18 +757,18 @@ const LoanCreatePage: React.FC = () => {
                           <div className="flex justify-between items-start">
                             <div>
                               <p className="font-medium text-sm">{acc.bankName}</p>
-                              <p className="text-xs text-slate-500">{acc.accountNumber || 'Sin número'} · {acc.currency}</p>
+                              <p className="text-xs text-slate-500">{acc.accountNumber || t('lc.no_number')} · {acc.currency}</p>
                             </div>
                             {isSelected && <Check className="w-4 h-4 text-blue-600 flex-shrink-0" />}
                           </div>
                           <div className="mt-1.5 flex items-center justify-between">
-                            <span className="text-xs text-slate-500">Disponible:</span>
+                            <span className="text-xs text-slate-500">{t('lc.available')}</span>
                             <span className={`text-sm font-semibold ${enoughFunds ? 'text-emerald-600' : 'text-red-600'}`}>
                               {formatCurrency(available, acc.currency || 'DOP')}
                             </span>
                           </div>
                           {!enoughFunds && requested > 0 && (
-                            <p className="text-xs text-red-600 mt-1">Fondos insuficientes</p>
+                            <p className="text-xs text-red-600 mt-1">{t('lc.insufficient')}</p>
                           )}
                         </div>
                       )
@@ -780,22 +779,22 @@ const LoanCreatePage: React.FC = () => {
               </div>
 
               <div className="col-span-full">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Propósito del Préstamo</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('lc.purpose')}</label>
                 <input
                   type="text"
                   value={form.purpose}
                   onChange={(e) => setForm({ ...form, purpose: e.target.value })}
-                  placeholder="Ej: Capital de trabajo, compra de vehículo..."
+                  placeholder={t('lc.purpose_ph')}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div className="col-span-full">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Notas Internas</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('lc.notes')}</label>
                 <textarea
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  placeholder="Observaciones adicionales..."
+                  placeholder={t('lc.notes_ph')}
                   rows={2}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -803,7 +802,7 @@ const LoanCreatePage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Cargo de Prorroga <span className="text-slate-400 font-normal">(opcional)</span>
+                  {t('lc.prorroga_fee')} <span className="text-slate-400 font-normal">{t('lc.optional')}</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
@@ -818,7 +817,7 @@ const LoanCreatePage: React.FC = () => {
                   />
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Cargo fijo para extender el vencimiento un periodo. Dejar en 0 para no aplicar.
+                  {t('lc.prorroga_hint')}
                 </p>
               </div>
             </div>
@@ -826,24 +825,24 @@ const LoanCreatePage: React.FC = () => {
             {/* Preview button */}
             <div className="mt-4 pt-4 border-t border-slate-200">
               <Button variant="outline" size="sm" onClick={computePreview}>
-                Vista Previa del Plan de Pagos
+                {t('lc.preview_btn')}
               </Button>
             </div>
           </Card>
 
           {previewSchedule.length > 0 && (
             <Card>
-              <h3 className="section-title mb-3">Vista Previa (primeras cuotas)</h3>
+              <h3 className="section-title mb-3">{t('lc.preview_title')}</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200">
                       <th className="text-center py-2 px-3 font-semibold text-slate-700">#</th>
-                      <th className="text-left py-2 px-3 font-semibold text-slate-700">Vence</th>
-                      <th className="text-right py-2 px-3 font-semibold text-slate-700">Capital</th>
-                      <th className="text-right py-2 px-3 font-semibold text-slate-700">Interés</th>
-                      <th className="text-right py-2 px-3 font-semibold text-slate-700">Cuota</th>
-                      <th className="text-right py-2 px-3 font-semibold text-slate-700">Saldo</th>
+                      <th className="text-left py-2 px-3 font-semibold text-slate-700">{t('lc.h_due')}</th>
+                      <th className="text-right py-2 px-3 font-semibold text-slate-700">{t('lc.h_principal')}</th>
+                      <th className="text-right py-2 px-3 font-semibold text-slate-700">{t('lc.h_interest')}</th>
+                      <th className="text-right py-2 px-3 font-semibold text-slate-700">{t('lc.h_installment')}</th>
+                      <th className="text-right py-2 px-3 font-semibold text-slate-700">{t('lc.h_balance')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -859,7 +858,7 @@ const LoanCreatePage: React.FC = () => {
                     ))}
                     <tr className="border-t-2 border-slate-300">
                       <td colSpan={6} className="py-2 px-3 text-center text-xs text-slate-500 font-medium">
-                        Total: {previewSchedule.length} cuotas · {formatCurrency(previewSchedule.reduce((s,r)=>s+r.total,0))} total
+                        {t('lc.preview_total').replace('{n}', String(previewSchedule.length)).replace('{amount}', formatCurrency(previewSchedule.reduce((s,r)=>s+r.total,0)))}
                       </td>
                     </tr>
                   </tbody>
@@ -870,14 +869,14 @@ const LoanCreatePage: React.FC = () => {
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep(2)} className="flex items-center gap-2">
-              <ArrowLeft className="w-4 h-4" /> Atrás
+              <ArrowLeft className="w-4 h-4" /> {t('lc.back')}
             </Button>
             <Button
               onClick={() => setStep(4)}
               disabled={!form.requestedAmount || !form.term}
               className="flex items-center gap-2"
             >
-              Siguiente <ArrowRight className="w-4 h-4" />
+              {t('lc.next')} <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
         </div>
@@ -887,11 +886,11 @@ const LoanCreatePage: React.FC = () => {
       {step === 4 && selectedClient && selectedProduct && (
         <div className="space-y-4">
           <Card>
-            <h2 className="section-title mb-4">Confirmar Solicitud de Préstamo</h2>
+            <h2 className="section-title mb-4">{t('lc.confirm_title')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                  <User className="w-4 h-4" /> Cliente
+                  <User className="w-4 h-4" /> {t('lc.c_client')}
                 </h3>
                 <div className="space-y-1 text-sm">
                   <p className="font-medium">{selectedClient.fullName || `${selectedClient.firstName} ${selectedClient.lastName}`}</p>
@@ -901,20 +900,20 @@ const LoanCreatePage: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                  <Settings className="w-4 h-4" /> Producto
+                  <Settings className="w-4 h-4" /> {t('lc.c_product')}
                 </h3>
                 <div className="space-y-1 text-sm">
                   <p className="font-medium">{selectedProduct.name}</p>
-                  <p className="text-slate-500">{TYPE_LABELS[selectedProduct.type] || selectedProduct.type}</p>
+                  <p className="text-slate-500">{typeLabel(selectedProduct.type)}</p>
                 </div>
               </div>
               <div>
                 <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4" /> Condiciones
+                  <DollarSign className="w-4 h-4" /> {t('lc.c_conditions')}
                 </h3>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Monto</span>
+                    <span className="text-slate-500">{t('lc.c_amount')}</span>
                     <div className="text-right">
                       <span className="font-semibold text-lg text-blue-700">{formatCurrency(parseFloat(form.requestedAmount) || 0, form.currency)}</span>
                       {form.currency !== 'DOP' && (
@@ -924,7 +923,7 @@ const LoanCreatePage: React.FC = () => {
                   </div>
                   {form.currency !== 'DOP' && (
                     <div className="flex justify-between items-center">
-                      <span className="text-slate-500">Moneda</span>
+                      <span className="text-slate-500">{t('lc.c_currency')}</span>
                       <span className="font-medium inline-flex items-center gap-1">
                         <Globe className="w-3 h-3 text-blue-500" />
                         {form.currency}
@@ -933,33 +932,26 @@ const LoanCreatePage: React.FC = () => {
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Plazo</span>
-                    <span className="font-medium">{form.term} {
-                      form.termUnit === 'months'   ? 'meses' :
-                      form.termUnit === 'biweekly' ? 'quincenas' :
-                      form.termUnit === 'weeks'    ? 'semanas' :
-                      form.termUnit === 'days'     ? 'días' :
-                      form.termUnit === 'years'    ? 'años' :
-                      form.termUnit
-                    }</span>
+                    <span className="text-slate-500">{t('lc.c_term')}</span>
+                    <span className="font-medium">{form.term} {unitLabel(form.termUnit)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Tasa</span>
-                    <span className="font-medium">{form.rate}% {form.rateType === 'monthly' ? 'mensual' : 'anual'}</span>
+                    <span className="text-slate-500">{t('lc.c_rate')}</span>
+                    <span className="font-medium">{form.rate}% {form.rateType === 'monthly' ? t('lc.p_monthly') : t('lc.p_annual')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Frecuencia</span>
-                    <span className="font-medium">{FREQ_LABELS[form.paymentFrequency] || form.paymentFrequency}</span>
+                    <span className="text-slate-500">{t('lc.c_freq')}</span>
+                    <span className="font-medium">{freqLabel(form.paymentFrequency)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Amortización</span>
+                    <span className="text-slate-500">{t('lc.c_amort')}</span>
                     <span className="font-medium">{getAmortLabel(form.amortizationType)}</span>
                   </div>
                 </div>
               </div>
               {form.purpose && (
                 <div>
-                  <h3 className="font-semibold text-slate-700 mb-2">Propósito</h3>
+                  <h3 className="font-semibold text-slate-700 mb-2">{t('lc.c_purpose')}</h3>
                   <p className="text-sm text-slate-600">{form.purpose}</p>
                 </div>
               )}
@@ -970,34 +962,34 @@ const LoanCreatePage: React.FC = () => {
               const acc = bankAccounts.find(a => a.id === form.disbursementBankAccountId)
               return acc ? (
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
-                  <p className="font-semibold text-blue-800 mb-1">Cuenta de Desembolso</p>
-                  <p className="text-blue-700">{acc.bankName} · {acc.accountNumber || 'Sin número'}</p>
-                  <p className="text-blue-600">Balance disponible: <strong>{formatCurrency(acc.currentBalance, form.currency)}</strong></p>
-                  <p className="text-blue-600">Después del desembolso: <strong>{formatCurrency(acc.currentBalance - (parseFloat(form.requestedAmount) || 0), form.currency)}</strong></p>
+                  <p className="font-semibold text-blue-800 mb-1">{t('lc.disb_summary')}</p>
+                  <p className="text-blue-700">{acc.bankName} · {acc.accountNumber || t('lc.no_number')}</p>
+                  <p className="text-blue-600">{t('lc.balance_avail')} <strong>{formatCurrency(acc.currentBalance, form.currency)}</strong></p>
+                  <p className="text-blue-600">{t('lc.after_disb')} <strong>{formatCurrency(acc.currentBalance - (parseFloat(form.requestedAmount) || 0), form.currency)}</strong></p>
                 </div>
               ) : null
             })()}
 
             {selectedProduct.requiresApproval && (
               <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                Este producto requiere aprobación. El préstamo quedará en estado <strong>En Revisión</strong> hasta que sea aprobado.
+                {t('lc.requires_approval')}
               </div>
             )}
           </Card>
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep(3)} className="flex items-center gap-2">
-              <ArrowLeft className="w-4 h-4" /> Atrás
+              <ArrowLeft className="w-4 h-4" /> {t('lc.back')}
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={isSubmitting}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
             >
-              {isSubmitting ? 'Creando...' : (
+              {isSubmitting ? t('lc.creating') : (
                 <>
                   <Check className="w-4 h-4" />
-                  Crear Préstamo
+                  {t('lc.create_loan')}
                 </>
               )}
             </Button>
