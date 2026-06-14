@@ -5,6 +5,7 @@ import { X, AlertTriangle, Settings, Calendar, Percent, RefreshCw, ShieldOff } f
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { AMORTIZATION_TYPES } from '@/lib/amortization'
+import { useT } from '@/lib/i18n'
 
 interface EditLoanModalProps {
   loan: any
@@ -13,22 +14,23 @@ interface EditLoanModalProps {
 }
 
 const FREQ_OPTIONS = [
-  { value: 'weekly',     label: 'Semanal' },
-  { value: 'biweekly',   label: 'Quincenal' },
-  { value: 'monthly',    label: 'Mensual' },
-  { value: 'quarterly',  label: 'Trimestral' },
+  { value: 'weekly',     labelKey: 'elm.freq_weekly' },
+  { value: 'biweekly',   labelKey: 'elm.freq_biweekly' },
+  { value: 'monthly',    labelKey: 'elm.freq_monthly' },
+  { value: 'quarterly',  labelKey: 'elm.freq_quarterly' },
 ]
 
 // AMORT_OPTIONS importado de @/lib/amortization (AMORTIZATION_TYPES)
 
 const RATE_TYPE_OPTIONS = [
-  { value: 'monthly', label: 'Mensual' },
-  { value: 'annual',  label: 'Anual' },
+  { value: 'monthly', labelKey: 'elm.rate_monthly' },
+  { value: 'annual',  labelKey: 'elm.rate_annual' },
 ]
 
 type Tab = 'terminos' | 'fechas' | 'mora' | 'otros'
 
 const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved }) => {
+  const t = useT()
   const isDisbursed = ['active', 'in_mora', 'disbursed', 'restructured', 'liquidated'].includes(loan.status)
   const [activeTab, setActiveTab] = useState<Tab>('terminos')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -90,15 +92,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
   const handleSave = async () => {
     // Confirmacion extra si vamos a reestructurar un prestamo activo
     if (isDisbursed && scheduleFieldsChanged()) {
-      const ok = window.confirm(
-        '\u26A0\uFE0F REESTRUCTURACION DE PRESTAMO\n\n' +
-        'Estas cambiando tasa/plazo/frecuencia/amortizacion de un prestamo activo.\n\n' +
-        'El sistema:\n' +
-        '* MANTENDRA intactas las cuotas ya pagadas o parciales.\n' +
-        '* REGENERARA las cuotas pendientes con base en el saldo principal restante.\n' +
-        '* Registrara esta accion en el historial de auditoria.\n\n' +
-        'Confirmas la reestructuracion?'
-      )
+      const ok = window.confirm(t('elm.restructure_confirm'))
       if (!ok) return
     }
     setIsSubmitting(true)
@@ -133,14 +127,14 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
         prorrogaFee:      parseFloat(form.prorrogaFee) || 0,
       }
       const res = await api.put(`/loans/${loan.id}`, payload)
-      toast.success('Préstamo actualizado correctamente')
+      toast.success(t('elm.updated_ok'))
       onSaved()
       onClose()
     } catch (err: any) {
       if (err?.response?.status === 403) {
         setPermissionDenied(true)
       } else {
-        toast.error(err?.response?.data?.error || 'Error al actualizar préstamo')
+        toast.error(err?.response?.data?.error || t('elm.update_error'))
       }
     } finally {
       setIsSubmitting(false)
@@ -148,10 +142,10 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
   }
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
-    { id: 'terminos', label: 'Términos',  icon: Percent },
-    { id: 'fechas',   label: 'Fechas',    icon: Calendar },
-    { id: 'mora',     label: 'Mora',      icon: AlertTriangle },
-    { id: 'otros',    label: 'Otros',     icon: Settings },
+    { id: 'terminos', label: t('elm.tab_terms'),  icon: Percent },
+    { id: 'fechas',   label: t('elm.tab_dates'),  icon: Calendar },
+    { id: 'mora',     label: t('elm.tab_mora'),   icon: AlertTriangle },
+    { id: 'otros',    label: t('elm.tab_other'),  icon: Settings },
   ]
 
   const inputCls = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -165,7 +159,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
         <div className="flex items-center justify-between mb-1">
           <div>
             <h2 className="section-title flex items-center gap-2">
-              <Settings className="w-4 h-4" /> Editar Préstamo
+              <Settings className="w-4 h-4" /> {t('elm.title')}
             </h2>
             <p className="text-xs text-slate-500">{loan.loanNumber ?? loan.loan_number} · {loan.clientName ?? loan.client_name}</p>
           </div>
@@ -179,9 +173,9 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
           <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
             <ShieldOff className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-red-800 text-sm">Acceso denegado</p>
+              <p className="font-semibold text-red-800 text-sm">{t('elm.access_denied')}</p>
               <p className="text-red-700 text-sm mt-0.5">
-                No tienes permisos para editar este préstamo. Comunícate con tu encargado.
+                {t('elm.access_denied_desc')}
               </p>
             </div>
           </div>
@@ -192,18 +186,18 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4 text-xs text-amber-800">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
             <div>
-              <p className="font-semibold">Préstamo activo — esta edición REESTRUCTURARÁ el préstamo</p>
+              <p className="font-semibold">{t('elm.warn_title')}</p>
               <p className="mt-0.5 text-amber-700">
-                Si cambias <strong>tasa, plazo, frecuencia o tipo de amortización</strong>, el sistema:
+                {t('elm.warn_intro')} <strong>{t('elm.warn_fields')}</strong>{t('elm.warn_the_system')}
               </p>
               <ul className="mt-1 ml-4 list-disc text-amber-700 space-y-0.5">
-                <li>Mantiene <strong>intactas</strong> las cuotas ya pagadas o parciales.</li>
-                <li>Regenera las cuotas pendientes con base en el <strong>saldo principal restante</strong>.</li>
-                <li>Recalcula la fecha de vencimiento final y el interés total nuevo.</li>
-                <li>Registra el evento en el historial de auditoría.</li>
+                <li>{t('elm.warn_li1_a')} <strong>{t('elm.warn_li1_b')}</strong> {t('elm.warn_li1_c')}</li>
+                <li>{t('elm.warn_li2_a')} <strong>{t('elm.warn_li2_b')}</strong>.</li>
+                <li>{t('elm.warn_li3')}</li>
+                <li>{t('elm.warn_li4')}</li>
               </ul>
               <p className="mt-1 text-amber-700">
-                Si solo deseas corregir datos (fechas, mora, notas, cobrador), <strong>esos cambios NO disparan la reestructuración</strong>.
+                {t('elm.warn_footer_a')} <strong>{t('elm.warn_footer_b')}</strong>.
               </p>
             </div>
           </div>
@@ -235,29 +229,29 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Monto Solicitado</label>
+                <label className={labelCls}>{t('elm.requested_amount')}</label>
                 <input type="number" step="0.01" value={form.requestedAmount} onChange={e => set('requestedAmount', e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Monto Aprobado</label>
+                <label className={labelCls}>{t('elm.approved_amount')}</label>
                 <input type="number" step="0.01" value={form.approvedAmount} onChange={e => set('approvedAmount', e.target.value)} className={inputCls} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Tasa de Interés (%)</label>
-                <input type="number" step="0.01" value={form.rate} onChange={e => set('rate', e.target.value)} className={inputCls} placeholder="Ej. 3 para 3%" />
+                <label className={labelCls}>{t('elm.rate')}</label>
+                <input type="number" step="0.01" value={form.rate} onChange={e => set('rate', e.target.value)} className={inputCls} placeholder={t('elm.rate_ph')} />
               </div>
               <div>
-                <label className={labelCls}>Tipo de Tasa</label>
+                <label className={labelCls}>{t('elm.rate_type')}</label>
                 <select value={form.rateType} onChange={e => set('rateType', e.target.value)} className={inputCls}>
-                  {RATE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {RATE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
                 </select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Plazo</label>
+                <label className={labelCls}>{t('elm.term')}</label>
                 <div className="flex gap-2">
                   <input type="number" value={form.term} onChange={e => set('term', e.target.value)} className={`${inputCls} flex-1`} placeholder="12" />
                   <select value={form.termUnit} onChange={e => {
@@ -266,22 +260,22 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                       set('termUnit', u)
                       if (freqMap[u]) set('paymentFrequency', freqMap[u])
                     }} className={`${inputCls} w-auto`}>
-                    <option value="months">Meses</option>
-                    <option value="biweekly">Quincenal</option>
-                    <option value="weeks">Semanas</option>
-                    <option value="days">Días</option>
+                    <option value="months">{t('elm.u_months')}</option>
+                    <option value="biweekly">{t('elm.u_biweekly')}</option>
+                    <option value="weeks">{t('elm.u_weeks')}</option>
+                    <option value="days">{t('elm.u_days')}</option>
                   </select>
                 </div>
               </div>
               <div>
-                <label className={labelCls}>Frecuencia de Pago</label>
+                <label className={labelCls}>{t('elm.pay_freq')}</label>
                 <select value={form.paymentFrequency} onChange={e => set('paymentFrequency', e.target.value)} className={inputCls}>
-                  {FREQ_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {FREQ_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
                 </select>
               </div>
             </div>
             <div>
-              <label className={labelCls}>Tipo de Amortización</label>
+              <label className={labelCls}>{t('elm.amort_type')}</label>
               <select value={form.amortizationType} onChange={e => set('amortizationType', e.target.value)} className={inputCls}>
                 {AMORTIZATION_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -289,7 +283,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
             {!isDisbursed && (
               <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
                 <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-blue-600" />
-                <p>El calendario de pagos se regenerará automáticamente al guardar (si hay fecha de primer pago configurada).</p>
+                <p>{t('elm.schedule_regen')}</p>
               </div>
             )}
           </div>
@@ -298,28 +292,28 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
         {/* Tab: Fechas */}
         {activeTab === 'fechas' && (
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">Correcciones de fechas en el registro del préstamo.</p>
+            <p className="text-xs text-slate-500">{t('elm.dates_intro')}</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Fecha de Solicitud</label>
+                <label className={labelCls}>{t('elm.application_date')}</label>
                 <input type="date" value={form.applicationDate} onChange={e => set('applicationDate', e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Fecha de Aprobación</label>
+                <label className={labelCls}>{t('elm.approval_date')}</label>
                 <input type="date" value={form.approvalDate} onChange={e => set('approvalDate', e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Fecha de Desembolso</label>
+                <label className={labelCls}>{t('elm.disbursement_date')}</label>
                 <input type="date" value={form.disbursementDate} onChange={e => set('disbursementDate', e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Fecha del Primer Pago</label>
+                <label className={labelCls}>{t('elm.first_payment_date')}</label>
                 <input type="date" value={form.firstPaymentDate} onChange={e => set('firstPaymentDate', e.target.value)} className={inputCls} />
               </div>
               <div className="col-span-2">
-                <label className={labelCls}>Fecha de Vencimiento (Maturity)</label>
+                <label className={labelCls}>{t('elm.maturity_date')}</label>
                 <input type="date" value={form.maturityDate} onChange={e => set('maturityDate', e.target.value)} className={inputCls} />
-                <p className="text-xs text-slate-400 mt-1">Útil para extender el plazo del préstamo manualmente.</p>
+                <p className="text-xs text-slate-400 mt-1">{t('elm.maturity_hint')}</p>
               </div>
             </div>
           </div>
@@ -328,10 +322,10 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
         {/* Tab: Mora */}
         {activeTab === 'mora' && (
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">Configura los parámetros de mora para este préstamo específico.</p>
+            <p className="text-xs text-slate-500">{t('elm.mora_intro')}</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Tasa de Mora Diaria (%)</label>
+                <label className={labelCls}>{t('elm.mora_rate')}</label>
                 <input
                   type="number" step="0.0001" min="0" max="10"
                   value={form.moraRateDaily}
@@ -340,11 +334,11 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   placeholder="0.1000"
                 />
                 <p className="text-xs text-slate-400 mt-1">
-                  {form.moraRateDaily}% diario ≈ {(parseFloat(form.moraRateDaily || '0') * 30).toFixed(2)}% mensual
+                  {t('elm.mora_rate_hint').replace('{d}', form.moraRateDaily).replace('{m}', (parseFloat(form.moraRateDaily || '0') * 30).toFixed(2))}
                 </p>
               </div>
               <div>
-                <label className={labelCls}>Días de Gracia</label>
+                <label className={labelCls}>{t('elm.grace_days')}</label>
                 <input
                   type="number" step="1" min="0"
                   value={form.moraGraceDays}
@@ -353,36 +347,36 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   placeholder="3"
                 />
                 <p className="text-xs text-slate-400 mt-1">
-                  Días después del vencimiento antes de aplicar mora.
+                  {t('elm.grace_hint')}
                 </p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Base de Cálculo de Mora</label>
+                <label className={labelCls}>{t('elm.mora_base')}</label>
                 <select value={form.moraBase} onChange={e => set('moraBase', e.target.value)} className={inputCls}>
-                  <option value="cuota_vencida">Cuota Vencida (capital + interés)</option>
-                  <option value="capital_pendiente">Capital Pendiente</option>
-                  <option value="capital_vencido">Capital Vencido</option>
+                  <option value="cuota_vencida">{t('elm.mora_cuota')}</option>
+                  <option value="capital_pendiente">{t('elm.mora_cap_pend')}</option>
+                  <option value="capital_vencido">{t('elm.mora_cap_venc')}</option>
                 </select>
                 <p className="text-xs text-slate-400 mt-1">
-                  Monto sobre el cual se calcula el porcentaje de mora.
+                  {t('elm.mora_base_hint')}
                 </p>
               </div>
               <div>
-                <label className={labelCls}>Cargo de Mora Fijo</label>
+                <label className={labelCls}>{t('elm.mora_fixed')}</label>
                 <select value={form.moraFixedEnabled} onChange={e => set('moraFixedEnabled', e.target.value)} className={inputCls}>
-                  <option value="0">Deshabilitado</option>
-                  <option value="1">Habilitado</option>
+                  <option value="0">{t('elm.disabled')}</option>
+                  <option value="1">{t('elm.enabled')}</option>
                 </select>
                 <p className="text-xs text-slate-400 mt-1">
-                  Cargo fijo por cada cuota vencida. Cuando está habilitado, <strong>reemplaza</strong> la tasa porcentual.
+                  {t('elm.mora_fixed_hint')}
                 </p>
               </div>
             </div>
             {parseInt(form.moraFixedEnabled) === 1 && (
               <div>
-                <label className={labelCls}>Monto Fijo de Mora (por cuota vencida)</label>
+                <label className={labelCls}>{t('elm.mora_fixed_amt')}</label>
                 <input
                   type="number" step="0.01" min="0"
                   value={form.moraFixedAmount}
@@ -391,7 +385,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   placeholder="50.00"
                 />
                 <p className="text-xs text-slate-400 mt-1">
-                  Se suma al cargo porcentual por cada cuota que esté vencida.
+                  {t('elm.mora_fixed_amt_hint')}
                 </p>
               </div>
             )}
@@ -399,8 +393,8 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
             {/* mora_start_date: control para prestamos migrados que estaban al dia */}
             <div className="border-t border-slate-200 pt-4 mt-2">
               <label className={labelCls}>
-                Cobrar mora desde
-                <span className="text-xs text-slate-400 font-normal ml-1">— opcional, para migración de cartera</span>
+                {t('elm.mora_from')}
+                <span className="text-xs text-slate-400 font-normal ml-1">{t('elm.mora_from_opt')}</span>
               </label>
               <div className="flex gap-2">
                 <input
@@ -415,7 +409,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                     onClick={() => set('moraStartDate', '')}
                     className="px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg whitespace-nowrap"
                   >
-                    Limpiar
+                    {t('elm.clear')}
                   </button>
                 ) : (
                   <button
@@ -423,38 +417,38 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                     onClick={() => set('moraStartDate', new Date().toISOString().split('T')[0])}
                     className="px-3 py-2 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg whitespace-nowrap"
                   >
-                    Al día hoy
+                    {t('elm.uptodate_today')}
                   </button>
                 )}
               </div>
               <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-1">
-                <p><strong>¿Cuándo usar?</strong> Si migraste un préstamo de un cliente que ha estado pagando al día.</p>
+                <p><strong>{t('elm.mora_from_when')}</strong> {t('elm.mora_from_when_d')}</p>
                 <p>
-                  <strong>Vacío:</strong> mora se calcula desde la fecha de cada cuota (comportamiento normal).<br/>
-                  <strong>Con fecha:</strong> ignora cualquier atraso anterior a esa fecha. Solo se cobra mora si una cuota se atrasa <em>después</em> de ese punto.
+                  <strong>{t('elm.mora_from_empty')}</strong> {t('elm.mora_from_empty_d')}<br/>
+                  <strong>{t('elm.mora_from_set')}</strong> {t('elm.mora_from_set_d')}
                 </p>
-                <p className="italic">Tip: clic "Al día hoy" para marcar que el cliente está al día desde este momento.</p>
+                <p className="italic">{t('elm.mora_from_tip')}</p>
               </div>
             </div>
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1.5">
-              <p className="font-semibold">Ejemplo con los valores actuales:</p>
-              <p>Si una cuota vence y el cliente paga {parseInt(form.moraGraceDays) + 10} días después ({parseInt(form.moraGraceDays)} gracia + 10 días de mora):</p>
+              <p className="font-semibold">{t('elm.example_title')}</p>
+              <p>{t('elm.example_intro').replace('{n}', String(parseInt(form.moraGraceDays) + 10)).replace('{g}', String(parseInt(form.moraGraceDays)))}</p>
               {parseInt(form.moraFixedEnabled) === 1 ? (
                 <p className="font-semibold text-amber-700">
-                  Mora = RD${parseFloat(form.moraFixedAmount || '0').toFixed(2)} fijo por cuota vencida
-                  <span className="font-normal text-slate-500"> (la tasa % queda inactiva)</span>
+                  {t('elm.example_fixed').replace('{amt}', parseFloat(form.moraFixedAmount || '0').toFixed(2))}
+                  <span className="font-normal text-slate-500"> {t('elm.example_fixed_note')}</span>
                 </p>
               ) : (
                 <p className="font-semibold">
-                  Mora = Base ({form.moraBase === 'cuota_vencida' ? 'cuota vencida' : 'capital pendiente'}) × {parseFloat(form.moraRateDaily || '0').toFixed(4)}% × 10 días
+                  {t('elm.example_pct').replace('{base}', form.moraBase === 'cuota_vencida' ? t('elm.base_cuota') : t('elm.base_capital')).replace('{rate}', parseFloat(form.moraRateDaily || '0').toFixed(4))}
                 </p>
               )}
               <div className="pt-1.5 border-t border-slate-200 text-slate-500 space-y-0.5">
-                <p className="font-semibold text-slate-600">Reglas de precedencia:</p>
-                <p>① <strong>Cargo fijo habilitado</strong> → anula la tasa % de este préstamo y la configuración global.</p>
-                <p>② <strong>Tasa % por préstamo</strong> → anula la tasa % configurada a nivel global.</p>
-                <p>③ <strong>Sin configuración por préstamo</strong> → se aplica la tasa global de Configuración → General.</p>
+                <p className="font-semibold text-slate-600">{t('elm.precedence')}</p>
+                <p>① <strong>{t('elm.prec1')}</strong> {t('elm.prec1_d')}</p>
+                <p>② <strong>{t('elm.prec2')}</strong> {t('elm.prec2_d')}</p>
+                <p>③ <strong>{t('elm.prec3')}</strong> {t('elm.prec3_d')}</p>
               </div>
             </div>
           </div>
@@ -464,9 +458,9 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
         {activeTab === 'otros' && (
           <div className="space-y-4">
             <div>
-              <label className={labelCls}>Cobrador Asignado</label>
+              <label className={labelCls}>{t('elm.collector')}</label>
               <select value={form.collectorId} onChange={e => set('collectorId', e.target.value)} className={inputCls}>
-                <option value="">— Sin cobrador asignado —</option>
+                <option value="">{t('elm.no_collector')}</option>
                 {collectors.map((c: any) => (
                   <option key={c.userId ?? c.user_id} value={c.userId ?? c.user_id}>
                     {c.fullName ?? c.full_name ?? c.email}
@@ -475,27 +469,27 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
               </select>
             </div>
             <div>
-              <label className={labelCls}>Propósito del Préstamo</label>
+              <label className={labelCls}>{t('elm.purpose')}</label>
               <input
                 type="text"
                 value={form.purpose}
                 onChange={e => set('purpose', e.target.value)}
                 className={inputCls}
-                placeholder="Ej. Capital de trabajo, Consumo personal..."
+                placeholder={t('elm.purpose_ph')}
               />
             </div>
             <div>
-              <label className={labelCls}>Notas Internas</label>
+              <label className={labelCls}>{t('elm.notes')}</label>
               <textarea
                 value={form.notes}
                 onChange={e => set('notes', e.target.value)}
                 rows={4}
                 className={`${inputCls} resize-none`}
-                placeholder="Notas internas sobre el préstamo..."
+                placeholder={t('elm.notes_ph')}
               />
             </div>
             <div>
-              <label className={labelCls}>Cargo de Pr&#xF3;rroga</label>
+              <label className={labelCls}>{t('elm.prorroga_fee')}</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
                 <input
@@ -509,7 +503,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                 />
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Cargo fijo para extender el vencimiento de una cuota un per&#xED;odo. Dejar en 0 para deshabilitar la opci&#xF3;n de pr&#xF3;rroga.
+                {t('elm.prorroga_hint')}
               </p>
             </div>
           </div>
@@ -518,14 +512,14 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
         {/* Footer */}
         <div className="flex gap-2 mt-6 pt-4 border-t border-slate-200">
           <Button variant="secondary" className="flex-1" onClick={onClose} disabled={isSubmitting}>
-            Cancelar
+            {t('common.cancel')}
           </Button>
           <Button
             className="flex-1 bg-blue-600 hover:bg-blue-700"
             onClick={handleSave}
             disabled={isSubmitting || permissionDenied}
           >
-            {isSubmitting ? 'Guardando...' : '✓ Guardar Cambios'}
+            {isSubmitting ? t('elm.saving') : t('elm.save_changes')}
           </Button>
         </div>
       </Card>

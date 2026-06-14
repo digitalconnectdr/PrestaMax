@@ -8,6 +8,7 @@ import { Building2, User, Mail, Phone, Lock, CheckCircle, ArrowLeft, Eye, EyeOff
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { SUPPORTED_CURRENCIES } from '@/lib/utils'
+import { useT } from '@/lib/i18n'
 
 interface Plan {
   id: string
@@ -22,6 +23,7 @@ interface Plan {
 }
 
 const RegisterPage: React.FC = () => {
+  const t = useT()
   const [form, setForm] = useState({
     companyName: '',
     adminName: '',
@@ -55,13 +57,13 @@ const RegisterPage: React.FC = () => {
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {}
-    if (!form.companyName.trim()) newErrors.companyName = 'Nombre de empresa es requerido'
-    if (!form.adminName.trim()) newErrors.adminName = 'Tu nombre es requerido'
-    if (!form.adminEmail.trim()) newErrors.adminEmail = 'Email es requerido'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail)) newErrors.adminEmail = 'Email inválido'
-    if (!form.adminPassword) newErrors.adminPassword = 'Contraseña es requerida'
-    else if (form.adminPassword.length < 8) newErrors.adminPassword = 'Mínimo 8 caracteres'
-    if (form.adminPassword !== form.confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden'
+    if (!form.companyName.trim()) newErrors.companyName = t('reg.err_company')
+    if (!form.adminName.trim()) newErrors.adminName = t('reg.err_name')
+    if (!form.adminEmail.trim()) newErrors.adminEmail = t('reg.err_email')
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail)) newErrors.adminEmail = t('reg.err_email_inv')
+    if (!form.adminPassword) newErrors.adminPassword = t('reg.err_pwd')
+    else if (form.adminPassword.length < 8) newErrors.adminPassword = t('reg.err_pwd_min')
+    if (form.adminPassword !== form.confirmPassword) newErrors.confirmPassword = t('reg.err_pwd_match')
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -90,11 +92,11 @@ const RegisterPage: React.FC = () => {
 
       setStep('success')
       setTimeout(() => {
-        toast.success('¡Bienvenido a PrestaMax!')
+        toast.success(t('reg.welcome'))
         navigate('/dashboard')
       }, 2000)
     } catch (err: any) {
-      const message = err.response?.data?.error || 'Error al crear la cuenta'
+      const message = err.response?.data?.error || t('reg.create_error')
       toast.error(message)
     } finally {
       setIsLoading(false)
@@ -109,9 +111,9 @@ const RegisterPage: React.FC = () => {
     if (/[A-Z]/.test(pw)) score++
     if (/[0-9]/.test(pw)) score++
     if (/[^A-Za-z0-9]/.test(pw)) score++
-    if (score <= 2) return { level: score, label: 'Débil', color: 'bg-red-500' }
-    if (score <= 3) return { level: score, label: 'Regular', color: 'bg-amber-500' }
-    return { level: score, label: 'Fuerte', color: 'bg-emerald-500' }
+    if (score <= 2) return { level: score, label: t('reg.pw_weak'), color: 'bg-red-500' }
+    if (score <= 3) return { level: score, label: t('reg.pw_regular'), color: 'bg-amber-500' }
+    return { level: score, label: t('reg.pw_strong'), color: 'bg-emerald-500' }
   }
 
   const pwStrength = passwordStrength(form.adminPassword)
@@ -123,9 +125,9 @@ const RegisterPage: React.FC = () => {
           <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="w-10 h-10 text-white" />
           </div>
-          <h2 className="text-3xl font-bold mb-2">¡Cuenta creada!</h2>
-          <p className="text-blue-200 text-lg mb-2">Tu empresa está lista en PrestaMax</p>
-          <p className="text-blue-300 text-sm">Redirigiendo al panel principal...</p>
+          <h2 className="text-3xl font-bold mb-2">{t('reg.success_title')}</h2>
+          <p className="text-blue-200 text-lg mb-2">{t('reg.success_sub')}</p>
+          <p className="text-blue-300 text-sm">{t('reg.redirecting')}</p>
         </div>
       </div>
     )
@@ -136,30 +138,30 @@ const RegisterPage: React.FC = () => {
       {/* Left Panel */}
       <div className="hidden lg:flex lg:w-5/12 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] text-white flex-col justify-between p-12">
         <div>
-          <Link to="/" className="inline-block hover:opacity-90 transition-opacity" title="Volver al inicio">
+          <Link to="/" className="inline-block hover:opacity-90 transition-opacity" title={t('reg.back_home')}>
             <h1 className="text-4xl font-bold mb-2">
               <span className="text-[#f59e0b]">Presta</span>Max
             </h1>
           </Link>
-          <p className="text-blue-200 text-lg">Gestión Profesional de Préstamos</p>
+          <p className="text-blue-200 text-lg">{t('reg.tagline')}</p>
         </div>
 
         <div className="space-y-6">
           <div>
-            <p className="text-2xl font-bold mb-2">Comienza tu período de prueba</p>
+            <p className="text-2xl font-bold mb-2">{t('reg.start_trial')}</p>
             <p className="text-blue-100">
-              Registra tu empresa y empieza a gestionar tu cartera de préstamos de forma profesional.
+              {t('reg.start_trial_desc')}
             </p>
           </div>
 
           <div className="space-y-4">
             {[
-              { icon: '🏦', text: 'Múltiples tipos de préstamos' },
-              { icon: '📊', text: 'Dashboard en tiempo real' },
-              { icon: '💬', text: 'Mensajería vía WhatsApp' },
-              { icon: '📄', text: 'Contratos y recibos automáticos' },
-              { icon: '👥', text: 'Gestión de cobradores' },
-              { icon: '🔒', text: 'Datos seguros e independientes' },
+              { icon: '🏦', text: t('reg.feat_types') },
+              { icon: '📊', text: t('reg.feat_dashboard') },
+              { icon: '💬', text: t('reg.feat_whatsapp') },
+              { icon: '📄', text: t('reg.feat_contracts') },
+              { icon: '👥', text: t('reg.feat_collectors') },
+              { icon: '🔒', text: t('reg.feat_secure') },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-3">
                 <span className="text-xl">{item.icon}</span>
@@ -191,23 +193,23 @@ const RegisterPage: React.FC = () => {
             className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-sm mb-6 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Volver al inicio de sesión
+            {t('reg.back_login')}
           </button>
 
-          <h2 className="text-2xl font-bold text-slate-900 mb-1">Crear cuenta</h2>
-          <p className="text-slate-600 text-sm mb-6">Registra tu empresa y comienza gratis</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-1">{t('reg.create_account')}</h2>
+          <p className="text-slate-600 text-sm mb-6">{t('reg.create_account_sub')}</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Company Info */}
             <div className="bg-slate-50 rounded-xl p-4 space-y-4">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5" />
-                Datos de la Empresa
+                {t('reg.company_data')}
               </p>
               <div>
                 <Input
-                  label="Nombre de la Empresa *"
-                  placeholder="Ej: Prestamos Rápidos S.A."
+                  label={t('reg.company_name')}
+                  placeholder={t('reg.company_name_ph')}
                   value={form.companyName}
                   onChange={e => set('companyName', e.target.value)}
                 />
@@ -216,14 +218,14 @@ const RegisterPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Input
-                    label="Teléfono"
+                    label={t('reg.phone')}
                     placeholder="809-000-0000"
                     value={form.phone}
                     onChange={e => set('phone', e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Moneda</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('reg.currency')}</label>
                   <select
                     value={form.currency}
                     onChange={e => set('currency', e.target.value)}
@@ -241,12 +243,12 @@ const RegisterPage: React.FC = () => {
             <div className="bg-slate-50 rounded-xl p-4 space-y-4">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5" />
-                Tu Cuenta de Administrador
+                {t('reg.admin_account')}
               </p>
               <div>
                 <Input
-                  label="Tu nombre completo *"
-                  placeholder="Ej: Juan Pérez"
+                  label={t('reg.your_name')}
+                  placeholder={t('reg.your_name_ph')}
                   value={form.adminName}
                   onChange={e => set('adminName', e.target.value)}
                 />
@@ -255,19 +257,19 @@ const RegisterPage: React.FC = () => {
               <div>
                 <Input
                   type="email"
-                  label="Correo Electrónico *"
-                  placeholder="tu@empresa.com"
+                  label={t('reg.email')}
+                  placeholder={t('reg.email_ph')}
                   value={form.adminEmail}
                   onChange={e => set('adminEmail', e.target.value)}
                 />
                 {errors.adminEmail && <p className="text-red-500 text-xs mt-1">{errors.adminEmail}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('reg.password')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Mínimo 8 caracteres"
+                    placeholder={t('reg.password_ph')}
                     value={form.adminPassword}
                     onChange={e => set('adminPassword', e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] pr-10"
@@ -288,18 +290,18 @@ const RegisterPage: React.FC = () => {
                       ))}
                     </div>
                     {pwStrength.label && (
-                      <p className="text-xs text-slate-500">Contraseña <span className="font-medium">{pwStrength.label}</span></p>
+                      <p className="text-xs text-slate-500">{t('reg.pw_label')} <span className="font-medium">{pwStrength.label}</span></p>
                     )}
                   </div>
                 )}
                 {errors.adminPassword && <p className="text-red-500 text-xs mt-1">{errors.adminPassword}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Confirmar Contraseña *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('reg.confirm_password')}</label>
                 <div className="relative">
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="Repite tu contraseña"
+                    placeholder={t('reg.confirm_password_ph')}
                     value={form.confirmPassword}
                     onChange={e => set('confirmPassword', e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] pr-10 ${errors.confirmPassword ? 'border-red-400' : 'border-slate-300'}`}
@@ -319,44 +321,44 @@ const RegisterPage: React.FC = () => {
             {/* Plan selector (optional) */}
             {plans.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Plan (opcional)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('reg.plan_optional')}</label>
                 <select
                   value={form.planId}
                   onChange={e => set('planId', e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
                 >
-                  <option value="">Comenzar en período de prueba gratuita</option>
+                  <option value="">{t('reg.plan_trial')}</option>
                   {plans.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} — ${p.priceMonthly}/mes · {p.trialDays || 10} días de prueba
+                      {t('reg.plan_option').replace('{name}', p.name).replace('{price}', String(p.priceMonthly)).replace('{days}', String(p.trialDays || 10))}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-400 mt-1">Puedes cambiar tu plan en cualquier momento desde la configuración.</p>
+                <p className="text-xs text-slate-400 mt-1">{t('reg.plan_hint')}</p>
               </div>
             )}
 
             <Button type="submit" isLoading={isLoading} size="lg" className="w-full">
-              Crear mi Cuenta
+              {t('reg.create_my')}
             </Button>
           </form>
 
           <div className="mt-6 pt-6 border-t border-slate-200 text-center space-y-2">
             <p className="text-sm text-slate-600">
-              ¿Ya tienes cuenta?{' '}
+              {t('reg.have_account')}{' '}
               <button
                 type="button"
                 onClick={() => navigate('/login')}
                 className="text-[#1e3a5f] font-semibold hover:underline"
               >
-                Inicia sesión aquí
+                {t('reg.signin_here')}
               </button>
             </p>
             <p className="text-xs text-slate-400">
-              Al registrarte aceptas nuestros{' '}
-              <a href="/terms" className="text-[#1e3a5f] hover:underline font-medium">Términos y Condiciones</a>
-              {' '}y nuestra{' '}
-              <a href="/privacy" className="text-[#1e3a5f] hover:underline font-medium">Política de Privacidad</a>.
+              {t('reg.terms_pre')}{' '}
+              <a href="/terms" className="text-[#1e3a5f] hover:underline font-medium">{t('reg.terms')}</a>
+              {' '}{t('reg.terms_and')}{' '}
+              <a href="/privacy" className="text-[#1e3a5f] hover:underline font-medium">{t('reg.privacy')}</a>.
             </p>
           </div>
         </div>
