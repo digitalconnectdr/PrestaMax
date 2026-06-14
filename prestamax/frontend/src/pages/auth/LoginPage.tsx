@@ -27,7 +27,7 @@ const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (searchParams.get('revoked') === '1') {
-      const msg = searchParams.get('msg') || 'Tu cuenta fue desactivada. Contacta a tu administrador.'
+      const msg = searchParams.get('msg') || t('auth.revoked_default')
       setError(msg)
       toast.error(msg, { duration: 6000 })
       searchParams.delete('revoked'); searchParams.delete('msg')
@@ -49,7 +49,7 @@ const LoginPage: React.FC = () => {
       navigate('/dashboard')
     } catch (err: any) {
       const code = err.response?.data?.code
-      const message = err.response?.data?.error || err.response?.data?.message || 'Error al iniciar sesion'
+      const message = err.response?.data?.error || err.response?.data?.message || t('auth.login_error')
       setError(message)
       toast.error(message, code === 'ACCESS_REVOKED' ? { duration: 6000 } : undefined)
     } finally {
@@ -61,7 +61,7 @@ const LoginPage: React.FC = () => {
     <div className="min-h-screen flex">
       <div className="hidden md:flex md:w-1/2 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] text-white flex-col justify-between p-10 overflow-y-auto">
         <div>
-          <Link to="/" className="inline-block mb-3 hover:opacity-90 transition-opacity" title="Volver al inicio">
+          <Link to="/" className="inline-block mb-3 hover:opacity-90 transition-opacity" title={t('auth.back_home')}>
             <h1 className="text-4xl font-bold">
               <span className="text-white">Presta</span>
               <span className="text-[#f59e0b]">Max</span>
@@ -116,7 +116,7 @@ const LoginPage: React.FC = () => {
         </div>
         <div className="w-full max-w-sm">
           <div className="md:hidden mb-8">
-            <Link to="/" className="inline-block mb-1 hover:opacity-90 transition-opacity" title="Volver al inicio">
+            <Link to="/" className="inline-block mb-1 hover:opacity-90 transition-opacity" title={t('auth.back_home')}>
               <h1 className="text-3xl font-bold">
                 <span className="text-[#1e3a5f]">Presta</span>
                 <span className="text-[#f59e0b]">Max</span>

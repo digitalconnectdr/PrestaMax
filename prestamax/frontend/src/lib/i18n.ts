@@ -37,6 +37,9 @@ const TR: Record<string, Tri> = {
   'auth.terms':      { es: 'Términos de Uso',    en: 'Terms of Use',       pt: 'Termos de Uso' },
   'auth.privacy':    { es: 'Política de Privacidad', en: 'Privacy Policy',  pt: 'Política de Privacidade' },
   'auth.welcome':    { es: 'Bienvenido a PrestaMax', en: 'Welcome to PrestaMax', pt: 'Bem-vindo ao PrestaMax' },
+  'auth.revoked_default': { es: 'Tu cuenta fue desactivada. Contacta a tu administrador.', en: 'Your account was deactivated. Contact your administrator.', pt: 'Sua conta foi desativada. Contate seu administrador.' },
+  'auth.login_error':{ es: 'Error al iniciar sesión', en: 'Error signing in', pt: 'Erro ao entrar' },
+  'auth.back_home':  { es: 'Volver al inicio', en: 'Back to home', pt: 'Voltar ao início' },
 
   // ── Common ─────────────────────────────────────────────────────────────────
   'common.cancel':   { es: 'Cancelar',   en: 'Cancel',      pt: 'Cancelar' },
