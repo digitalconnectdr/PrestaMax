@@ -134,7 +134,7 @@ const LandingPage: React.FC = () => {
     <div className="min-h-screen bg-white">
       {/* Navbar */}
       <header className={`sticky top-0 z-50 bg-white/95 backdrop-blur border-b transition-shadow duration-300 ${scrolled ? 'border-slate-200 shadow-md' : 'border-transparent'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] rounded-lg flex items-center justify-center">
@@ -193,7 +193,7 @@ const LandingPage: React.FC = () => {
 
       {/* Hero */}
       <section className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-16 md:py-24">
           <div className="text-center max-w-4xl mx-auto">
             <div className="lp-hero-item lp-delay-1 inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700 mb-6">
               <Zap className="w-3.5 h-3.5" />
@@ -239,7 +239,7 @@ const LandingPage: React.FC = () => {
           </div>
 
           {/* Hero mockup illustration */}
-          <div className="mt-16 relative max-w-5xl mx-auto">
+          <div className="mt-16 relative max-w-6xl mx-auto">
             <div className="bg-gradient-to-br from-[#1e3a5f]/10 via-[#f59e0b]/10 to-blue-500/10 rounded-2xl p-2 md:p-4 shadow-2xl">
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="flex items-center gap-1.5 px-4 py-3 bg-slate-50 border-b border-slate-200">
@@ -280,7 +280,7 @@ const LandingPage: React.FC = () => {
 
       {/* Trust strip */}
       <section className="border-y border-slate-200 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             <div className="flex flex-col items-center gap-1">
               <Smartphone className="w-6 h-6 text-[#1e3a5f]" />
@@ -308,7 +308,7 @@ const LandingPage: React.FC = () => {
 
       {/* Features */}
       <section id="features" className="py-16 md:py-24 scroll-mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
           <Reveal className="text-center max-w-3xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
               {t('lp.features.title')}
@@ -341,7 +341,7 @@ const LandingPage: React.FC = () => {
 
       {/* Pricing */}
       <section id="pricing" className="py-16 md:py-24 bg-slate-50 scroll-mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
           <Reveal className="text-center max-w-3xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
               {t('lp.pricing.title')}
@@ -445,7 +445,7 @@ const LandingPage: React.FC = () => {
 
       {/* FAQ */}
       <section id="faq" className="py-16 md:py-24 scroll-mt-20">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal className="text-center">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.faq.title')}</h2>
             <p className="mt-4 text-lg text-slate-600">{t('lp.faq.subtitle')}</p>
@@ -478,7 +478,7 @@ const LandingPage: React.FC = () => {
 
       {/* Footer */}
       <footer className="bg-slate-900 text-slate-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-12">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2">
