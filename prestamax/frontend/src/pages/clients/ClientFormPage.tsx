@@ -8,6 +8,7 @@ import { PageLoadingState } from '@/components/ui/Loading'
 import { ArrowLeft } from 'lucide-react'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
+import { useT } from '@/lib/i18n'
 
 interface FormData {
   firstName: string
@@ -39,6 +40,7 @@ interface FormData {
 }
 
 const ClientFormPage: React.FC = () => {
+  const t = useT()
   const { id } = useParams()
   const navigate = useNavigate()
   // isLoading only when editing an existing client (id is a real UUID, not undefined or 'new')
@@ -111,7 +113,7 @@ const ClientFormPage: React.FC = () => {
             notes: client.notes || '',
           })
         } catch (error) {
-          if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error('Error al cargar los datos del cliente')
+          if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error(t('cf.load_error'))
           navigate('/clients')
         } finally {
           setIsLoading(false)
@@ -136,19 +138,19 @@ const ClientFormPage: React.FC = () => {
 
     // Validation
     if (!formData.firstName.trim()) {
-      toast.error('El nombre es requerido')
+      toast.error(t('cf.first_required'))
       return
     }
     if (!formData.lastName.trim()) {
-      toast.error('El apellido es requerido')
+      toast.error(t('cf.last_required'))
       return
     }
     if (!formData.documentNumber.trim()) {
-      toast.error('El número de documento es requerido')
+      toast.error(t('cf.doc_required'))
       return
     }
     if (!formData.phonePersonal.trim()) {
-      toast.error('El teléfono personal es requerido')
+      toast.error(t('cf.phone_required'))
       return
     }
 
@@ -185,15 +187,15 @@ const ClientFormPage: React.FC = () => {
 
       if (!isEditMode) {
         await api.post('/clients', payload)
-        toast.success('Cliente creado exitosamente')
+        toast.success(t('cf.created_ok'))
       } else {
         await api.put(`/clients/${id}`, payload)
-        toast.success('Cliente actualizado exitosamente')
+        toast.success(t('cf.updated_ok'))
       }
 
       navigate('/clients')
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'Error al guardar el cliente'
+      const errorMessage = error.response?.data?.message || t('cf.save_error')
       toast.error(errorMessage)
     } finally {
       setIsSaving(false)
@@ -205,7 +207,7 @@ const ClientFormPage: React.FC = () => {
   }
 
   const isEditing = isEditMode
-  const pageTitle = isEditing ? 'Editar Cliente' : 'Nuevo Cliente'
+  const pageTitle = isEditing ? t('cf.title_edit') : t('cf.title_new')
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -221,17 +223,17 @@ const ClientFormPage: React.FC = () => {
         <div>
           <h1 className="page-title">{pageTitle}</h1>
           <p className="text-slate-600 text-sm mt-1">
-            {isEditing ? 'Actualiza los datos del cliente' : 'Completa la información del cliente'}
+            {isEditing ? t('cf.subtitle_edit') : t('cf.subtitle_new')}
           </p>
         </div>
       </div>
 
       {/* Datos Personales */}
       <Card>
-        <h3 className="section-title mb-6">Datos Personales</h3>
+        <h3 className="section-title mb-6">{t('cf.personal')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
-            label="Nombre"
+            label={t('cf.first_name')}
             name="firstName"
             value={formData.firstName}
             onChange={handleChange}
@@ -239,7 +241,7 @@ const ClientFormPage: React.FC = () => {
             required
           />
           <Input
-            label="Apellido"
+            label={t('cf.last_name')}
             name="lastName"
             value={formData.lastName}
             onChange={handleChange}
@@ -247,19 +249,19 @@ const ClientFormPage: React.FC = () => {
             required
           />
           <Select
-            label="Tipo de Documento"
+            label={t('cf.doc_type')}
             name="documentType"
             value={formData.documentType}
             onChange={handleChange}
             options={[
-              { value: 'cedula', label: 'Cédula' },
-              { value: 'passport', label: 'Pasaporte' },
-              { value: 'rnc', label: 'RNC' },
+              { value: 'cedula', label: t('cf.dt_cedula') },
+              { value: 'passport', label: t('cf.dt_passport') },
+              { value: 'rnc', label: t('cf.dt_rnc') },
             ]}
             required
           />
           <Input
-            label="Número de Documento"
+            label={t('cf.doc_number')}
             name="documentNumber"
             value={formData.documentNumber}
             onChange={handleChange}
@@ -267,40 +269,40 @@ const ClientFormPage: React.FC = () => {
             required
           />
           <Input
-            label="Fecha de Nacimiento"
+            label={t('cf.dob')}
             name="dateOfBirth"
             type="date"
             value={formData.dateOfBirth}
             onChange={handleChange}
           />
           <Select
-            label="Género"
+            label={t('cf.gender')}
             name="gender"
             value={formData.gender}
             onChange={handleChange}
-            placeholder="-- Selecciona --"
+            placeholder={t('cf.select')}
             options={[
-              { value: 'male', label: 'Masculino' },
-              { value: 'female', label: 'Femenino' },
-              { value: 'other', label: 'Otro' },
+              { value: 'male', label: t('cf.g_male') },
+              { value: 'female', label: t('cf.g_female') },
+              { value: 'other', label: t('cf.g_other') },
             ]}
           />
           <Select
-            label="Estado Civil"
+            label={t('cf.marital')}
             name="maritalStatus"
             value={formData.maritalStatus}
             onChange={handleChange}
-            placeholder="-- Selecciona --"
+            placeholder={t('cf.select')}
             options={[
-              { value: 'single', label: 'Soltero' },
-              { value: 'married', label: 'Casado' },
-              { value: 'divorced', label: 'Divorciado' },
-              { value: 'widowed', label: 'Viudo' },
-              { value: 'common_law', label: 'Unión Libre' },
+              { value: 'single', label: t('cf.m_single') },
+              { value: 'married', label: t('cf.m_married') },
+              { value: 'divorced', label: t('cf.m_divorced') },
+              { value: 'widowed', label: t('cf.m_widowed') },
+              { value: 'common_law', label: t('cf.m_common_law') },
             ]}
           />
           <Input
-            label="Nacionalidad"
+            label={t('cf.nationality')}
             name="nationality"
             value={formData.nationality}
             onChange={handleChange}
@@ -311,10 +313,10 @@ const ClientFormPage: React.FC = () => {
 
       {/* Contacto */}
       <Card>
-        <h3 className="section-title mb-6">Contacto</h3>
+        <h3 className="section-title mb-6">{t('cf.contact')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
-            label="Teléfono Personal"
+            label={t('cf.phone_personal')}
             name="phonePersonal"
             type="tel"
             value={formData.phonePersonal}
@@ -323,7 +325,7 @@ const ClientFormPage: React.FC = () => {
             required
           />
           <Input
-            label="Teléfono Laboral"
+            label={t('cf.phone_work')}
             name="phoneWork"
             type="tel"
             value={formData.phoneWork}
@@ -331,7 +333,7 @@ const ClientFormPage: React.FC = () => {
             placeholder="809-555-0002"
           />
           <Input
-            label="Teléfono Familiar"
+            label={t('cf.phone_family')}
             name="phoneFamily"
             type="tel"
             value={formData.phoneFamily}
@@ -347,7 +349,7 @@ const ClientFormPage: React.FC = () => {
             placeholder="809-555-0001"
           />
           <Input
-            label="Email"
+            label={t('cf.email')}
             name="email"
             type="email"
             value={formData.email}
@@ -356,33 +358,33 @@ const ClientFormPage: React.FC = () => {
             className="md:col-span-2"
           />
           <Input
-            label="Nombre del Contacto Familiar"
+            label={t('cf.family_contact')}
             name="familyContactName"
             value={formData.familyContactName}
             onChange={handleChange}
             placeholder="María García"
           />
           <Input
-            label="Relación Familiar"
+            label={t('cf.family_rel')}
             name="familyRelationship"
             value={formData.familyRelationship}
             onChange={handleChange}
-            placeholder="Hermana"
+            placeholder={t('cf.family_rel_ph')}
           />
         </div>
       </Card>
 
       {/* Dirección */}
       <Card>
-        <h3 className="section-title mb-6">Dirección</h3>
+        <h3 className="section-title mb-6">{t('cf.address')}</h3>
         <div className="grid grid-cols-1 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Dirección</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('cf.address')}</label>
             <textarea
               name="address"
               value={formData.address}
               onChange={handleChange}
-              placeholder="Calle Principal 123, Apartamento 5"
+              placeholder={t('cf.address_ph')}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
               rows={3}
             />
@@ -390,14 +392,14 @@ const ClientFormPage: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <Input
-            label="Ciudad"
+            label={t('cf.city')}
             name="city"
             value={formData.city}
             onChange={handleChange}
             placeholder="Santo Domingo"
           />
           <Input
-            label="Provincia"
+            label={t('cf.province')}
             name="province"
             value={formData.province}
             onChange={handleChange}
@@ -408,24 +410,24 @@ const ClientFormPage: React.FC = () => {
 
       {/* Información Económica */}
       <Card>
-        <h3 className="section-title mb-6">Información Económica</h3>
+        <h3 className="section-title mb-6">{t('cf.economic')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
-            label="Ocupación"
+            label={t('cf.occupation')}
             name="occupation"
             value={formData.occupation}
             onChange={handleChange}
-            placeholder="Ingeniero"
+            placeholder={t('cf.occupation_ph')}
           />
           <Input
-            label="Empleador"
+            label={t('cf.employer')}
             name="employer"
             value={formData.employer}
             onChange={handleChange}
-            placeholder="Empresa XYZ"
+            placeholder={t('cf.employer_ph')}
           />
           <Input
-            label="Dirección de la Empresa"
+            label={t('cf.work_address')}
             name="workAddress"
             value={formData.workAddress}
             onChange={handleChange}
@@ -433,7 +435,7 @@ const ClientFormPage: React.FC = () => {
             className="md:col-span-2"
           />
           <Input
-            label="Ingresos Mensuales"
+            label={t('cf.monthly_income')}
             name="monthlyIncome"
             type="number"
             value={formData.monthlyIncome}
@@ -441,18 +443,18 @@ const ClientFormPage: React.FC = () => {
             placeholder="25000"
           />
           <Input
-            label="Actividad Económica"
+            label={t('cf.economic_act')}
             name="economicActivity"
             value={formData.economicActivity}
             onChange={handleChange}
-            placeholder="Profesional independiente"
+            placeholder={t('cf.economic_act_ph')}
           />
         </div>
       </Card>
 
       {/* Opciones */}
       <Card>
-        <h3 className="section-title mb-6">Opciones</h3>
+        <h3 className="section-title mb-6">{t('cf.options')}</h3>
         <div className="space-y-4">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
@@ -463,7 +465,7 @@ const ClientFormPage: React.FC = () => {
               className="w-4 h-4 rounded border-slate-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
             />
             <span className="text-sm font-medium text-slate-700">
-              Autoriza procesamiento de datos
+              {t('cf.consent_data')}
             </span>
           </label>
           <label className="flex items-center gap-3 cursor-pointer">
@@ -475,16 +477,16 @@ const ClientFormPage: React.FC = () => {
               className="w-4 h-4 rounded border-slate-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
             />
             <span className="text-sm font-medium text-slate-700">
-              Autoriza notificaciones por WhatsApp
+              {t('cf.consent_whatsapp')}
             </span>
           </label>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-slate-700 mb-2">Notas</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('cf.notes')}</label>
             <textarea
               name="notes"
               value={formData.notes}
               onChange={handleChange}
-              placeholder="Notas adicionales sobre el cliente..."
+              placeholder={t('cf.notes_ph')}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
               rows={3}
             />
@@ -499,14 +501,14 @@ const ClientFormPage: React.FC = () => {
           variant="ghost"
           onClick={() => navigate('/clients')}
         >
-          Cancelar
+          {t('common.cancel')}
         </Button>
         <Button
           type="submit"
           isLoading={isSaving}
           disabled={isSaving}
         >
-          {isEditing ? 'Actualizar Cliente' : 'Crear Cliente'}
+          {isEditing ? t('cf.update_client') : t('cf.create_client')}
         </Button>
       </div>
     </form>
