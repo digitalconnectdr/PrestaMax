@@ -246,7 +246,7 @@ const LandingPage: React.FC = () => {
                   <div className="w-3 h-3 rounded-full bg-red-400" />
                   <div className="w-3 h-3 rounded-full bg-yellow-400" />
                   <div className="w-3 h-3 rounded-full bg-green-400" />
-                  <div className="flex-1 text-center text-xs text-slate-500 font-mono">prestamax.com/dashboard</div>
+                  <div className="flex-1 text-center text-xs text-slate-500 font-mono">credytek.com/dashboard</div>
                 </div>
                 <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
@@ -538,7 +538,15 @@ const LandingPage: React.FC = () => {
               © {new Date().getFullYear()} CredyTek. {t('lp.footer.rights')}
             </p>
             <p className="text-xs text-slate-400">
-              CredyTek — Powered by JPRS Digital Connect
+              CredyTek — Powered by{' '}
+              <a
+                href="https://digitalconnectdr.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-slate-300 hover:text-white transition-colors"
+              >
+                JPRS Digital Connect
+              </a>
             </p>
           </div>
         </div>
