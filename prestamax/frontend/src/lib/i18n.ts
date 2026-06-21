@@ -2665,8 +2665,9 @@ const TR: Record<string, Tri> = {
   'lp.stats.web':        { es: '% en la nube', en: '% cloud-based', pt: '% na nuvem' },
 
   // Países y monedas
-  'lp.cur.title':    { es: 'Diseñado para República Dominicana, listo para Latinoamérica', en: 'Built for the Dominican Republic, ready for Latin America', pt: 'Feito para a República Dominicana, pronto para a América Latina' },
-  'lp.cur.subtitle': { es: 'Opera en la moneda de tu país. CredyTek soporta 12 monedas de la región, USD y EUR.', en: 'Operate in your country’s currency. CredyTek supports 12 regional currencies, plus USD and EUR.', pt: 'Opere na moeda do seu país. A CredyTek suporta 12 moedas da região, além de USD e EUR.' },
+  'lp.cur.title':    { es: 'Multi-moneda para toda Latinoamérica', en: 'Multi-currency for all of Latin America', pt: 'Multimoeda para toda a América Latina' },
+  'lp.cur.subtitle': { es: 'Opera en la moneda de tu país. CredyTek soporta 12 monedas de la región, además de USD y EUR.', en: 'Operate in your country’s currency. CredyTek supports 12 regional currencies, plus USD and EUR.', pt: 'Opere na moeda do seu país. A CredyTek suporta 12 moedas da região, além de USD e EUR.' },
+  'lp.cur.based':    { es: 'Solución latinoamericana, con sede en República Dominicana.', en: 'A Latin American solution, headquartered in the Dominican Republic.', pt: 'Solução latino-americana, com sede na República Dominicana.' },
   'lp.cur.dr_badge': { es: 'Mercado inicial', en: 'Home market', pt: 'Mercado inicial' },
   'lp.cur.dr_name':  { es: 'República Dominicana', en: 'Dominican Republic', pt: 'República Dominicana' },
   'lp.cur.dr_desc':  { es: 'Nuestro mercado principal: soporte local, atención cercana y conocimiento del negocio de préstamos dominicano.', en: 'Our primary market: local support, close attention and deep knowledge of the Dominican lending business.', pt: 'Nosso mercado principal: suporte local, atendimento próximo e conhecimento do negócio de empréstimos dominicano.' },

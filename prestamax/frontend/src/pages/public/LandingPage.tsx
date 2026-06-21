@@ -117,8 +117,9 @@ const buildFaqs = (t: TFn) => [
   { q: t('lp.faq.q12'), a: t('lp.faq.a12') },
 ]
 
-// Monedas soportadas (DOP se destaca aparte como mercado inicial).
+// Monedas soportadas (presencia regional — todas por igual).
 const CURRENCIES: { code: string; flag: string; key: string }[] = [
+  { code: 'DOP', flag: '🇩🇴', key: 'lp.cur.dop' },
   { code: 'USD', flag: '🇺🇸', key: 'lp.cur.usd' },
   { code: 'EUR', flag: '🇪🇺', key: 'lp.cur.eur' },
   { code: 'HTG', flag: '🇭🇹', key: 'lp.cur.htg' },
@@ -541,21 +542,8 @@ const LandingPage: React.FC = () => {
             <p className="mt-4 text-lg text-slate-600">{t('lp.cur.subtitle')}</p>
           </Reveal>
 
-          {/* Mercado inicial: República Dominicana */}
-          <Reveal>
-            <div className="mt-12 max-w-4xl mx-auto rounded-2xl bg-gradient-to-br from-[#1e3a5f] to-[#152a45] text-white p-6 md:p-8 shadow-xl shadow-[#1e3a5f]/20 flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
-              <span className="text-6xl leading-none flex-shrink-0">🇩🇴</span>
-              <div>
-                <span className="inline-block px-3 py-1 bg-[#f59e0b] text-white text-xs font-bold rounded-full uppercase tracking-wide">{t('lp.cur.dr_badge')}</span>
-                <h3 className="mt-2 text-2xl font-bold">{t('lp.cur.dr_name')} <span className="text-[#f59e0b]">· DOP</span></h3>
-                <p className="mt-1 text-blue-100 text-sm leading-relaxed">{t('lp.cur.dr_desc')}</p>
-              </div>
-            </div>
-          </Reveal>
-
-          {/* Resto de la región */}
-          <p className="mt-10 text-center text-xs font-semibold uppercase tracking-widest text-slate-400">{t('lp.cur.region')}</p>
-          <div className="mt-5 max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {/* Grid uniforme de monedas — todas por igual (presencia regional) */}
+          <div className="mt-12 max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {CURRENCIES.map((c, i) => (
               <Reveal key={c.code} delay={(i % 4) * 60}>
                 <div className="lp-card-hover flex items-center gap-3 p-3.5 bg-white rounded-xl border border-slate-200 hover:border-[#1e3a5f]/40">
@@ -568,6 +556,8 @@ const LandingPage: React.FC = () => {
               </Reveal>
             ))}
           </div>
+
+          <p className="mt-8 text-center text-xs text-slate-400">{t('lp.cur.based')}</p>
         </div>
       </section>
 
