@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now, r2, nextDocNumber } from '../db/database';
-import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { authenticate, requireTenant, requirePermission, AuthRequest, isPlatformStaff } from '../middleware/auth';
 import { generateDraft } from '../services/whatsappService';
 // FIX P0 (Jun 2026): usar el MOTOR UNIFICADO de calculations.ts que respeta
 // freq + rateType correctamente. La version inline anterior (eliminada) calculaba
@@ -911,9 +911,8 @@ router.post('/:id/write-off', authenticate, requireTenant, requirePermission('lo
     // loss_components: { capital: bool, interest: bool, mora: bool } — selects what to register as expense
     if (!reason?.trim()) return res.status(400).json({ error: 'Motivo requerido' })
 
-    // Only tenant owners / platform admins can write off
-    const platformRole = (req as any).user?.platformRole || (req as any).user?.platform_role || ''
-    const isPlatform = ['platform_owner', 'platform_admin', 'admin'].includes(platformRole)
+    // Only tenant owners / platform staff can write off
+    const isPlatform = isPlatformStaff((req as any).user)
     const membership = db.prepare('SELECT roles FROM tenant_memberships WHERE tenant_id=? AND user_id=?')
       .get(req.tenant!.id, (req as any).user.id) as any
     const roles: string[] = (() => { try { return JSON.parse(membership?.roles || '[]') } catch { return [] } })()

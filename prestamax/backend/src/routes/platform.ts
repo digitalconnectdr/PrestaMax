@@ -1,14 +1,14 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { getDb, uuid, now } from '../db/database';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest, isPlatformStaff } from '../middleware/auth';
 
 const router = Router();
 
-// ── Middleware: require platform admin role ──────────────────────────────────
+// ── Middleware: require platform admin role (owner por email o staff explícito).
+// 'admin' (rol de tenant) NO da acceso de plataforma. ─────────────────────────
 function requirePlatformAdmin(req: AuthRequest, res: Response, next: Function) {
-  const role = req.user?.platform_role || req.user?.platformRole || '';
-  if (!['platform_owner', 'platform_admin', 'admin'].includes(role)) {
+  if (!isPlatformStaff(req.user)) {
     return res.status(403).json({ error: 'Requiere rol de administrador de plataforma' });
   }
   next();

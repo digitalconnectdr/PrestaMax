@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
-import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { authenticate, requireTenant, requirePermission, AuthRequest, isPlatformStaff } from '../middleware/auth';
 
 const router = Router();
 
@@ -29,7 +29,7 @@ router.get('/', authenticate, requireTenant, requirePermission('collections.task
     const explicit: Record<string,boolean> = (() => { try { return JSON.parse(req.membership?.permissions || '{}'); } catch(_) { return {}; } })();
     const { hasPermission } = require('../lib/permissions');
     const canManage = hasPermission(roles, explicit, 'collections.tasks.manage', planFeatures);
-    const isPlatform = ['platform_owner','platform_admin','admin'].includes(req.user?.platform_role || '');
+    const isPlatform = isPlatformStaff(req.user);
 
     let sql = `
       SELECT ct.*,
@@ -203,7 +203,7 @@ router.patch('/:id/status', authenticate, requireTenant, requirePermission('coll
     const explicit: Record<string,boolean> = (() => { try { return JSON.parse(req.membership?.permissions || '{}'); } catch(_) { return {}; } })();
     const { hasPermission } = require('../lib/permissions');
     const canManage = hasPermission(roles, explicit, 'collections.tasks.manage', planFeatures);
-    const isPlatform = ['platform_owner','platform_admin','admin'].includes(req.user?.platform_role || '');
+    const isPlatform = isPlatformStaff(req.user);
 
     if (!canManage && !isPlatform && task.assigned_to !== req.user.id) {
       return res.status(403).json({ error: 'Solo puedes actualizar tus propias tareas.' });

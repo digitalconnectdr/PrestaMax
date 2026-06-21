@@ -32,8 +32,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
     navigate('/login')
   }
 
-  const userPlatformRole = (state.user as any)?.platformRole || (state.user as any)?.platform_role || ''
-  const isPlatformAdmin = ['admin', 'platform_owner', 'platform_admin'].includes(userPlatformRole)
+  // Acceso al panel de plataforma: el backend marca isPlatformAdmin SOLO para el
+  // owner (por email) o staff de plataforma explícito. Los dueños de empresa
+  // (rol de tenant 'admin') NO lo reciben.
+  const isPlatformAdmin = (state.user as any)?.isPlatformAdmin === true
 
   const navGroups = [
     {

@@ -9,6 +9,19 @@ export interface AuthRequest extends Request {
   membership?: any;
 }
 
+// ── Acceso de plataforma (panel /admin) ──────────────────────────────────────
+// SOLO el owner de la plataforma (por email) y, opcionalmente, staff con un
+// platform_role EXPLÍCITO de plataforma. OJO: 'admin' es el rol del dueño de
+// cada empresa (tenant), NO un rol de plataforma — por eso NO se incluye aquí.
+// Así, ningún cliente que adquiera el servicio obtiene acceso al panel global.
+const PLATFORM_ROLES = ['platform_owner', 'platform_admin', 'platform_support'];
+export function isPlatformStaff(user: any): boolean {
+  if (!user) return false;
+  const ownerEmail = (process.env.OWNER_USER_EMAIL || 'jcpenalo@gmail.com').toLowerCase();
+  if ((user.email || '').toLowerCase() === ownerEmail) return true;
+  return PLATFORM_ROLES.includes(user.platform_role || user.platformRole);
+}
+
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
@@ -31,7 +44,7 @@ export const requireTenant = async (req: AuthRequest, res: Response, next: NextF
     const db = getDb();
     const tenant = db.prepare("SELECT * FROM tenants WHERE id = ? AND is_active = 1").get(tenantId) as any;
     if (!tenant) return res.status(404).json({ error: "Empresa no encontrada" });
-    const isPlatform = ["platform_owner","platform_admin","platform_support"].includes(req.user?.platform_role);
+    const isPlatform = isPlatformStaff(req.user);
     const membership = db.prepare("SELECT * FROM tenant_memberships WHERE user_id=? AND tenant_id=? AND is_active=1").get(req.user?.id, tenantId) as any;
     if (!membership && !isPlatform) return res.status(403).json({ error: "Sin acceso a esta empresa" });
     // Check subscription status (platform admins bypass)
@@ -75,8 +88,7 @@ export const requireTenant = async (req: AuthRequest, res: Response, next: NextF
 };
 
 export const requirePlatformAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const role = req.user?.platform_role || req.user?.platformRole;
-  if (!["platform_owner","platform_admin","admin"].includes(role)) {
+  if (!isPlatformStaff(req.user)) {
     return res.status(403).json({ error: "Requiere rol de administrador de plataforma" });
   }
   next();
@@ -88,9 +100,10 @@ export const requirePlatformAdmin = (req: AuthRequest, res: Response, next: Next
 // Platform owners/admins bypass ALL checks.
 export const requirePermission = (permKey: PermKey) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    // Layer 0: Platform-level admins bypass everything
-    const platformRole = req.user?.platform_role || req.user?.platformRole;
-    if (["platform_owner","platform_admin","admin"].includes(platformRole)) return next();
+    // Layer 0: Platform-level staff (owner por email) bypass everything.
+    // 'admin' (rol de tenant) NO entra aquí: los dueños de empresa obtienen sus
+    // permisos por sus roles de tenant (Layer 1/2), no por bypass de plataforma.
+    if (isPlatformStaff(req.user)) return next();
 
     const membership = req.membership;
     if (!membership) return res.status(403).json({ error: "Sin membresia activa" });

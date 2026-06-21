@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getDb, uuid, now } from '../db/database';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest, isPlatformStaff } from '../middleware/auth';
 import { computePermissions } from '../lib/permissions';
 
 const router = Router();
@@ -39,7 +39,7 @@ router.post('/login', async (req: Request, res: Response) => {
     // Si no tiene ninguna membresia activa y NO es platform admin, rechazar.
     // Esto evita que un usuario bloqueado por su admin (membership.is_active=0
     // o tenant.is_active=0) pueda iniciar sesion y navegar.
-    const isPlatformAdmin = ['platform_owner','platform_admin','admin'].includes(user.platform_role);
+    const isPlatformAdmin = isPlatformStaff(user);
     if (memberships.length === 0 && !isPlatformAdmin) {
       return res.status(403).json({
         error: 'Tu cuenta esta desactivada o no tiene acceso a ninguna empresa. Contacta a tu administrador.',
@@ -59,7 +59,7 @@ router.post('/login', async (req: Request, res: Response) => {
       };
     });
     const { password_hash, ...userSafe } = user;
-    res.json({ user: userSafe, token, tenants });
+    res.json({ user: { ...userSafe, isPlatformAdmin }, token, tenants });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Login failed' }); }
 });
 
@@ -74,7 +74,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     `).all(req.user.id) as any[];
 
     // Rechazar acceso si no hay memberships activas y no es platform admin
-    const isPlatformAdmin = ['platform_owner','platform_admin','admin'].includes(req.user.platform_role);
+    const isPlatformAdmin = isPlatformStaff(req.user);
     if (memberships.length === 0 && !isPlatformAdmin) {
       return res.status(403).json({
         error: 'Tu cuenta esta desactivada o no tiene acceso a ninguna empresa. Contacta a tu administrador.',
@@ -94,7 +94,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
       };
     });
     const { password_hash, ...userSafe } = req.user;
-    res.json({ user: userSafe, tenants });
+    res.json({ user: { ...userSafe, isPlatformAdmin }, tenants });
   } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 

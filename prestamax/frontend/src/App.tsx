@@ -72,6 +72,14 @@ const PermissionRoute: React.FC<{ perm: PermKey; children: React.ReactNode }> = 
   return <>{children}</>
 }
 
+// Acceso al panel de plataforma (/admin): SOLO owner/staff de plataforma.
+// El backend marca user.isPlatformAdmin; cualquier otro usuario va a /dashboard.
+const PlatformRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { state } = useAuth()
+  if (!(state.user as any)?.isPlatformAdmin) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 const AppRoutes: React.FC = () => {
   const { state } = useAuth()
 
@@ -132,7 +140,7 @@ const AppRoutes: React.FC = () => {
 
           <Route path="/help" element={<HelpPage />} />
 
-          <Route path="/admin" element={<PlatformAdminPage />} />
+          <Route path="/admin" element={<PlatformRoute><PlatformAdminPage /></PlatformRoute>} />
 
           <Route path="/investors" element={<PermissionRoute perm="investors.view"><InvestorsPage /></PermissionRoute>} />
           <Route path="/investors/:id" element={<PermissionRoute perm="investors.view"><InvestorDetailPage /></PermissionRoute>} />

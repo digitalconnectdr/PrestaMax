@@ -2,7 +2,7 @@ import { Router, Response, Request } from 'express';
 import bcrypt from 'bcryptjs';
 import { getDb, uuid, now } from '../db/database';
 import { logAudit } from '../lib/audit';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest, isPlatformStaff } from '../middleware/auth';
 import path from 'path';
 import fs from 'fs';
 import { seedDemo } from '../db/seed_demo';
@@ -107,31 +107,22 @@ function seedDefaultTemplates(db: any, tenantId: string) {
   } catch (_) {}
 }
 
-// Middleware to require platform admin role
+// Middleware to require platform admin role (owner por email o staff explícito).
+// 'admin' (rol de tenant) NO da acceso de plataforma.
 function requirePlatformAdmin(req: AuthRequest, res: Response, next: Function) {
-  const role = req.user?.platformRole || req.user?.platform_role || ''
-  const allowed = ['admin', 'platform_owner', 'platform_admin']
-  if (!allowed.includes(role)) {
+  if (!isPlatformStaff(req.user)) {
     return res.status(403).json({ error: 'Acceso restringido a administradores de plataforma' });
   }
   next();
 }
 
-// Middleware para bootstrap: solo permite si NO hay admins aún; bloquea si ya existe uno
+// Middleware para bootstrap: SOLO el owner de la plataforma (por email) puede
+// usar este endpoint. Ya no hay auto-promoción del "primer usuario".
 function requireFirstBootstrap(req: AuthRequest, res: Response, next: Function) {
-  try {
-    const db = getDb();
-    const adminCount = (db.prepare(`SELECT COUNT(*) as c FROM users WHERE platform_role='admin'`).get() as any).c;
-    if (adminCount > 0) {
-      // Ya hay un admin: solo otro admin puede llamar este endpoint (ej. para agregar otro)
-      const role = req.user?.platformRole || req.user?.platform_role || ''
-      const allowed = ['admin', 'platform_owner', 'platform_admin']
-      if (!allowed.includes(role)) {
-        return res.status(403).json({ error: 'El sistema ya está inicializado. Solo administradores de plataforma pueden usar este endpoint.' });
-      }
-    }
-    next();
-  } catch(e: any) { res.status(500).json({ error: e.message || 'Failed bootstrap check' }); }
+  if (!isPlatformStaff(req.user)) {
+    return res.status(403).json({ error: 'Solo el owner de la plataforma puede usar este endpoint.' });
+  }
+  next();
 }
 
 // POST create new tenant (with optional admin user)
@@ -607,8 +598,7 @@ router.get('/my-subscription', authenticate, (req: AuthRequest, res: Response) =
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID requerido' });
     // Security: verify the authenticated user actually belongs to this tenant
     // (Platform admins bypass this check)
-    const platformRole = (req.user as any)?.platform_role || (req.user as any)?.platformRole;
-    const isPlatformAdmin = ['platform_owner', 'platform_admin', 'admin'].includes(platformRole);
+    const isPlatformAdmin = isPlatformStaff(req.user);
     if (!isPlatformAdmin) {
       const membership = db.prepare(
         'SELECT id FROM tenant_memberships WHERE user_id=? AND tenant_id=? AND is_active=1'
