@@ -2644,6 +2644,23 @@ const TR: Record<string, Tri> = {
   'lp.mock.sub_active':   { es: '74 activos', en: '74 active', pt: '74 ativos' },
   'lp.mock.sub_mora':     { es: '74 en mora', en: '74 overdue', pt: '74 em atraso' },
   'lp.mock.sub_today':    { es: '12 cobros hoy', en: '12 collections today', pt: '12 cobranças hoje' },
+
+  // Cómo funciona
+  'lp.how.title':    { es: '¿Cómo empiezo?', en: 'How do I start?', pt: 'Como começo?' },
+  'lp.how.subtitle': { es: 'Empieza a operar en minutos, sin instalar nada.', en: 'Start operating in minutes, no installation.', pt: 'Comece a operar em minutos, sem instalar nada.' },
+  'lp.how.s1.t':     { es: 'Solicita tu plan', en: 'Request your plan', pt: 'Solicite seu plano' },
+  'lp.how.s1.d':     { es: 'Elige tu plan y crea tu cuenta. Te activamos en minutos, sin instalaciones ni equipos.', en: 'Choose your plan and create your account. We activate you in minutes — no installs, no servers.', pt: 'Escolha seu plano e crie sua conta. Ativamos em minutos, sem instalações.' },
+  'lp.how.s2.t':     { es: 'Carga tu cartera', en: 'Load your portfolio', pt: 'Carregue sua carteira' },
+  'lp.how.s2.d':     { es: 'Registra tus clientes y préstamos, o migra tu cartera existente en pocos pasos.', en: 'Add your clients and loans, or migrate your existing portfolio in a few steps.', pt: 'Cadastre seus clientes e empréstimos, ou migre sua carteira existente.' },
+  'lp.how.s3.t':     { es: 'Gestiona y cobra', en: 'Manage and collect', pt: 'Gerencie e cobre' },
+  'lp.how.s3.d':     { es: 'Controla cobranzas, pagos, mora y reportes desde la web o tu celular.', en: 'Track collections, payments, overdue and reports from the web or your phone.', pt: 'Controle cobranças, pagamentos, inadimplência e relatórios pela web ou celular.' },
+
+  // Stats animados
+  'lp.stats.title':      { es: 'Pensado para Latinoamérica', en: 'Built for Latin America', pt: 'Feito para a América Latina' },
+  'lp.stats.currencies': { es: 'Monedas', en: 'Currencies', pt: 'Moedas' },
+  'lp.stats.langs':      { es: 'Idiomas', en: 'Languages', pt: 'Idiomas' },
+  'lp.stats.trial':      { es: 'Días de prueba', en: 'Trial days', pt: 'Dias de teste' },
+  'lp.stats.web':        { es: '% en la nube', en: '% cloud-based', pt: '% na nuvem' },
   'lp.trust.web':       { es: '100% Web', en: '100% Web', pt: '100% Web' },
   'lp.trust.web_d':     { es: 'Desde cualquier dispositivo', en: 'From any device', pt: 'De qualquer dispositivo' },
   'lp.trust.enc':       { es: 'Datos cifrados', en: 'Encrypted data', pt: 'Dados criptografados' },

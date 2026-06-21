@@ -232,7 +232,13 @@ const LandingPage: React.FC = () => {
 
       {/* Hero */}
       <section className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-16 md:py-24">
+        {/* Blobs decorativos del fondo */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="lp-blob absolute -top-32 -right-24 w-[28rem] h-[28rem] bg-[#f59e0b]/10 rounded-full blur-3xl" />
+          <div className="lp-blob absolute top-32 -left-32 w-[26rem] h-[26rem] bg-blue-400/10 rounded-full blur-3xl" style={{ animationDelay: '-6s' }} />
+          <div className="lp-blob absolute bottom-0 right-1/3 w-80 h-80 bg-[#1e3a5f]/5 rounded-full blur-3xl" style={{ animationDelay: '-11s' }} />
+        </div>
+        <div className="relative z-10 max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-16 md:py-24">
           <div className="text-center max-w-4xl mx-auto">
             <div className="lp-hero-item lp-delay-1 inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700 mb-6">
               <Zap className="w-3.5 h-3.5" />
@@ -282,7 +288,7 @@ const LandingPage: React.FC = () => {
           </div>
 
           {/* Hero mockup illustration — réplica del dashboard real */}
-          <div className="mt-16 relative max-w-6xl mx-auto">
+          <div className="lp-float mt-16 relative max-w-6xl mx-auto">
             <div className="bg-gradient-to-br from-[#1e3a5f]/10 via-[#f59e0b]/10 to-blue-500/10 rounded-2xl p-2 md:p-4 shadow-2xl">
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 {/* Barra del navegador */}
@@ -428,6 +434,38 @@ const LandingPage: React.FC = () => {
         </div>
       </section>
 
+      {/* Cómo funciona */}
+      <section className="py-16 md:py-24 bg-gradient-to-b from-white to-slate-50 scroll-mt-20">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
+          <Reveal className="text-center max-w-3xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.how.title')}</h2>
+            <p className="mt-4 text-lg text-slate-600">{t('lp.how.subtitle')}</p>
+          </Reveal>
+
+          <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-8">
+            {[
+              { icon: ClipboardList, title: t('lp.how.s1.t'), desc: t('lp.how.s1.d') },
+              { icon: Users,         title: t('lp.how.s2.t'), desc: t('lp.how.s2.d') },
+              { icon: TrendingUp,    title: t('lp.how.s3.t'), desc: t('lp.how.s3.d') },
+            ].map((step, i) => {
+              const StepIcon = step.icon
+              return (
+                <Reveal key={i} delay={i * 100} className="text-center">
+                  <div className="relative inline-flex">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#1e3a5f] to-[#152a45] flex items-center justify-center shadow-lg shadow-[#1e3a5f]/20">
+                      <StepIcon className="w-7 h-7 text-white" />
+                    </div>
+                    <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-[#f59e0b] text-white text-xs font-bold flex items-center justify-center shadow">{i + 1}</span>
+                  </div>
+                  <h3 className="mt-5 text-lg font-semibold text-slate-900">{step.title}</h3>
+                  <p className="mt-2 text-sm text-slate-600 leading-relaxed max-w-xs mx-auto">{step.desc}</p>
+                </Reveal>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
       {/* Pricing */}
       <section id="pricing" className="py-16 md:py-24 bg-slate-50 scroll-mt-20">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
@@ -509,6 +547,28 @@ const LandingPage: React.FC = () => {
           <p className="mt-8 text-center text-sm text-slate-500">
             {t('lp.pricing.note')}
           </p>
+        </div>
+      </section>
+
+      {/* Stats animados */}
+      <section className="py-14 md:py-16 bg-white border-y border-slate-200">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
+          <p className="text-center text-xs font-semibold uppercase tracking-widest text-slate-400 mb-8">{t('lp.stats.title')}</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            {[
+              { value: 12,  label: t('lp.stats.currencies') },
+              { value: 3,   label: t('lp.stats.langs') },
+              { value: 14,  label: t('lp.stats.trial') },
+              { value: 100, label: t('lp.stats.web') },
+            ].map((s, i) => (
+              <Reveal key={i} delay={i * 80}>
+                <div className="text-4xl md:text-5xl font-bold text-[#1e3a5f]">
+                  <AnimatedCounter value={s.value} />
+                </div>
+                <div className="mt-1 text-sm text-slate-600">{s.label}</div>
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
 
