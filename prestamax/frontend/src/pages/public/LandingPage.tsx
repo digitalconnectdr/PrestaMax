@@ -22,6 +22,10 @@ import {
   Lock,
   Cloud,
   Zap,
+  LayoutDashboard,
+  TrendingUp,
+  AlertCircle,
+  Calendar,
 } from 'lucide-react'
 
 import PlanInquiryModal from '@/components/public/PlanInquiryModal'
@@ -241,38 +245,92 @@ const LandingPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Hero mockup illustration */}
+          {/* Hero mockup illustration — réplica del dashboard real */}
           <div className="mt-16 relative max-w-6xl mx-auto">
             <div className="bg-gradient-to-br from-[#1e3a5f]/10 via-[#f59e0b]/10 to-blue-500/10 rounded-2xl p-2 md:p-4 shadow-2xl">
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                {/* Barra del navegador */}
                 <div className="flex items-center gap-1.5 px-4 py-3 bg-slate-50 border-b border-slate-200">
                   <div className="w-3 h-3 rounded-full bg-red-400" />
                   <div className="w-3 h-3 rounded-full bg-yellow-400" />
                   <div className="w-3 h-3 rounded-full bg-green-400" />
                   <div className="flex-1 text-center text-xs text-slate-500 font-mono">credytek.com/dashboard</div>
                 </div>
-                <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: t('lp.mock.portfolio'),    node: <AnimatedCounter value={2.4} format={(n) => `$ ${n.toFixed(1)}M`} />, colorClass: 'text-[#1e3a5f]' },
-                    { label: t('lp.mock.clients'),      node: <AnimatedCounter value={347} />, colorClass: 'text-blue-600' },
-                    { label: t('lp.mock.active_loans'), node: <AnimatedCounter value={142} />, colorClass: 'text-purple-600' },
-                    { label: t('lp.mock.collected'),    node: <AnimatedCounter value={412} format={(n) => `$ ${Math.round(n)}K`} />, colorClass: 'text-[#f59e0b]' },
-                  ].map((stat, i) => (
-                    <div key={i} className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                      <div className="text-xs text-slate-500">{stat.label}</div>
-                      <div className={`mt-1 text-xl md:text-2xl font-bold ${stat.colorClass}`}>{stat.node}</div>
+
+                {/* Cuerpo: sidebar + área principal */}
+                <div className="flex">
+                  {/* Sidebar */}
+                  <aside className="hidden sm:flex flex-col w-44 flex-shrink-0 bg-[#1e3a5f] py-4 px-3 gap-0.5">
+                    <div className="flex items-center gap-2 px-2 mb-4">
+                      <div className="w-7 h-7 bg-gradient-to-br from-[#f59e0b] to-amber-600 rounded-md flex items-center justify-center">
+                        <DollarSign className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="text-sm font-bold text-white">Credy<span className="text-[#f59e0b]">Tek</span></span>
                     </div>
-                  ))}
-                </div>
-                <div className="px-6 pb-6">
-                  <div className="h-32 bg-gradient-to-t from-blue-100 to-slate-50 rounded-lg flex items-end p-3 gap-1.5">
-                    {[40, 65, 50, 75, 60, 85, 70, 90, 75, 95, 80, 100].map((h, i) => (
-                      <div
-                        key={i}
-                        className="flex-1 bg-[#1e3a5f] rounded-t opacity-80"
-                        style={{ height: `${h}%` }}
-                      />
-                    ))}
+                    {[
+                      { icon: LayoutDashboard, label: t('lp.mock.dashboard'), active: true },
+                      { icon: Users,           label: t('lp.mock.clients') },
+                      { icon: DollarSign,      label: t('lp.mock.loans') },
+                      { icon: CreditCard,      label: t('lp.mock.payments') },
+                      { icon: ClipboardList,   label: t('lp.mock.collections') },
+                      { icon: BarChart3,       label: t('lp.mock.reports') },
+                    ].map((it, i) => {
+                      const ItIcon = it.icon
+                      return (
+                        <div key={i} className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs ${it.active ? 'bg-white/10 text-white font-medium' : 'text-blue-100/70'}`}>
+                          <ItIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span className="truncate">{it.label}</span>
+                        </div>
+                      )
+                    })}
+                  </aside>
+
+                  {/* Main */}
+                  <div className="flex-1 min-w-0 p-4 md:p-5 bg-slate-50/60">
+                    <div className="mb-4">
+                      <div className="text-base md:text-lg font-bold text-slate-900">{t('lp.mock.dashboard')}</div>
+                      <div className="text-xs text-slate-500">{t('lp.mock.overview')}</div>
+                    </div>
+
+                    {/* KPIs */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {[
+                        { label: t('lp.mock.total'),  node: <AnimatedCounter value={2.4} format={(n) => `$${n.toFixed(1)}M`} />, sub: t('lp.mock.sub_loans'),  icon: DollarSign, color: 'text-[#1e3a5f]',   box: 'bg-blue-50 text-[#1e3a5f]' },
+                        { label: t('lp.mock.active'), node: <AnimatedCounter value={1.8} format={(n) => `$${n.toFixed(1)}M`} />, sub: t('lp.mock.sub_active'), icon: TrendingUp, color: 'text-emerald-600', box: 'bg-emerald-50 text-emerald-600' },
+                        { label: t('lp.mock.mora'),   node: <AnimatedCounter value={297} format={(n) => `$${Math.round(n)}K`} />, sub: t('lp.mock.sub_mora'),  icon: AlertCircle, color: 'text-red-600',  box: 'bg-red-50 text-red-600' },
+                        { label: t('lp.mock.today'),  node: <AnimatedCounter value={42} format={(n) => `$${Math.round(n)}K`} />,  sub: t('lp.mock.sub_today'), icon: Calendar,   color: 'text-[#f59e0b]',  box: 'bg-amber-50 text-[#f59e0b]' },
+                      ].map((stat, i) => {
+                        const StatIcon = stat.icon
+                        return (
+                          <div key={i} className="p-3 bg-white rounded-lg border border-slate-200">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-[10px] uppercase tracking-wide text-slate-500 truncate">{stat.label}</div>
+                                <div className={`mt-1 text-lg md:text-xl font-bold ${stat.color}`}>{stat.node}</div>
+                                <div className="text-[10px] text-slate-400 mt-0.5">{stat.sub}</div>
+                              </div>
+                              <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${stat.box}`}>
+                                <StatIcon className="w-4 h-4" />
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Gráfico */}
+                    <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
+                      <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-2">{t('lp.mock.chart')}</div>
+                      <div className="h-24 flex items-end gap-1.5">
+                        {[40, 65, 50, 75, 60, 85, 70, 90, 75, 95, 80, 100].map((h, i) => (
+                          <div
+                            key={i}
+                            className="flex-1 bg-gradient-to-t from-[#1e3a5f] to-[#2c5a8f] rounded-t"
+                            style={{ height: `${h}%` }}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
