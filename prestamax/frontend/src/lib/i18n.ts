@@ -90,6 +90,8 @@ const TR: Record<string, Tri> = {
   'nav.bank_accounts': { es: 'Cuentas Bancarias',  en: 'Bank Accounts',      pt: 'Contas Bancárias' },
   'nav.subscription':  { es: 'Mi Suscripción',     en: 'My Subscription',    pt: 'Minha Assinatura' },
   'nav.help':          { es: 'Guía del Sistema',   en: 'System Guide',       pt: 'Guia do Sistema' },
+  'nav.collapse':      { es: 'Contraer menú',      en: 'Collapse menu',      pt: 'Recolher menu' },
+  'nav.expand':        { es: 'Expandir menú',      en: 'Expand menu',        pt: 'Expandir menu' },
   'nav.admin':         { es: 'Admin Panel',        en: 'Admin Panel',        pt: 'Painel Admin' },
 
   // ── Estados de préstamo (reutilizable en toda la app) ────────────────────────

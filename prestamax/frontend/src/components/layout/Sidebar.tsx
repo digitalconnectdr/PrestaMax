@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import {
   BarChart3, Users, DollarSign, CreditCard, FileText, FileCheck,
   Truck, MessageCircle, Settings, Package, Users2, MapPin, BookOpen,
-  ReceiptText, LogOut, ChevronLeft, TrendingUp, Landmark, ShieldCheck, ClipboardList, Calculator, CalendarRange, Briefcase, HelpCircle, FileSpreadsheet
+  ReceiptText, LogOut, ChevronLeft, ChevronRight, TrendingUp, Landmark, ShieldCheck, ClipboardList, Calculator, CalendarRange, Briefcase, HelpCircle, FileSpreadsheet
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
@@ -21,6 +21,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
   const { state, logout } = useAuth()
   const { can, canAny } = usePermission()
   const t = useT()
+
+  // Colapsar el menú a solo-iconos (desktop). Se persiste entre sesiones.
+  const [collapsed, setCollapsed] = React.useState<boolean>(() => {
+    try { return localStorage.getItem('credytek_sidebar_collapsed') === '1' } catch { return false }
+  })
+  const toggleCollapsed = () => setCollapsed(prev => {
+    const next = !prev
+    try { localStorage.setItem('credytek_sidebar_collapsed', next ? '1' : '0') } catch {}
+    return next
+  })
 
   const isActive = (path: string) => {
     if (path === '/settings') return location.pathname === '/settings'
@@ -112,21 +122,32 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       {isOpen && <div className="fixed inset-0 bg-black/50 lg:hidden z-40" onClick={onClose} />}
 
       <aside className={cn(
-        'fixed lg:relative lg:translate-x-0 h-screen w-60 bg-[#1e3a5f] text-white flex flex-col overflow-y-auto z-50 transition-transform duration-300',
+        'fixed lg:relative lg:translate-x-0 h-screen w-60 bg-[#1e3a5f] text-white flex flex-col overflow-y-auto z-50 transition-all duration-300',
+        collapsed ? 'lg:w-[4.5rem]' : 'lg:w-60',
         isOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         {/* Header */}
-        <div className="p-6 border-b border-white/10">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-white">
+        <div className={cn('border-b border-white/10 p-4', !collapsed && 'lg:p-6')}>
+          <div className={cn('flex items-center', collapsed ? 'justify-between lg:justify-center' : 'justify-between')}>
+            <h1 className={cn('text-xl font-bold text-white whitespace-nowrap', collapsed && 'lg:hidden')}>
               <span className="text-[#f59e0b]">Credy</span>Tek
             </h1>
+            {/* Cerrar (móvil) */}
             <button onClick={onClose} className="lg:hidden p-1 hover:bg-white/10 rounded transition-colors">
               <ChevronLeft className="w-5 h-5" />
             </button>
+            {/* Contraer / expandir (desktop) */}
+            <button
+              onClick={toggleCollapsed}
+              title={collapsed ? t('nav.expand') : t('nav.collapse')}
+              aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
+              className="hidden lg:flex p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            </button>
           </div>
           {state.user && (
-            <p className="text-xs text-white/60 mt-2 truncate">{(state.user as any).fullName || (state.user as any).full_name || (state.user as any).email}</p>
+            <p className={cn('text-xs text-white/60 mt-2 truncate', collapsed && 'lg:hidden')}>{(state.user as any).fullName || (state.user as any).full_name || (state.user as any).email}</p>
           )}
         </div>
 
@@ -137,7 +158,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
             if (!visibleItems.length) return null
             return (
               <div key={group.label}>
-                <div className="sidebar-link-group">{group.label}</div>
+                <div className={cn('sidebar-link-group', collapsed && 'lg:hidden')}>{group.label}</div>
+                {collapsed && <div className="hidden lg:block h-px bg-white/10 my-2 mx-2" />}
                 {visibleItems.map((item) => {
                   const Icon = item.icon
                   const active = isActive(item.path)
@@ -145,10 +167,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
                     <button
                       key={item.path}
                       onClick={() => { navigate(item.path); onClose?.() }}
-                      className={cn('sidebar-link w-full text-left', active && 'bg-white/15 text-white font-medium')}
+                      title={item.label}
+                      className={cn('sidebar-link w-full text-left', collapsed && 'lg:justify-center lg:px-2', active && 'bg-white/15 text-white font-medium')}
                     >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.label}</span>
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      <span className={cn(collapsed && 'lg:hidden')}>{item.label}</span>
                     </button>
                   )
                 })}
@@ -159,11 +182,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
 
         {/* Footer */}
         <div className="border-t border-white/10 p-4 space-y-2">
-          <button onClick={handleLogout} className="sidebar-link w-full text-left text-red-300 hover:text-red-200 hover:bg-red-600/20">
-            <LogOut className="w-4 h-4" />
-            <span>{t('common.logout')}</span>
+          <button onClick={handleLogout} title={t('common.logout')} className={cn('sidebar-link w-full text-left text-red-300 hover:text-red-200 hover:bg-red-600/20', collapsed && 'lg:justify-center lg:px-2')}>
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            <span className={cn(collapsed && 'lg:hidden')}>{t('common.logout')}</span>
           </button>
-          <p className="text-[10px] text-white/30 text-center leading-tight pt-1">
+          <p className={cn('text-[10px] text-white/30 text-center leading-tight pt-1', collapsed && 'lg:hidden')}>
             JPRS Digital Connect
           </p>
         </div>
