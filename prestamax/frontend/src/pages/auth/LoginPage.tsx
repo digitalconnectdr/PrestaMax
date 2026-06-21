@@ -63,8 +63,8 @@ const LoginPage: React.FC = () => {
         <div>
           <Link to="/" className="inline-block mb-3 hover:opacity-90 transition-opacity" title={t('auth.back_home')}>
             <h1 className="text-4xl font-bold">
-              <span className="text-white">Presta</span>
-              <span className="text-[#f59e0b]">Max</span>
+              <span className="text-white">Credy</span>
+              <span className="text-[#f59e0b]">Tek</span>
             </h1>
           </Link>
           <p className="text-blue-200 text-base">
@@ -96,7 +96,7 @@ const LoginPage: React.FC = () => {
         </div>
 
         <div className="text-xs text-blue-300 space-y-0.5">
-          <p>(c) 2026 PrestaMax. {currentLocale === 'en' ? 'All rights reserved.' : currentLocale === 'pt' ? 'Todos os direitos reservados.' : 'Todos los derechos reservados.'}</p>
+          <p>(c) 2026 CredyTek. {currentLocale === 'en' ? 'All rights reserved.' : currentLocale === 'pt' ? 'Todos os direitos reservados.' : 'Todos los derechos reservados.'}</p>
           <p>JPRS Digital Connect</p>
         </div>
       </div>
@@ -118,8 +118,8 @@ const LoginPage: React.FC = () => {
           <div className="md:hidden mb-8">
             <Link to="/" className="inline-block mb-1 hover:opacity-90 transition-opacity" title={t('auth.back_home')}>
               <h1 className="text-3xl font-bold">
-                <span className="text-[#1e3a5f]">Presta</span>
-                <span className="text-[#f59e0b]">Max</span>
+                <span className="text-[#1e3a5f]">Credy</span>
+                <span className="text-[#f59e0b]">Tek</span>
               </h1>
             </Link>
             <p className="text-slate-500 text-sm">

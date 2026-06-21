@@ -5,8 +5,8 @@ import { useT } from '@/lib/i18n'
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 import { trackEvent } from '@/lib/analytics'
 
-const SALES_EMAIL = 'prestamax@digitalconnectdr.com'
-const SUPPORT_EMAIL = 'prestamaxsupport@digitalconnectdr.com'
+const SALES_EMAIL = 'credytek@digitalconnectdr.com'
+const SUPPORT_EMAIL = 'credyteksupport@digitalconnectdr.com'
 
 const ContactPage: React.FC = () => {
   const t = useT()
@@ -40,7 +40,7 @@ const ContactPage: React.FC = () => {
             <div className="w-9 h-9 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] rounded-lg flex items-center justify-center">
               <DollarSign className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-slate-900">PrestaMax</span>
+            <span className="text-xl font-bold text-slate-900">CredyTek</span>
           </Link>
           <LanguageSwitcher />
         </div>
@@ -95,7 +95,7 @@ const ContactPage: React.FC = () => {
       </main>
 
       <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-400">
-        © {new Date().getFullYear()} PrestaMax — JPRS Digital Connect
+        © {new Date().getFullYear()} CredyTek — JPRS Digital Connect
       </footer>
     </div>
   )

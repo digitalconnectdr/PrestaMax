@@ -182,7 +182,7 @@ const BillingPage: React.FC = () => {
     <div className="max-w-6xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Suscripcion</h1>
-        <p className="text-gray-600 mt-1">Gestiona el plan y los pagos de tu cuenta de PrestaMax</p>
+        <p className="text-gray-600 mt-1">Gestiona el plan y los pagos de tu cuenta de CredyTek</p>
       </div>
 
       {/* Estado actual */}

@@ -140,7 +140,7 @@ const RegisterPage: React.FC = () => {
         <div>
           <Link to="/" className="inline-block hover:opacity-90 transition-opacity" title={t('reg.back_home')}>
             <h1 className="text-4xl font-bold mb-2">
-              <span className="text-[#f59e0b]">Presta</span>Max
+              <span className="text-[#f59e0b]">Credy</span>Tek
             </h1>
           </Link>
           <p className="text-blue-200 text-lg">{t('reg.tagline')}</p>
@@ -172,7 +172,7 @@ const RegisterPage: React.FC = () => {
         </div>
 
         <div className="text-xs text-blue-300 space-y-0.5">
-          <p>PrestaMax — Powered by <span className="font-semibold text-[#f59e0b]">JPRS Digital Connect</span></p>
+          <p>CredyTek — Powered by <span className="font-semibold text-[#f59e0b]">JPRS Digital Connect</span></p>
           <p className="text-blue-400">v1.0 · @digitalconnect_dr</p>
         </div>
       </div>
@@ -183,8 +183,8 @@ const RegisterPage: React.FC = () => {
           {/* Mobile header */}
           <div className="lg:hidden mb-6">
             <h1 className="text-3xl font-bold mb-1">
-              <span className="text-[#1e3a5f]">Presta</span>
-              <span className="text-[#f59e0b]">Max</span>
+              <span className="text-[#1e3a5f]">Credy</span>
+              <span className="text-[#f59e0b]">Tek</span>
             </h1>
           </div>
 

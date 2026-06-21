@@ -4,9 +4,9 @@ import { ArrowLeft, Shield, FileText, AlertTriangle, Users, CreditCard, Server, 
 
 const LAST_UPDATED = '24 de mayo de 2026'
 const COMPANY = 'JPRS Digital Connect'
-const APP = 'PrestaMax'
-const EMAIL_LEGAL = 'prestamax@digitalconnectdr.com'
-const EMAIL_SUPPORT = 'prestamaxsupport@digitalconnectdr.com'
+const APP = 'CredyTek'
+const EMAIL_LEGAL = 'credytek@digitalconnectdr.com'
+const EMAIL_SUPPORT = 'credyteksupport@digitalconnectdr.com'
 const JURISDICTION = 'República Dominicana'
 
 const Section: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (

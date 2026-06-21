@@ -237,7 +237,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       };
     });
     const { password_hash, ...userSafe } = user;
-    res.status(201).json({ user: userSafe, token, tenants, message: 'Cuenta creada exitosamente! Bienvenido a PrestaMax.' });
+    res.status(201).json({ user: userSafe, token, tenants, message: 'Cuenta creada exitosamente! Bienvenido a CredyTek.' });
   } catch (e: any) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(400).json({ error: 'Ya existe una cuenta con ese email o nombre de empresa.' });
     console.error(e);

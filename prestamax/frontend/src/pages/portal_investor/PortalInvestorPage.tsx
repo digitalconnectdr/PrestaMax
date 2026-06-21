@@ -61,7 +61,7 @@ const PortalInvestorPage: React.FC = () => {
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">
-              <span className="text-[#f59e0b]">Presta</span>Max <span className="text-white/70 font-normal text-sm ml-2">· {t('pinv.portal')}</span>
+              <span className="text-[#f59e0b]">Credy</span>Tek <span className="text-white/70 font-normal text-sm ml-2">· {t('pinv.portal')}</span>
             </h1>
             <p className="text-xs text-white/70 mt-1">{fullName}{me.email ? ` · ${me.email}` : ''}</p>
           </div>
@@ -235,7 +235,7 @@ const PortalInvestorPage: React.FC = () => {
         )}
 
         <footer className="text-center text-xs text-slate-400 pt-4 pb-8">
-          PrestaMax · {t('pinv.portal')}
+          CredyTek · {t('pinv.portal')}
         </footer>
       </main>
     </div>

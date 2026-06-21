@@ -189,7 +189,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         shortcutLabel: 'Ir a Inversionistas',
         requiredPermission: 'investors.view',
         steps: [
-          { title: 'Concepto general', description: 'Un inversionista es una persona/empresa que APORTA dinero para que tú lo prestes. Tú gestionas los cobros y le pagas su parte. PrestaMax soporta 2 modelos de relación: tasa fija (le pagas % mensual del capital) y participación en interés (le pagas % del interés generado por sus préstamos asignados).' },
+          { title: 'Concepto general', description: 'Un inversionista es una persona/empresa que APORTA dinero para que tú lo prestes. Tú gestionas los cobros y le pagas su parte. CredyTek soporta 2 modelos de relación: tasa fija (le pagas % mensual del capital) y participación en interés (le pagas % del interés generado por sus préstamos asignados).' },
           { title: 'Crear un inversionista', description: 'Click "+ Nuevo Inversionista". Datos: nombre completo, email (único por empresa), teléfono, cédula, modelo de relación, % o tasa, comisión que TÚ cobras (en el modelo de participación), capital aportado.', tip: 'El email debe ser único dentro de tu empresa. Si intentas crear otro con el mismo email, el sistema te avisa y te muestra cuál ya existe — útil para evitar duplicados.' },
           { title: 'Asignar préstamos al inversionista', description: 'Desde el detalle del inversionista → "+ Asignar préstamo". Selecciona préstamos no asignados a otro inversionista. Su interés generado se irá contabilizando como deuda contigo hacia él.' },
           { title: 'Ver capital activo y por liquidar', description: 'El detalle del inversionista muestra: capital aportado, capital activo (en préstamos no liquidados), interés ganado, comisión retenida por ti, y balance pendiente de pagar.' },
@@ -347,8 +347,8 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         steps: [
           { title: 'Abre Configuración → Mi Suscripción', description: 'Verás el estado de tu plan actual (Activa, Periodo de prueba, Expirada) y la lista de todos los planes disponibles con sus características y precio.' },
           { title: 'Elige el plan que quieres', description: 'Compara las características de cada plan: cantidad de cobradores, clientes, usuarios y funciones incluidas. Tu plan actual aparece marcado en verde con "PLAN ACTUAL".' },
-          { title: 'Click en "Solicitar este plan"', description: 'Se abrirá un cuadro para confirmar. Puedes agregar una nota opcional con detalles (ej: "Quiero activarlo el 15 de este mes", "prefiero pago trimestral", etc).', tip: 'No te cobramos automáticamente — la solicitud va al equipo de soporte de PrestaMax para procesarla manualmente.' },
-          { title: 'Espera el contacto de soporte', description: 'Tu solicitud queda visible en la página con un banner azul "Solicitud en proceso". El equipo de PrestaMax te contactará por WhatsApp o email para coordinar el pago y activación.' },
+          { title: 'Click en "Solicitar este plan"', description: 'Se abrirá un cuadro para confirmar. Puedes agregar una nota opcional con detalles (ej: "Quiero activarlo el 15 de este mes", "prefiero pago trimestral", etc).', tip: 'No te cobramos automáticamente — la solicitud va al equipo de soporte de CredyTek para procesarla manualmente.' },
+          { title: 'Espera el contacto de soporte', description: 'Tu solicitud queda visible en la página con un banner azul "Solicitud en proceso". El equipo de CredyTek te contactará por WhatsApp o email para coordinar el pago y activación.' },
           { title: 'Pago y activación', description: 'Una vez procesado el pago manualmente con nuestro equipo, soporte activa tu plan en el sistema y verás el nuevo límite de usuarios/clientes/cobradores disponible inmediatamente.', tip: 'Si ya tienes una solicitud pendiente, el sistema no te dejará enviar otra hasta que la primera se resuelva. Esto evita duplicados. Si necesitas cancelarla, contacta a soporte por WhatsApp.' },
           { title: 'Renovar antes de que expire', description: 'El sistema te avisa con 3, 7 y 14 días de antelación cuando tu plan está por vencer. Aprovecha para solicitar la renovación con tiempo y evitar cortes de servicio.' },
         ],
@@ -391,7 +391,7 @@ const HelpPage: React.FC = () => {
           Guía del Sistema
         </h1>
         <p className="text-slate-600 text-sm mt-1">
-          Aprende a usar PrestaMax paso a paso. Si tienes dudas, vuelve a esta sección.
+          Aprende a usar CredyTek paso a paso. Si tienes dudas, vuelve a esta sección.
         </p>
       </div>
 

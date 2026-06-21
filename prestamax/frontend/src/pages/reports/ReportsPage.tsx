@@ -1408,7 +1408,7 @@ const DataCreditoTab: React.FC<{ dcLoading: boolean; setDcLoading: (v: boolean) 
     }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'DataCredito')
-    XLSX.writeFile(wb, `DataCredito_PrestaMax_${period}.xlsx`)
+    XLSX.writeFile(wb, `DataCredito_CredyTek_${period}.xlsx`)
     toast.success('Archivo Excel descargado')
   }
 
@@ -1461,7 +1461,7 @@ const DataCreditoTab: React.FC<{ dcLoading: boolean; setDcLoading: (v: boolean) 
             <thead>
               <tr className="border-b border-slate-200 text-left">
                 <th className="pb-2 pr-4 font-semibold text-slate-700 whitespace-nowrap">Columna DataCrédito</th>
-                <th className="pb-2 pr-4 font-semibold text-slate-700">Origen en PrestaMax</th>
+                <th className="pb-2 pr-4 font-semibold text-slate-700">Origen en CredyTek</th>
                 <th className="pb-2 font-semibold text-slate-700">Estado</th>
               </tr>
             </thead>

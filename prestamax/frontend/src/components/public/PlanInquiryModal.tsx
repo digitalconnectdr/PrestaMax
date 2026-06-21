@@ -145,7 +145,7 @@ const PlanInquiryModal: React.FC<Props> = ({ open, onClose, initialPlan }) => {
                 {t('piq.urgent')}
                 {' '}
                 <a
-                  href="https://wa.me/18498891220?text=Hola%2C%20me%20interesa%20PrestaMax"
+                  href="https://wa.me/18498891220?text=Hola%2C%20me%20interesa%20CredyTek"
                   target="_blank" rel="noopener noreferrer"
                   className="text-emerald-600 font-medium hover:underline"
                 >

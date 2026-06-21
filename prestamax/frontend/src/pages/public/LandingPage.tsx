@@ -1,4 +1,4 @@
-// LandingPage — pagina publica de marketing de PrestaMax
+// LandingPage — pagina publica de marketing de CredyTek
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -140,7 +140,7 @@ const LandingPage: React.FC = () => {
               <div className="w-9 h-9 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] rounded-lg flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold text-slate-900">PrestaMax</span>
+              <span className="text-xl font-bold text-slate-900">CredyTek</span>
             </div>
 
             {/* Desktop nav */}
@@ -485,7 +485,7 @@ const LandingPage: React.FC = () => {
                 <div className="w-8 h-8 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] rounded-lg flex items-center justify-center">
                   <DollarSign className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-lg font-bold text-white">PrestaMax</span>
+                <span className="text-lg font-bold text-white">CredyTek</span>
               </div>
               <p className="mt-3 text-sm text-slate-400">
                 {t('lp.footer.tagline')}
@@ -523,11 +523,11 @@ const LandingPage: React.FC = () => {
                 <li><Link to="/contact" className="hover:text-white">{t('lp.footer.contact_us')}</Link></li>
                 <li>
                   <span className="block text-xs text-slate-500">{t('lp.footer.sales')}</span>
-                  <a href="mailto:prestamax@digitalconnectdr.com" className="hover:text-white text-xs">prestamax@digitalconnectdr.com</a>
+                  <a href="mailto:credytek@digitalconnectdr.com" className="hover:text-white text-xs">credytek@digitalconnectdr.com</a>
                 </li>
                 <li>
                   <span className="block text-xs text-slate-500">{t('lp.footer.support')}</span>
-                  <a href="mailto:prestamaxsupport@digitalconnectdr.com" className="hover:text-white text-xs">prestamaxsupport@digitalconnectdr.com</a>
+                  <a href="mailto:credyteksupport@digitalconnectdr.com" className="hover:text-white text-xs">credyteksupport@digitalconnectdr.com</a>
                 </li>
               </ul>
             </div>
@@ -535,10 +535,10 @@ const LandingPage: React.FC = () => {
 
           <div className="mt-10 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-slate-400">
-              © {new Date().getFullYear()} PrestaMax. {t('lp.footer.rights')}
+              © {new Date().getFullYear()} CredyTek. {t('lp.footer.rights')}
             </p>
             <p className="text-xs text-slate-400">
-              PrestaMax — Powered by JPRS Digital Connect
+              CredyTek — Powered by JPRS Digital Connect
             </p>
           </div>
         </div>

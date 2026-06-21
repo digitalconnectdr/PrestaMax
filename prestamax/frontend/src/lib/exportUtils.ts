@@ -1,5 +1,5 @@
 /**
- * exportUtils.ts — CSV and PDF export helpers for PrestaMax
+ * exportUtils.ts — CSV and PDF export helpers for CredyTek
  *
  * i18n (Jun 2026): el "chrome" de los exports (idioma del HTML, fecha, pie,
  * aviso de popups) sigue el idioma activo de la app. Las etiquetas de columnas
@@ -105,7 +105,7 @@ export function printToPDF(options: PrintTableOptions): void {
   <div class="header">
     <h1>${title}</h1>
     ${subtitle ? `<p>${subtitle}</p>` : ''}
-    <span class="badge">PrestaMax · ${t('report.generated_on')} ${new Date().toLocaleDateString(intlLocale(), { dateStyle: 'full' })}</span>
+    <span class="badge">CredyTek · ${t('report.generated_on')} ${new Date().toLocaleDateString(intlLocale(), { dateStyle: 'full' })}</span>
   </div>
   ${summaryHtml}
   <table>

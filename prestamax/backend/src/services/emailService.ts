@@ -12,7 +12,7 @@
 //   RESEND_API_KEY=re_xxxxxxxxxxxxxxxxx
 //   ADMIN_EMAIL=jcpenalo@gmail.com           — destinatario(s), separados por coma
 //   ADMIN_WHATSAPP=18095551234               — solo digitos, para wa.me link
-//   FROM_EMAIL=PrestaMax <noreply@prestamax.com>   — opcional, default usa onboarding@resend.dev
+//   FROM_EMAIL=CredyTek <noreply@prestamax.com>   — opcional, default usa onboarding@resend.dev
 //   FRONTEND_URL=https://prestamax-umber.vercel.app — para link al admin
 
 interface InquiryPayload {
@@ -66,8 +66,8 @@ const COUNTRY_LABELS: Record<string, string> = {
 function buildWaLink(whatsapp: string, name: string, plan: string | null | undefined): string {
   const digits = (whatsapp || '').replace(/\D/g, '');
   const firstName = (name || '').split(' ')[0] || '';
-  const planTxt = plan && plan !== 'unsure' ? `el plan ${PLAN_LABELS[plan] || plan}` : 'PrestaMax';
-  const body = `Hola ${firstName}, soy Juan de PrestaMax. Vi tu solicitud sobre ${planTxt}. ¿Tienes 10 minutos para conversar y ayudarte a evaluar si nuestra solución es lo que necesitas?`;
+  const planTxt = plan && plan !== 'unsure' ? `el plan ${PLAN_LABELS[plan] || plan}` : 'CredyTek';
+  const body = `Hola ${firstName}, soy Juan de CredyTek. Vi tu solicitud sobre ${planTxt}. ¿Tienes 10 minutos para conversar y ayudarte a evaluar si nuestra solución es lo que necesitas?`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(body)}`;
 }
 
@@ -83,7 +83,7 @@ function buildHtml(p: InquiryPayload): string {
 <!DOCTYPE html>
 <html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0;">
-    <h1 style="margin:0;font-size:20px;">🎯 Nuevo lead de PrestaMax</h1>
+    <h1 style="margin:0;font-size:20px;">🎯 Nuevo lead de CredyTek</h1>
     <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">${planLbl}</p>
   </div>
   <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
@@ -102,7 +102,7 @@ function buildHtml(p: InquiryPayload): string {
       <a href="${waLink}" style="background:#25D366;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">💬 Abrir WhatsApp</a>
       <a href="${frontUrl}/admin?tab=inquiries" style="background:#1e3a5f;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">📋 Ver en Admin</a>
     </div>
-    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">ID: ${p.id} · Sistema PrestaMax · Notificacion automatica</p>
+    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">ID: ${p.id} · Sistema CredyTek · Notificacion automatica</p>
   </div>
 </body></html>`.trim();
 }
@@ -146,9 +146,9 @@ export async function sendInquiryNotification(p: InquiryPayload): Promise<boolea
     return false;
   }
 
-  const from = process.env.FROM_EMAIL || 'PrestaMax <onboarding@resend.dev>';
+  const from = process.env.FROM_EMAIL || 'CredyTek <onboarding@resend.dev>';
   const recipients = to.split(',').map(s => s.trim()).filter(Boolean);
-  const subject = `[PrestaMax] Lead nuevo: ${p.full_name}${p.business_name ? ' (' + p.business_name + ')' : ''}`;
+  const subject = `[CredyTek] Lead nuevo: ${p.full_name}${p.business_name ? ' (' + p.business_name + ')' : ''}`;
 
   const payload = {
     from,
@@ -188,5 +188,5 @@ export async function sendInquiryNotification(p: InquiryPayload): Promise<boolea
 export const EMAIL_CONFIG = {
   enabled: !!(process.env.RESEND_API_KEY && process.env.ADMIN_EMAIL),
   to: process.env.ADMIN_EMAIL || null,
-  from: process.env.FROM_EMAIL || 'PrestaMax <onboarding@resend.dev>',
+  from: process.env.FROM_EMAIL || 'CredyTek <onboarding@resend.dev>',
 };

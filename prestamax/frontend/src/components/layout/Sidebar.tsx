@@ -117,7 +117,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
         <div className="p-6 border-b border-white/10">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-white">
-              <span className="text-[#f59e0b]">Presta</span>Max
+              <span className="text-[#f59e0b]">Credy</span>Tek
             </h1>
             <button onClick={onClose} className="lg:hidden p-1 hover:bg-white/10 rounded transition-colors">
               <ChevronLeft className="w-5 h-5" />
