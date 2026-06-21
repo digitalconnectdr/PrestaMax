@@ -120,7 +120,7 @@ const RegisterPage: React.FC = () => {
 
   if (step === 'success') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1e3a5f] to-[#152a45]">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#1e3a5f] via-[#17324f] to-[#0e1f35]">
         <div className="text-center text-white p-8">
           <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="w-10 h-10 text-white" />
@@ -136,7 +136,7 @@ const RegisterPage: React.FC = () => {
   return (
     <div className="min-h-screen flex">
       {/* Left Panel */}
-      <div className="hidden lg:flex lg:w-5/12 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] text-white flex-col justify-between p-12">
+      <div className="hidden lg:flex lg:w-5/12 bg-gradient-to-b from-[#1e3a5f] via-[#17324f] to-[#0e1f35] text-white flex-col justify-between p-12">
         <div>
           <Link to="/" className="inline-block hover:opacity-90 transition-opacity" title={t('reg.back_home')}>
             <h1 className="text-4xl font-bold mb-2">

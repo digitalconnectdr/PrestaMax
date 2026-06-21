@@ -59,7 +59,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex">
-      <div className="hidden md:flex md:w-1/2 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] text-white flex-col justify-between p-10 overflow-y-auto">
+      <div className="hidden md:flex md:w-1/2 bg-gradient-to-b from-[#1e3a5f] via-[#17324f] to-[#0e1f35] text-white flex-col justify-between p-10 overflow-y-auto">
         <div>
           <Link to="/" className="inline-block mb-3 hover:opacity-90 transition-opacity" title={t('auth.back_home')}>
             <h1 className="text-4xl font-bold">
