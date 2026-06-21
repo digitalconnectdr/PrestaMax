@@ -113,6 +113,21 @@ const buildFaqs = (t: TFn) => [
   { q: t('lp.faq.q8'), a: t('lp.faq.a8') },
 ]
 
+// Monedas soportadas (DOP se destaca aparte como mercado inicial).
+const CURRENCIES: { code: string; flag: string; key: string }[] = [
+  { code: 'USD', flag: '🇺🇸', key: 'lp.cur.usd' },
+  { code: 'EUR', flag: '🇪🇺', key: 'lp.cur.eur' },
+  { code: 'HTG', flag: '🇭🇹', key: 'lp.cur.htg' },
+  { code: 'MXN', flag: '🇲🇽', key: 'lp.cur.mxn' },
+  { code: 'COP', flag: '🇨🇴', key: 'lp.cur.cop' },
+  { code: 'PEN', flag: '🇵🇪', key: 'lp.cur.pen' },
+  { code: 'CLP', flag: '🇨🇱', key: 'lp.cur.clp' },
+  { code: 'BOB', flag: '🇧🇴', key: 'lp.cur.bob' },
+  { code: 'UYU', flag: '🇺🇾', key: 'lp.cur.uyu' },
+  { code: 'BRL', flag: '🇧🇷', key: 'lp.cur.brl' },
+  { code: 'GTQ', flag: '🇬🇹', key: 'lp.cur.gtq' },
+]
+
 // Gráfico de barras animado para el mockup del hero: crecen al aparecer y
 // luego varían sutilmente (sensación de datos en vivo). Respeta reduce-motion.
 const MOCK_BARS = [40, 65, 50, 75, 60, 85, 70, 90, 75, 95, 80, 100]
@@ -462,6 +477,44 @@ const LandingPage: React.FC = () => {
                 </Reveal>
               )
             })}
+          </div>
+        </div>
+      </section>
+
+      {/* Países y monedas */}
+      <section className="py-16 md:py-24 bg-gradient-to-b from-slate-50 to-white">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
+          <Reveal className="text-center max-w-3xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.cur.title')}</h2>
+            <p className="mt-4 text-lg text-slate-600">{t('lp.cur.subtitle')}</p>
+          </Reveal>
+
+          {/* Mercado inicial: República Dominicana */}
+          <Reveal>
+            <div className="mt-12 max-w-4xl mx-auto rounded-2xl bg-gradient-to-br from-[#1e3a5f] to-[#152a45] text-white p-6 md:p-8 shadow-xl shadow-[#1e3a5f]/20 flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
+              <span className="text-6xl leading-none flex-shrink-0">🇩🇴</span>
+              <div>
+                <span className="inline-block px-3 py-1 bg-[#f59e0b] text-white text-xs font-bold rounded-full uppercase tracking-wide">{t('lp.cur.dr_badge')}</span>
+                <h3 className="mt-2 text-2xl font-bold">{t('lp.cur.dr_name')} <span className="text-[#f59e0b]">· DOP</span></h3>
+                <p className="mt-1 text-blue-100 text-sm leading-relaxed">{t('lp.cur.dr_desc')}</p>
+              </div>
+            </div>
+          </Reveal>
+
+          {/* Resto de la región */}
+          <p className="mt-10 text-center text-xs font-semibold uppercase tracking-widest text-slate-400">{t('lp.cur.region')}</p>
+          <div className="mt-5 max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {CURRENCIES.map((c, i) => (
+              <Reveal key={c.code} delay={(i % 4) * 60}>
+                <div className="lp-card-hover flex items-center gap-3 p-3.5 bg-white rounded-xl border border-slate-200 hover:border-[#1e3a5f]/40">
+                  <span className="text-2xl leading-none flex-shrink-0">{c.flag}</span>
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-900 text-sm">{c.code}</div>
+                    <div className="text-xs text-slate-500 truncate">{t(c.key)}</div>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
