@@ -3,7 +3,6 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import SubscriptionExpiredBanner from '@/components/shared/SubscriptionExpiredBanner'
-import { Toaster } from 'react-hot-toast'
 import { useAuth } from '@/hooks/useAuth'
 import { useTenant } from '@/hooks/useTenant'
 import api from '@/lib/api'
@@ -57,8 +56,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ title }) => {
           </div>
         </main>
       </div>
-
-      <Toaster position="top-right" />
     </div>
   )
 }

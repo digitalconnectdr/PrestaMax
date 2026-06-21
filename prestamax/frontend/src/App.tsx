@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { TenantProvider } from '@/contexts/TenantContext'
 import { useAuth } from '@/hooks/useAuth'
@@ -8,6 +9,7 @@ import type { PermKey } from '@/lib/permissions'
 import { initAnalytics, trackPageView } from '@/lib/analytics'
 import { applyRouteSeo } from '@/lib/seo'
 import { setLocale, type Locale } from '@/lib/i18n'
+import { PageLoadingState } from '@/components/ui/Loading'
 
 // ── Efectos por ruta: SEO (index/noindex) + Google Analytics pageview ─────────
 const RouteEffects: React.FC = () => {
@@ -19,41 +21,44 @@ const RouteEffects: React.FC = () => {
   return null
 }
 
-import LoginPage from '@/pages/auth/LoginPage'
-import RegisterPage from '@/pages/auth/RegisterPage'
-import DashboardPage from '@/pages/dashboard/DashboardPage'
-import ClientsPage from '@/pages/clients/ClientsPage'
-import ClientDetailPage from '@/pages/clients/ClientDetailPage'
-import ClientFormPage from '@/pages/clients/ClientFormPage'
-import LoansPage from '@/pages/loans/LoansPage'
-import LoanDetailPage from '@/pages/loans/LoanDetailPage'
-import LoanCreatePage from '@/pages/loans/LoanCreatePage'
-import PaymentsPage from '@/pages/payments/PaymentsPage'
-import ReceiptsPage from '@/pages/receipts/ReceiptsPage'
-import ContractsPage from '@/pages/contracts/ContractsPage'
-import CollectionsPage from '@/pages/collections/CollectionsPage'
-import PaymentPromisesPage from '@/pages/collections/PaymentPromisesPage'
-import ReportsPage from '@/pages/reports/ReportsPage'
-import ProjectionPage from '@/pages/reports/ProjectionPage'
-import AccountingExportPage from '@/pages/reports/AccountingExportPage'
-import SettingsPage from '@/pages/settings/SettingsPage'
-import WhatsAppPage from '@/pages/whatsapp/WhatsAppPage'
-import IncomePage from '@/pages/income/IncomePage'
-import PlatformAdminPage from '@/pages/admin/PlatformAdminPage'
-import LoanRequestPublicPage from '@/pages/public/LoanRequestPublicPage'
-import TermsPage from '@/pages/public/TermsPage'
-import PrivacyPage from '@/pages/public/PrivacyPage'
+// Entrada pública: estáticas para pintar rápido sin un chunk extra.
 import LandingPage from '@/pages/public/LandingPage'
-import ContactPage from '@/pages/public/ContactPage'
-import HelpPage from '@/pages/help/HelpPage'
-import LoanRequestsPage from '@/pages/requests/LoanRequestsPage'
-import LoanCalculatorPage from '@/pages/calculator/LoanCalculatorPage'
-import BillingPage from '@/pages/billing/BillingPage'
-import InvestorsPage from '@/pages/investors/InvestorsPage'
-import InvestorDetailPage from '@/pages/investors/InvestorDetailPage'
-import PortalInvestorPage from '@/pages/portal_investor/PortalInvestorPage'
+import LoginPage from '@/pages/auth/LoginPage'
 
-import AppLayout from '@/components/layout/AppLayout'
+// Resto de páginas: lazy-loaded → no entran en el bundle inicial del landing.
+const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'))
+const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'))
+const ClientsPage = lazy(() => import('@/pages/clients/ClientsPage'))
+const ClientDetailPage = lazy(() => import('@/pages/clients/ClientDetailPage'))
+const ClientFormPage = lazy(() => import('@/pages/clients/ClientFormPage'))
+const LoansPage = lazy(() => import('@/pages/loans/LoansPage'))
+const LoanDetailPage = lazy(() => import('@/pages/loans/LoanDetailPage'))
+const LoanCreatePage = lazy(() => import('@/pages/loans/LoanCreatePage'))
+const PaymentsPage = lazy(() => import('@/pages/payments/PaymentsPage'))
+const ReceiptsPage = lazy(() => import('@/pages/receipts/ReceiptsPage'))
+const ContractsPage = lazy(() => import('@/pages/contracts/ContractsPage'))
+const CollectionsPage = lazy(() => import('@/pages/collections/CollectionsPage'))
+const PaymentPromisesPage = lazy(() => import('@/pages/collections/PaymentPromisesPage'))
+const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
+const ProjectionPage = lazy(() => import('@/pages/reports/ProjectionPage'))
+const AccountingExportPage = lazy(() => import('@/pages/reports/AccountingExportPage'))
+const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
+const WhatsAppPage = lazy(() => import('@/pages/whatsapp/WhatsAppPage'))
+const IncomePage = lazy(() => import('@/pages/income/IncomePage'))
+const PlatformAdminPage = lazy(() => import('@/pages/admin/PlatformAdminPage'))
+const LoanRequestPublicPage = lazy(() => import('@/pages/public/LoanRequestPublicPage'))
+const TermsPage = lazy(() => import('@/pages/public/TermsPage'))
+const PrivacyPage = lazy(() => import('@/pages/public/PrivacyPage'))
+const ContactPage = lazy(() => import('@/pages/public/ContactPage'))
+const HelpPage = lazy(() => import('@/pages/help/HelpPage'))
+const LoanRequestsPage = lazy(() => import('@/pages/requests/LoanRequestsPage'))
+const LoanCalculatorPage = lazy(() => import('@/pages/calculator/LoanCalculatorPage'))
+const BillingPage = lazy(() => import('@/pages/billing/BillingPage'))
+const InvestorsPage = lazy(() => import('@/pages/investors/InvestorsPage'))
+const InvestorDetailPage = lazy(() => import('@/pages/investors/InvestorDetailPage'))
+const PortalInvestorPage = lazy(() => import('@/pages/portal_investor/PortalInvestorPage'))
+
+const AppLayout = lazy(() => import('@/components/layout/AppLayout'))
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { state } = useAuth()
@@ -158,7 +163,10 @@ const App: React.FC = () => {
       <AuthProvider>
         <TenantProvider>
           <RouteEffects />
-          <AppRoutes />
+          <Toaster position="top-right" />
+          <Suspense fallback={<PageLoadingState />}>
+            <AppRoutes />
+          </Suspense>
         </TenantProvider>
       </AuthProvider>
     </BrowserRouter>

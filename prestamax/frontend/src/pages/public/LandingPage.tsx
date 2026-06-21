@@ -26,6 +26,7 @@ import {
 
 import PlanInquiryModal from '@/components/public/PlanInquiryModal'
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
+import ShareButton from '@/components/shared/ShareButton'
 import { useT } from '@/lib/i18n'
 import { Reveal, AnimatedCounter } from '@/components/shared/Reveal'
 import { trackEvent } from '@/lib/analytics'
@@ -149,6 +150,7 @@ const LandingPage: React.FC = () => {
               <a href="#pricing" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.pricing')}</a>
               <a href="#faq" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.faq')}</a>
               <Link to="/login" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.login')}</Link>
+              <ShareButton />
               <LanguageSwitcher />
               <button
                 type="button"
@@ -159,8 +161,9 @@ const LandingPage: React.FC = () => {
               </button>
             </nav>
 
-            {/* Mobile: selector de idioma + botón menú */}
+            {/* Mobile: compartir + selector de idioma + botón menú */}
             <div className="md:hidden flex items-center gap-1">
+              <ShareButton />
               <LanguageSwitcher />
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -457,16 +460,18 @@ const LandingPage: React.FC = () => {
                 <button
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
                   className="w-full flex items-center justify-between px-5 py-4 text-left bg-white hover:bg-slate-50 transition"
+                  aria-expanded={openFaq === i}
+                  aria-controls={`faq-panel-${i}`}
                 >
                   <span className="font-medium text-slate-900">{faq.q}</span>
                   {openFaq === i ? (
-                    <ChevronUp className="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform" />
+                    <ChevronUp className="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform" aria-hidden="true" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform" />
+                    <ChevronDown className="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform" aria-hidden="true" />
                   )}
                 </button>
                 {openFaq === i && (
-                  <div className="px-5 pb-4 text-sm text-slate-600 leading-relaxed" style={{ animation: 'lp-fade-in 0.3s ease' }}>
+                  <div id={`faq-panel-${i}`} role="region" className="px-5 pb-4 text-sm text-slate-600 leading-relaxed" style={{ animation: 'lp-fade-in 0.3s ease' }}>
                     {faq.a}
                   </div>
                 )}

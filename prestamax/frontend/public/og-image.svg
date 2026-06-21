@@ -1,0 +1,65 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e3a5f"/>
+      <stop offset="1" stop-color="#0f1f33"/>
+    </linearGradient>
+    <linearGradient id="bars" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#f59e0b" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#f59e0b" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Glow decorativo -->
+  <circle cx="1080" cy="120" r="260" fill="#f59e0b" opacity="0.10"/>
+  <circle cx="120" cy="560" r="220" fill="#3b82f6" opacity="0.10"/>
+
+  <!-- Logo -->
+  <g transform="translate(80,70)">
+    <rect width="64" height="64" rx="14" fill="#f59e0b"/>
+    <text x="32" y="46" font-family="Arial, sans-serif" font-size="40" font-weight="bold" fill="#1e3a5f" text-anchor="middle">$</text>
+    <text x="84" y="46" font-family="Arial, sans-serif" font-size="42" font-weight="bold" fill="#ffffff">Credy<tspan fill="#f59e0b">Tek</tspan></text>
+  </g>
+
+  <!-- Titular -->
+  <text x="80" y="250" font-family="Arial, sans-serif" font-size="68" font-weight="bold" fill="#ffffff">Software de gestión</text>
+  <text x="80" y="328" font-family="Arial, sans-serif" font-size="68" font-weight="bold" fill="#f59e0b">de préstamos</text>
+
+  <!-- Subtítulo -->
+  <text x="80" y="392" font-family="Arial, sans-serif" font-size="30" fill="#cbd5e1">Clientes · Préstamos · Cobranzas · Pagos · Contratos</text>
+
+  <!-- Badges -->
+  <g font-family="Arial, sans-serif" font-size="24" font-weight="bold">
+    <rect x="80" y="430" width="240" height="54" rx="27" fill="#ffffff" opacity="0.10"/>
+    <text x="200" y="465" fill="#ffffff" text-anchor="middle">Multi-moneda</text>
+    <rect x="336" y="430" width="210" height="54" rx="27" fill="#ffffff" opacity="0.10"/>
+    <text x="441" y="465" fill="#ffffff" text-anchor="middle">Multi-país</text>
+    <rect x="562" y="430" width="200" height="54" rx="27" fill="#ffffff" opacity="0.10"/>
+    <text x="662" y="465" fill="#ffffff" text-anchor="middle">100% web</text>
+  </g>
+
+  <!-- Mini dashboard decorativo (derecha) -->
+  <g transform="translate(840,150)" opacity="0.95">
+    <rect x="0" y="0" width="300" height="330" rx="18" fill="#ffffff" opacity="0.06"/>
+    <rect x="20" y="22" width="125" height="70" rx="10" fill="#ffffff" opacity="0.10"/>
+    <rect x="155" y="22" width="125" height="70" rx="10" fill="#ffffff" opacity="0.10"/>
+    <rect x="20" y="104" width="125" height="70" rx="10" fill="#ffffff" opacity="0.10"/>
+    <rect x="155" y="104" width="125" height="70" rx="10" fill="#ffffff" opacity="0.10"/>
+    <!-- barras -->
+    <rect x="28"  y="280" width="22" height="30" rx="4" fill="url(#bars)"/>
+    <rect x="60"  y="262" width="22" height="48" rx="4" fill="url(#bars)"/>
+    <rect x="92"  y="240" width="22" height="70" rx="4" fill="url(#bars)"/>
+    <rect x="124" y="252" width="22" height="58" rx="4" fill="url(#bars)"/>
+    <rect x="156" y="218" width="22" height="92" rx="4" fill="url(#bars)"/>
+    <rect x="188" y="232" width="22" height="78" rx="4" fill="url(#bars)"/>
+    <rect x="220" y="200" width="22" height="110" rx="4" fill="url(#bars)"/>
+    <rect x="252" y="186" width="22" height="124" rx="4" fill="url(#bars)"/>
+  </g>
+
+  <!-- Pie -->
+  <text x="80" y="560" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#ffffff">Prueba gratis 14 días · Sin tarjeta</text>
+  <text x="1120" y="560" font-family="Arial, sans-serif" font-size="22" fill="#94a3b8" text-anchor="end">credytek.vercel.app</text>
+</svg>

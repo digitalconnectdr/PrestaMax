@@ -2741,6 +2741,19 @@ const TR: Record<string, Tri> = {
   'lp.footer.support': { es: 'Soporte', en: 'Support', pt: 'Suporte' },
   'lp.footer.contact_us': { es: 'Contáctanos', en: 'Contact us', pt: 'Fale conosco' },
 
+  // Compartir
+  'share.btn':      { es: 'Compartir', en: 'Share', pt: 'Compartilhar' },
+  'share.title':    { es: 'Compartir CredyTek', en: 'Share CredyTek', pt: 'Compartilhar CredyTek' },
+  'share.msg':      { es: 'CredyTek — Software para gestionar préstamos, clientes y cobranzas.', en: 'CredyTek — Software to manage loans, clients and collections.', pt: 'CredyTek — Software para gerenciar empréstimos, clientes e cobranças.' },
+  'share.whatsapp': { es: 'WhatsApp', en: 'WhatsApp', pt: 'WhatsApp' },
+  'share.facebook': { es: 'Facebook', en: 'Facebook', pt: 'Facebook' },
+  'share.x':        { es: 'X (Twitter)', en: 'X (Twitter)', pt: 'X (Twitter)' },
+  'share.linkedin': { es: 'LinkedIn', en: 'LinkedIn', pt: 'LinkedIn' },
+  'share.instagram':{ es: 'Instagram', en: 'Instagram', pt: 'Instagram' },
+  'share.copy':     { es: 'Copiar enlace', en: 'Copy link', pt: 'Copiar link' },
+  'share.copied':   { es: '¡Enlace copiado!', en: 'Link copied!', pt: 'Link copiado!' },
+  'share.ig_hint':  { es: 'Enlace copiado — pégalo en tu historia o perfil de Instagram', en: 'Link copied — paste it in your Instagram story or profile', pt: 'Link copiado — cole no seu story ou perfil do Instagram' },
+
   // ── Página Contáctanos ───────────────────────────────────────────────────────
   'contact.title':        { es: 'Contáctanos', en: 'Contact us', pt: 'Fale conosco' },
   'contact.subtitle':     { es: 'Estamos aquí para ayudarte. Escríbenos y te respondemos lo antes posible.', en: "We're here to help. Write to us and we'll reply as soon as possible.", pt: 'Estamos aqui para ajudar. Escreva-nos e responderemos o quanto antes.' },
