@@ -122,7 +122,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       {isOpen && <div className="fixed inset-0 bg-black/50 lg:hidden z-40" onClick={onClose} />}
 
       <aside className={cn(
-        'fixed lg:relative lg:translate-x-0 h-screen w-60 bg-[#1e3a5f] text-white flex flex-col overflow-y-auto z-50 transition-all duration-300',
+        'fixed lg:relative lg:translate-x-0 h-screen w-60 bg-gradient-to-b from-[#1e3a5f] via-[#17324f] to-[#0e1f35] text-white flex flex-col overflow-y-auto z-50 transition-all duration-300 border-r border-white/5',
         collapsed ? 'lg:w-[4.5rem]' : 'lg:w-60',
         isOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
