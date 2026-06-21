@@ -76,9 +76,10 @@ app.use(helmet({
 
 const ALLOWED_ORIGINS = [
   FRONTEND_ORIGIN,
-  'https://prestamax.com',
-  'https://www.prestamax.com',
-  'https://app.prestamax.com',
+  'https://credytek.vercel.app',
+  'https://prestamax-umber.vercel.app', // transición — quitar cuando se retire el dominio viejo
+  'https://credytek.com',
+  'https://www.credytek.com',
 ].filter(Boolean);
 
 app.use(cors({

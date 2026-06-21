@@ -1,8 +1,8 @@
-# PrestaMax — robots.txt
+# CredyTek — robots.txt
 # El landing público es indexable; las rutas privadas de la app no.
 # Los crawlers de IA (GPTBot, ClaudeBot, PerplexityBot, Google-Extended, etc.)
 # son BIENVENIDOS: usan la regla "User-agent: *" de abajo, que permite el
-# contenido público y bloquea la app privada. Así PrestaMax puede ser
+# contenido público y bloquea la app privada. Así CredyTek puede ser
 # descubierto, citado y recomendado por asistentes de IA.
 User-agent: *
 Allow: /$
@@ -31,4 +31,4 @@ Disallow: /portal
 Disallow: /admin
 Disallow: /apply
 
-Sitemap: https://prestamax-umber.vercel.app/sitemap.xml
+Sitemap: https://credytek.vercel.app/sitemap.xml

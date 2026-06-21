@@ -13,7 +13,7 @@
 //   ADMIN_EMAIL=jcpenalo@gmail.com           — destinatario(s), separados por coma
 //   ADMIN_WHATSAPP=18095551234               — solo digitos, para wa.me link
 //   FROM_EMAIL=CredyTek <noreply@prestamax.com>   — opcional, default usa onboarding@resend.dev
-//   FRONTEND_URL=https://prestamax-umber.vercel.app — para link al admin
+//   FRONTEND_URL=https://credytek.vercel.app — para link al admin
 
 interface InquiryPayload {
   id: string;
@@ -76,7 +76,7 @@ function buildHtml(p: InquiryPayload): string {
   const sizeLbl    = SIZE_LABELS[p.portfolio_size || ''] || p.portfolio_size || '—';
   const sourceLbl  = SOURCE_LABELS[p.source || ''] || p.source || '—';
   const countryLbl = COUNTRY_LABELS[p.country] || p.country;
-  const frontUrl   = process.env.FRONTEND_URL || 'https://prestamax-umber.vercel.app';
+  const frontUrl   = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
   const waLink     = buildWaLink(p.whatsapp, p.full_name, p.plan_interest);
 
   return `
