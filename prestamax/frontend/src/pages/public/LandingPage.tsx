@@ -111,6 +111,10 @@ const buildFaqs = (t: TFn) => [
   { q: t('lp.faq.q6'), a: t('lp.faq.a6') },
   { q: t('lp.faq.q7'), a: t('lp.faq.a7') },
   { q: t('lp.faq.q8'), a: t('lp.faq.a8') },
+  { q: t('lp.faq.q9'), a: t('lp.faq.a9') },
+  { q: t('lp.faq.q10'), a: t('lp.faq.a10') },
+  { q: t('lp.faq.q11'), a: t('lp.faq.a11') },
+  { q: t('lp.faq.q12'), a: t('lp.faq.a12') },
 ]
 
 // Monedas soportadas (DOP se destaca aparte como mercado inicial).
@@ -385,6 +389,54 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Problema / Solución */}
+      <section className="py-16 md:py-24 bg-white">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
+          <Reveal className="text-center max-w-3xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.prob.title')}</h2>
+            <p className="mt-4 text-lg text-slate-600">{t('lp.prob.subtitle')}</p>
+          </Reveal>
+
+          <div className="mt-12 grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+            {/* Antes */}
+            <Reveal className="rounded-2xl border border-red-200 bg-red-50/40 p-6 md:p-8">
+              <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+                <span className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0"><X className="w-4 h-4" /></span>
+                {t('lp.prob.before_t')}
+              </h3>
+              <ul className="mt-5 space-y-3">
+                {['lp.prob.b1','lp.prob.b2','lp.prob.b3','lp.prob.b4','lp.prob.b5','lp.prob.b6'].map(k => (
+                  <li key={k} className="flex items-start gap-2.5 text-sm text-slate-600">
+                    <X className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                    <span>{t(k)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+
+            {/* Después */}
+            <Reveal delay={120} className="rounded-2xl border-2 border-[#1e3a5f]/20 bg-white p-6 md:p-8 shadow-lg shadow-[#1e3a5f]/5">
+              <h3 className="flex items-center gap-2 text-lg font-bold text-[#1e3a5f]">
+                <span className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0"><Check className="w-4 h-4" /></span>
+                {t('lp.prob.after_t')}
+              </h3>
+              <ul className="mt-5 space-y-3">
+                {['lp.prob.g1','lp.prob.g2','lp.prob.g3','lp.prob.g4','lp.prob.g5','lp.prob.g6'].map(k => (
+                  <li key={k} className="flex items-start gap-2.5 text-sm text-slate-700">
+                    <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <span>{t(k)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          </div>
+
+          <Reveal>
+            <p className="mt-10 text-center text-base md:text-lg font-medium text-slate-900 max-w-2xl mx-auto">{t('lp.prob.close')}</p>
+          </Reveal>
         </div>
       </section>
 
@@ -678,6 +730,24 @@ const LandingPage: React.FC = () => {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* Respaldo de marca — JPRS Digital Connect */}
+      <section className="py-14 md:py-16 bg-slate-50 border-t border-slate-200">
+        <Reveal className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{t('lp.brand.label')}</p>
+          <h3 className="mt-3 text-2xl font-bold text-slate-900">{t('lp.brand.title')}</h3>
+          <p className="mt-3 text-sm md:text-base text-slate-600 leading-relaxed">{t('lp.brand.desc')}</p>
+          <a
+            href="https://digitalconnectdr.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-100 hover:border-slate-400 transition"
+          >
+            {t('lp.brand.cta')}
+            <ArrowRight className="w-4 h-4" />
+          </a>
+        </Reveal>
       </section>
 
       {/* Footer */}
