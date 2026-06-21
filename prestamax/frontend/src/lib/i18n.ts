@@ -2624,6 +2624,7 @@ const TR: Record<string, Tri> = {
   'lp.hero.no_install': { es: 'Sin instalación', en: 'No installation', pt: 'Sem instalação' },
   'lp.hero.cancel_any': { es: 'Cancela cuando quieras', en: 'Cancel anytime', pt: 'Cancele quando quiser' },
   'lp.hero.multi':   { es: 'Multi-moneda', en: 'Multi-currency', pt: 'Multimoeda' },
+  'lp.hero.mobile':  { es: 'Desde tu celular', en: 'From your phone', pt: 'Do seu celular' },
   'lp.mock.portfolio':    { es: 'Cartera activa', en: 'Active portfolio', pt: 'Carteira ativa' },
   'lp.mock.clients':      { es: 'Clientes', en: 'Clients', pt: 'Clientes' },
   'lp.mock.active_loans': { es: 'Préstamos activos', en: 'Active loans', pt: 'Empréstimos ativos' },

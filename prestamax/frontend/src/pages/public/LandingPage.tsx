@@ -229,10 +229,14 @@ const LandingPage: React.FC = () => {
                 {t('lp.cta.see_plans')}
               </a>
             </div>
-            <div className="mt-8 flex items-center justify-center gap-6 text-sm text-slate-500">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-slate-500">
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-[#1e3a5f]" />
                 {t('lp.hero.no_install')}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Smartphone className="w-4 h-4 text-[#1e3a5f]" />
+                {t('lp.hero.mobile')}
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-[#1e3a5f]" />
