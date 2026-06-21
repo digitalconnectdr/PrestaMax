@@ -113,6 +113,38 @@ const buildFaqs = (t: TFn) => [
   { q: t('lp.faq.q8'), a: t('lp.faq.a8') },
 ]
 
+// Gráfico de barras animado para el mockup del hero: crecen al aparecer y
+// luego varían sutilmente (sensación de datos en vivo). Respeta reduce-motion.
+const MOCK_BARS = [40, 65, 50, 75, 60, 85, 70, 90, 75, 95, 80, 100]
+
+const AnimatedBars: React.FC = () => {
+  const [heights, setHeights] = useState<number[]>(() => MOCK_BARS.map(() => 6))
+
+  useEffect(() => {
+    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    // Entrada: de ~0 a los valores base.
+    const start = setTimeout(() => setHeights(MOCK_BARS.slice()), 150)
+    if (reduce) return () => clearTimeout(start)
+    // Dinámico: cada 2.4s varía manteniendo la forma general.
+    const id = setInterval(() => {
+      setHeights(MOCK_BARS.map(h => Math.max(22, Math.min(100, Math.round(h + (Math.random() * 26 - 13))))))
+    }, 2400)
+    return () => { clearTimeout(start); clearInterval(id) }
+  }, [])
+
+  return (
+    <div className="h-24 flex items-end gap-1.5">
+      {heights.map((h, i) => (
+        <div
+          key={i}
+          className="flex-1 bg-gradient-to-t from-[#1e3a5f] to-[#3b82f6] rounded-t transition-[height] duration-700 ease-out"
+          style={{ height: `${h}%` }}
+        />
+      ))}
+    </div>
+  )
+}
+
 const LandingPage: React.FC = () => {
   const t = useT()
   const plans = buildPlans(t)
@@ -325,15 +357,7 @@ const LandingPage: React.FC = () => {
                     {/* Gráfico */}
                     <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
                       <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-2">{t('lp.mock.chart')}</div>
-                      <div className="h-24 flex items-end gap-1.5">
-                        {[40, 65, 50, 75, 60, 85, 70, 90, 75, 95, 80, 100].map((h, i) => (
-                          <div
-                            key={i}
-                            className="flex-1 bg-gradient-to-t from-[#1e3a5f] to-[#2c5a8f] rounded-t"
-                            style={{ height: `${h}%` }}
-                          />
-                        ))}
-                      </div>
+                      <AnimatedBars />
                     </div>
                   </div>
                 </div>
