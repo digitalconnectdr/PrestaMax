@@ -87,8 +87,8 @@ const buildWaLink = (whatsapp: string, name: string, plan: string | null): strin
   const firstName = (name || '').split(' ')[0]
   const planTxt = plan && plan !== 'unsure'
     ? `el plan ${PLAN_LABELS[plan] || plan}`
-    : 'PrestaMax'
-  const body = `Hola ${firstName}, soy Juan de PrestaMax. Vi tu solicitud sobre ${planTxt}. ¿Tienes 10 minutos para conversar?`
+    : 'CredyTek'
+  const body = `Hola ${firstName}, soy Juan de CredyTek. Vi tu solicitud sobre ${planTxt}. ¿Tienes 10 minutos para conversar?`
   return `https://wa.me/${digits}?text=${encodeURIComponent(body)}`
 }
 

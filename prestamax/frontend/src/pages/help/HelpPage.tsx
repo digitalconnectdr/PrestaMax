@@ -494,8 +494,8 @@ const HelpPage: React.FC = () => {
         <Settings className="w-8 h-8 text-slate-400 mx-auto mb-2" />
         <p className="text-sm text-slate-600">
           ¿Necesitas más ayuda? Escribe a{' '}
-          <a href="mailto:soporte@prestamax.com" className="text-[#1e3a5f] font-medium hover:underline">
-            soporte@prestamax.com
+          <a href="mailto:credyteksupport@digitalconnectdr.com" className="text-[#1e3a5f] font-medium hover:underline">
+            credyteksupport@digitalconnectdr.com
           </a>
         </p>
       </Card>

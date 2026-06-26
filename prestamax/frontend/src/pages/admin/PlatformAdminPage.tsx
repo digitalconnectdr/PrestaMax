@@ -781,7 +781,7 @@ const PlatformAdminPage: React.FC = () => {
         </div>
         <div>
           <h1 className="page-title">Administración de Plataforma</h1>
-          <p className="text-slate-600 text-sm">Panel exclusivo para el administrador de PrestaMax</p>
+          <p className="text-slate-600 text-sm">Panel exclusivo para el administrador de CredyTek</p>
         </div>
       </div>
 
