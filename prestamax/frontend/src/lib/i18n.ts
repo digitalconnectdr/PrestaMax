@@ -2616,6 +2616,7 @@ const TR: Record<string, Tri> = {
   'lp.nav.faq':      { es: 'Preguntas', en: 'FAQ',      pt: 'Perguntas' },
   'lp.nav.login':    { es: 'Iniciar sesión', en: 'Sign in', pt: 'Entrar' },
   'lp.cta.request':  { es: 'Solicitar plan', en: 'Request a plan', pt: 'Solicitar plano' },
+  'lp.cta.start':    { es: 'Empezar gratis', en: 'Start free', pt: 'Começar grátis' },
   'lp.cta.request_mine': { es: 'Solicitar mi plan', en: 'Request my plan', pt: 'Solicitar meu plano' },
   'lp.cta.see_plans': { es: 'Ver planes', en: 'See plans', pt: 'Ver planos' },
   'lp.menu':         { es: 'Menú', en: 'Menu', pt: 'Menu' },

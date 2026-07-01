@@ -1,6 +1,6 @@
 // LandingPage — pagina publica de marketing de CredyTek
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Users,
   DollarSign,
@@ -167,6 +167,7 @@ const AnimatedBars: React.FC = () => {
 
 const LandingPage: React.FC = () => {
   const t = useT()
+  const navigate = useNavigate()
   const plans = buildPlans(t)
   const features = buildFeatures(t)
   const faqs = buildFaqs(t)
@@ -626,14 +627,14 @@ const LandingPage: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => { trackEvent('cta_request_plan', { location: 'pricing', plan: plan.slug }); openInquiry(plan.slug || '') }}
+                  onClick={() => { trackEvent('cta_start', { location: 'pricing', plan: plan.slug }); navigate('/register') }}
                   className={`mt-6 block w-full text-center px-4 py-2.5 rounded-lg font-medium transition ${
                     plan.highlighted
                       ? 'bg-[#1e3a5f] text-white hover:bg-[#152a45]'
                       : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                   }`}
                 >
-                  {t('lp.cta.request')}
+                  {t('lp.cta.start')}
                 </button>
               </Reveal>
             ))}
