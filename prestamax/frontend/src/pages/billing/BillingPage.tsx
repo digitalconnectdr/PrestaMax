@@ -270,7 +270,12 @@ const BillingPage: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {plans.map(plan => {
-              const isCurrent = subscription?.planSlug === plan.slug && subscription?.subscriptionStatus === 'active';
+              // Un plan cuenta como "actual/activo" solo si está vigente por fecha.
+              // Si el mismo plan venció (o se canceló), debe poder RENOVARSE.
+              const isExpiredByDate = subscription?.subscriptionEnd ? new Date(subscription.subscriptionEnd) < new Date() : false;
+              const isMyPlan = subscription?.planSlug === plan.slug;
+              const isCurrent = isMyPlan && subscription?.subscriptionStatus === 'active' && !isExpiredByDate;
+              const isRenewable = isMyPlan && !isCurrent; // mi plan pero vencido/cancelado
               return (
                 <div key={plan.id} className={`relative rounded-lg border-2 p-6 flex flex-col ${isCurrent ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white hover:border-blue-400'} transition-colors`}>
                   {isCurrent && (
@@ -316,11 +321,11 @@ const BillingPage: React.FC = () => {
                       }
                     }}
                     disabled={isCurrent || checkoutLoading !== null || !!pendingRequest}
-                    className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${isCurrent ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'}`}
+                    className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${isCurrent ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : isRenewable ? 'bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50' : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'}`}
                     title={pendingRequest ? 'Ya tienes una solicitud pendiente — espera respuesta de soporte' : ''}
                   >
                     {checkoutLoading === plan.slug && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {isCurrent ? 'Plan actual' : pendingRequest ? 'Solicitud pendiente' : checkoutLoading === plan.slug ? 'Redirigiendo...' : ((whopEnabled || (plan as any).stripe_price_id) ? 'Suscribirse' : 'Solicitar este plan')}
+                    {isCurrent ? 'Plan actual' : pendingRequest ? 'Solicitud pendiente' : checkoutLoading === plan.slug ? 'Redirigiendo...' : isRenewable ? 'Renovar plan' : ((whopEnabled || (plan as any).stripe_price_id) ? 'Suscribirse' : 'Solicitar este plan')}
                   </button>
                 </div>
               );
