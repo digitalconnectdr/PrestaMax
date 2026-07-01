@@ -681,6 +681,9 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE tenants ADD COLUMN stripe_customer_id TEXT`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN stripe_subscription_id TEXT`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN subscription_notes TEXT`); } catch(_) {}
+  // Whop (pasarela de pago alternativa a Stripe)
+  try { db.exec(`ALTER TABLE tenants ADD COLUMN whop_membership_id TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE tenants ADD COLUMN whop_plan_id TEXT`); } catch(_) {}
 
   // Plan enhancements: trial days + feature flags
   try { db.exec(`ALTER TABLE plans ADD COLUMN trial_days INTEGER NOT NULL DEFAULT 10`); } catch(_) {}

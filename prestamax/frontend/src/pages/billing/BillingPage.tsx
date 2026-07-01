@@ -50,6 +50,7 @@ const BillingPage: React.FC = () => {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [whopEnabled, setWhopEnabled] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<{ id: string; planInterest: string; status: string; createdAt: string } | null>(null);
   const [requestModal, setRequestModal] = useState<{ planSlug: string; planName: string } | null>(null);
@@ -85,14 +86,16 @@ const BillingPage: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [plansRes, subRes, pendingRes] = await Promise.all([
+      const [plansRes, subRes, pendingRes, whopRes] = await Promise.all([
         api.get('/billing/plans'),
         api.get('/billing/subscription'),
         api.get('/billing/my-pending-request').catch(() => ({ data: { pending: null } })),
+        api.get('/billing/whop-config').catch(() => ({ data: { enabled: false } })),
       ]);
       setPlans(plansRes.data || []);
       setSubscription(subRes.data || null);
       setPendingRequest(pendingRes.data?.pending || null);
+      setWhopEnabled(!!whopRes.data?.enabled);
     } catch (e: any) {
       console.error('billing load error', e);
       toast.error(e?.response?.data?.error || 'No se pudo cargar la informacion de suscripcion');
@@ -128,7 +131,9 @@ const BillingPage: React.FC = () => {
   const handleSubscribe = async (planSlug: string) => {
     setCheckoutLoading(planSlug);
     try {
-      const res = await api.post('/billing/checkout', { plan_slug: planSlug });
+      // Whop es la pasarela activa; si no está, cae a Stripe.
+      const endpoint = whopEnabled ? '/billing/whop-checkout' : '/billing/checkout';
+      const res = await api.post(endpoint, { plan_slug: planSlug });
       if (res.data?.url) {
         window.location.href = res.data.url;
       } else {
@@ -303,7 +308,7 @@ const BillingPage: React.FC = () => {
                   </ul>
                   <button
                     onClick={() => {
-                      if ((plan as any).stripe_price_id) {
+                      if (whopEnabled || (plan as any).stripe_price_id) {
                         handleSubscribe(plan.slug);
                       } else {
                         setRequestModal({ planSlug: plan.slug, planName: plan.name });
@@ -315,7 +320,7 @@ const BillingPage: React.FC = () => {
                     title={pendingRequest ? 'Ya tienes una solicitud pendiente — espera respuesta de soporte' : ''}
                   >
                     {checkoutLoading === plan.slug && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {isCurrent ? 'Plan actual' : pendingRequest ? 'Solicitud pendiente' : checkoutLoading === plan.slug ? 'Redirigiendo...' : ((plan as any).stripe_price_id ? 'Suscribirse' : 'Solicitar este plan')}
+                    {isCurrent ? 'Plan actual' : pendingRequest ? 'Solicitud pendiente' : checkoutLoading === plan.slug ? 'Redirigiendo...' : ((whopEnabled || (plan as any).stripe_price_id) ? 'Suscribirse' : 'Solicitar este plan')}
                   </button>
                 </div>
               );

@@ -12,7 +12,7 @@ validateEnv();
 
 import { initializeDatabase, getDb } from './db/database';
 import { router } from './routes';
-import { webhookHandler } from './routes/billing';
+import { webhookHandler, whopWebhookHandler } from './routes/billing';
 import { errorHandler } from './middleware/errorHandler';
 import { initSentry, sentryRequestHandler, sentryErrorHandler } from './lib/sentry';
 initSentry();
@@ -102,7 +102,7 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders:   false,
   message: rateLimitMsg,
-  skip: (req) => req.path === '/health' || req.path === '/api/billing/webhook',
+  skip: (req) => req.path === '/health' || req.path === '/api/billing/webhook' || req.path === '/api/billing/whop-webhook',
 });
 
 const authLimiter = rateLimit({
@@ -157,9 +157,10 @@ app.use('/api/public/plan-inquiry',  publicFormsLimiter);
 app.use('/api/public/apply',         publicFormsLimiter);
 app.use('/api/',                     globalLimiter);
 
-// IMPORTANTE: webhook de Stripe ANTES de express.json para preservar raw body
-// (Stripe necesita el body como Buffer para verificar la firma HMAC)
+// IMPORTANTE: webhooks ANTES de express.json para preservar raw body
+// (Stripe/Whop necesitan el body crudo para verificar la firma HMAC)
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), webhookHandler);
+app.post('/api/billing/whop-webhook', express.raw({ type: '*/*' }), whopWebhookHandler);
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));

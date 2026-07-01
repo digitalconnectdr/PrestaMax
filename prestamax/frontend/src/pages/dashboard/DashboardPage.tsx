@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { DollarSign, TrendingUp, AlertCircle, Calendar, Users, FileText, Briefcase, Wallet, ArrowDownCircle } from 'lucide-react'
+import React, { useEffect, useState, useContext } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { DollarSign, TrendingUp, AlertCircle, Calendar, Users, FileText, Briefcase, Wallet, ArrowDownCircle, CheckCircle2 } from 'lucide-react'
+import { TenantContext } from '@/contexts/TenantContext'
 import Stat from '@/components/ui/Stat'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -90,6 +91,19 @@ const DashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const navigate = useNavigate()
   const t = useT()
+  const [params, setParams] = useSearchParams()
+  const { refreshCurrentTenant } = useContext(TenantContext)
+  const [showThanks, setShowThanks] = useState(false)
+
+  // Regreso desde el checkout de Whop (?whop=success): mostrar confirmación y
+  // refrescar el tenant (el webhook activa la suscripción en unos segundos).
+  useEffect(() => {
+    if (params.get('whop') === 'success') {
+      setShowThanks(true)
+      setTimeout(() => { refreshCurrentTenant?.() }, 3000)
+      params.delete('whop'); setParams(params, { replace: true })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const fetchData = async () => {
@@ -144,6 +158,27 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Popup de confirmación de pago (regreso desde Whop) */}
+      {showThanks && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowThanks(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center" onClick={e => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-9 h-9 text-emerald-600" />
+            </div>
+            <h3 className="mt-4 text-lg font-bold text-slate-900">¡Gracias, suscripción activada!</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Tu pago se procesó correctamente. La activación puede tardar unos segundos en reflejarse.
+            </p>
+            <button
+              onClick={() => setShowThanks(false)}
+              className="mt-5 w-full py-2.5 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Page Title */}
       <div>
         <h1 className="page-title">{t('nav.dashboard')}</h1>

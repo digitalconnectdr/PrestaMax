@@ -11,6 +11,13 @@ import {
   createPortalSession,
   constructWebhookEvent,
 } from '../services/stripeService';
+import {
+  isWhopConfigured,
+  getWhopPlanIdForSlug,
+  getSlugForWhopPlanId,
+  createWhopCheckout,
+  verifyWhopWebhook,
+} from '../services/whopService';
 
 const router = Router();
 
@@ -484,6 +491,145 @@ router.get('/my-pending-request', authenticate, requireTenant, (req: AuthRequest
   }
 });
 
-// Exportamos el handler por separado para montarlo con raw body en index.ts
-export { webhookHandler };
+// ═════════════════════════════════════════════════════════════════════════════
+// WHOP — pasarela de pago alternativa a Stripe
+// ═════════════════════════════════════════════════════════════════════════════
+
+// GET /api/billing/whop-config — indica si Whop está disponible (para el frontend)
+router.get('/whop-config', (_req: Request, res: Response) => {
+  res.json({ enabled: isWhopConfigured() });
+});
+
+// POST /api/billing/whop-checkout — crea una checkout configuration en Whop con
+// metadata {tenant_id, plan_slug} y devuelve la URL de pago.
+// Body: { plan_slug }
+router.post('/whop-checkout', authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+  if (!isWhopConfigured()) {
+    return res.status(503).json({ error: 'Pagos no están disponibles en este momento' });
+  }
+  try {
+    const { plan_slug } = req.body || {};
+    if (!plan_slug) return res.status(400).json({ error: 'plan_slug es requerido' });
+
+    const whopPlanId = getWhopPlanIdForSlug(plan_slug);
+    if (!whopPlanId) return res.status(400).json({ error: `Plan "${plan_slug}" no está disponible para suscripción` });
+
+    const tenantId = req.tenant.id;
+    const redirectUrl = `${FRONTEND()}/dashboard?whop=success`;
+
+    const { purchase_url } = await createWhopCheckout(
+      whopPlanId,
+      { tenant_id: tenantId, plan_slug, user_id: (req as any).user.id },
+      redirectUrl,
+    );
+    res.json({ url: purchase_url });
+  } catch (e: any) {
+    console.error('billing/whop-checkout error:', e);
+    res.status(500).json({ error: e.message || 'No se pudo iniciar el checkout' });
+  }
+});
+
+// POST /api/billing/whop-webhook — recibe eventos de Whop (raw body, sin auth).
+// Se monta con express.raw en index.ts para preservar el cuerpo crudo (firma).
+const whopWebhookHandler = async (req: Request, res: Response) => {
+  if (!isWhopConfigured()) return res.status(503).send('Whop no configurado');
+
+  let payload: any;
+  try {
+    payload = verifyWhopWebhook(req.body, req.headers as any);
+  } catch (err: any) {
+    console.error('[Whop] Firma de webhook inválida:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  const db = getDb();
+  // El campo del tipo puede venir como "membership.went_valid" o "membership_activated".
+  const rawType = String(payload.type || payload.action || '').toLowerCase().replace(/\./g, '_');
+  const data = payload.data || {};
+
+  // Metadata (tenant_id, plan_slug) — buscar en varias ubicaciones posibles.
+  const meta = data.metadata
+    || data.checkout_configuration?.metadata
+    || data.membership?.metadata
+    || data.plan?.metadata
+    || {};
+  const tenantId = meta.tenant_id || null;
+  // plan_slug: de la metadata, o resuelto por el plan_id de Whop presente en el evento.
+  const whopPlanId = data.plan_id || data.plan?.id || data.membership?.plan_id || null;
+  const planSlug = meta.plan_slug || (whopPlanId ? getSlugForWhopPlanId(whopPlanId) : null);
+
+  console.log(`[Whop] Evento: ${rawType} | tenant=${tenantId || '?'} | plan=${planSlug || '?'}`);
+
+  try {
+    const isActivation = rawType.includes('membership_activated') || rawType.includes('went_valid') || rawType === 'payment_succeeded';
+    const isDeactivation = rawType.includes('membership_deactivated') || rawType.includes('went_invalid');
+    const isPaymentFailed = rawType === 'payment_failed';
+
+    if (isActivation && tenantId) {
+      // Resolver el plan interno de CredyTek
+      let newPlanId: string | null = null;
+      if (planSlug) {
+        const planRow = db.prepare('SELECT id FROM plans WHERE slug=?').get(planSlug) as any;
+        newPlanId = planRow?.id || null;
+      }
+      // Fecha de fin: renovación del membership si viene; si no, +31 días.
+      const renewalTs = data.renewal_period_end || data.expires_at || data.membership?.renewal_period_end || null;
+      const subEnd = renewalTs
+        ? new Date(typeof renewalTs === 'number' ? renewalTs * 1000 : renewalTs).toISOString()
+        : new Date(Date.now() + 31 * 86400000).toISOString();
+      const membershipId = data.id || data.membership?.id || null;
+
+      if (newPlanId) {
+        db.prepare(`UPDATE tenants
+          SET whop_membership_id=?, whop_plan_id=?, subscription_status='active',
+              plan_id=?, subscription_start=datetime('now'), subscription_end=?, updated_at=datetime('now')
+          WHERE id=?`)
+          .run(membershipId, whopPlanId, newPlanId, subEnd, tenantId);
+        applyPlanChange(db, tenantId, newPlanId);
+      } else {
+        db.prepare(`UPDATE tenants
+          SET whop_membership_id=?, subscription_status='active',
+              subscription_start=datetime('now'), subscription_end=?, updated_at=datetime('now')
+          WHERE id=?`)
+          .run(membershipId, subEnd, tenantId);
+      }
+      console.log(`[Whop] Tenant ${tenantId} suscripción ACTIVADA (plan: ${newPlanId || 'sin cambio'}, hasta ${subEnd})`);
+    } else if (isDeactivation) {
+      // Localizar tenant por metadata o por whop_membership_id
+      const membershipId = data.id || data.membership?.id || null;
+      const t = tenantId
+        ? { id: tenantId }
+        : (membershipId ? db.prepare('SELECT id FROM tenants WHERE whop_membership_id=?').get(membershipId) as any : null);
+      if (t?.id) {
+        const trialPlan = db.prepare('SELECT id FROM plans WHERE is_trial_default=1 LIMIT 1').get() as any;
+        if (trialPlan?.id) {
+          db.prepare(`UPDATE tenants SET subscription_status='cancelled', plan_id=?, updated_at=datetime('now') WHERE id=?`)
+            .run(trialPlan.id, t.id);
+          applyPlanChange(db, t.id, trialPlan.id);
+        } else {
+          db.prepare(`UPDATE tenants SET subscription_status='cancelled', updated_at=datetime('now') WHERE id=?`).run(t.id);
+        }
+        console.log(`[Whop] Tenant ${t.id} suscripción CANCELADA -> plan trial`);
+      }
+    } else if (isPaymentFailed) {
+      const membershipId = data.membership?.id || data.membership_id || null;
+      const t = tenantId
+        ? { id: tenantId }
+        : (membershipId ? db.prepare('SELECT id FROM tenants WHERE whop_membership_id=?').get(membershipId) as any : null);
+      if (t?.id) {
+        applyPastDueGrace(db, t.id);
+        console.log(`[Whop] Tenant ${t.id} pago fallido -> periodo de gracia ${PAST_DUE_GRACE_DAYS}d`);
+      }
+    } else {
+      console.log(`[Whop] Evento no accionado: ${rawType}`);
+    }
+    res.json({ received: true });
+  } catch (e: any) {
+    console.error('[Whop] Error procesando webhook:', e);
+    res.status(500).json({ error: 'Error interno' });
+  }
+};
+
+// Exportamos los handlers por separado para montarlos con raw body en index.ts
+export { webhookHandler, whopWebhookHandler };
 export default router;
