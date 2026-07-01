@@ -2741,7 +2741,7 @@ const TR: Record<string, Tri> = {
   'lp.pricing.subtitle': { es: 'Sin sorpresas. Cancela cuando quieras. Te contactamos para configurar tu cuenta sin fricción.', en: 'No surprises. Cancel anytime. We contact you to set up your account smoothly.', pt: 'Sem surpresas. Cancele quando quiser. Entramos em contato para configurar sua conta sem fricção.' },
   'lp.pricing.per_month':{ es: '/mes', en: '/mo', pt: '/mês' },
   'lp.pricing.popular':  { es: 'Más popular', en: 'Most popular', pt: 'Mais popular' },
-  'lp.pricing.note':     { es: 'Todos los precios en USD. Te contactamos para coordinar el pago (transferencia, depósito o tarjeta).', en: 'All prices in USD. We contact you to arrange payment (transfer, deposit or card).', pt: 'Todos os preços em USD. Entramos em contato para combinar o pagamento (transferência, depósito ou cartão).' },
+  'lp.pricing.note':     { es: 'Todos los precios en USD. Pago en línea seguro con tarjeta. Prueba gratis, sin tarjeta al iniciar.', en: 'All prices in USD. Secure online card payment. Free trial, no card required to start.', pt: 'Todos os preços em USD. Pagamento online seguro com cartão. Teste grátis, sem cartão para começar.' },
   'lp.plan.starter':       { es: 'Starter', en: 'Starter', pt: 'Starter' },
   'lp.plan.starter.d':     { es: 'Ideal para emprendedores que recién empiezan', en: 'Ideal for entrepreneurs just starting out', pt: 'Ideal para empreendedores que estão começando' },
   'lp.plan.basico':        { es: 'Básico', en: 'Basic', pt: 'Básico' },

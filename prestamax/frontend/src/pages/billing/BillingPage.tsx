@@ -330,8 +330,17 @@ const BillingPage: React.FC = () => {
       </div>
 
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
-        <p>El pago de la suscripcion se gestiona de forma manual con nuestro equipo. Cuando seleccionas un plan se crea una solicitud que soporte procesa contactandote por WhatsApp o email.</p>
-        <p className="mt-1">Pronto habilitaremos pago automatico con tarjeta.</p>
+        {whopEnabled ? (
+          <>
+            <p>El pago se procesa en línea de forma segura con tarjeta. Tu suscripción se activa automáticamente al completar el pago.</p>
+            <p className="mt-1">Puedes cancelar cuando quieras; mantienes el acceso hasta el fin del período pagado.</p>
+          </>
+        ) : (
+          <>
+            <p>El pago de la suscripcion se gestiona de forma manual con nuestro equipo. Cuando seleccionas un plan se crea una solicitud que soporte procesa contactandote por WhatsApp o email.</p>
+            <p className="mt-1">Pronto habilitaremos pago automatico con tarjeta.</p>
+          </>
+        )}
       </div>
 
       {/* Modal: confirmar solicitud de plan */}

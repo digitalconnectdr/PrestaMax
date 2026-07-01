@@ -4,13 +4,11 @@
 // Env vars (en Render):
 //   WHOP_API_KEY          — clave API (Bearer) para crear checkout configurations
 //   WHOP_WEBHOOK_SECRET   — secreto para verificar la firma de los webhooks
-//   WHOP_COMPANY_ID       — id de la empresa en Whop (biz_...); default abajo
 //   WHOP_PLAN_<SLUG>      — (opcional) override del plan_id por slug
 import crypto from 'crypto';
 
 const WHOP_API_KEY        = process.env.WHOP_API_KEY;
 const WHOP_WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET;
-const WHOP_COMPANY_ID     = process.env.WHOP_COMPANY_ID || 'biz_o8VurTpfNIYuaT';
 const WHOP_API_BASE       = 'https://api.whop.com/api/v1';
 
 // Mapeo slug interno de CredyTek → plan_id de Whop. Overridable por env var.
@@ -49,8 +47,9 @@ export async function createWhopCheckout(
       Authorization: `Bearer ${WHOP_API_KEY}`,
       'Content-Type': 'application/json',
     },
+    // company_id NO se envía: Whop lo infiere de la API key. Enviarlo devuelve
+    // 400 "Cannot provide company_id for this configuration".
     body: JSON.stringify({
-      company_id: WHOP_COMPANY_ID,
       plan_id: planId,
       metadata,
       redirect_url: redirectUrl,
