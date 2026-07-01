@@ -67,7 +67,13 @@ const SubscriptionExpiredBanner: React.FC = () => {
         </div>
         <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
           <button
-            onClick={() => navigate('/settings/subscription')}
+            onClick={() => {
+              if (location.pathname === '/settings/subscription') {
+                document.getElementById('cambiar-de-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              } else {
+                navigate('/settings/subscription')
+              }
+            }}
             className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2 bg-white text-orange-700 hover:bg-orange-50 rounded-lg text-sm font-bold transition-colors shadow-sm"
           >
             <CreditCard className="w-4 h-4" />Renovar suscripción

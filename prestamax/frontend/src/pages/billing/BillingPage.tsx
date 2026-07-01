@@ -255,7 +255,7 @@ const BillingPage: React.FC = () => {
       )}
 
       {/* Lista de planes */}
-      <div>
+      <div id="cambiar-de-plan" className="scroll-mt-24">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">
           {subscription?.subscriptionStatus === 'active' ? 'Cambiar de plan' : 'Elige tu plan'}
         </h2>
