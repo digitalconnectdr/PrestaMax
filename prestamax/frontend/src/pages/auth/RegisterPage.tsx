@@ -178,7 +178,7 @@ const RegisterPage: React.FC = () => {
       </div>
 
       {/* Right Panel - Form */}
-      <div className="w-full lg:w-7/12 flex items-start justify-center bg-white p-6 overflow-y-auto">
+      <div className="w-full lg:w-7/12 flex items-start justify-center bg-white p-4 sm:p-6 overflow-y-auto">
         <div className="w-full max-w-lg py-8">
           {/* Mobile header */}
           <div className="lg:hidden mb-6">
@@ -215,7 +215,7 @@ const RegisterPage: React.FC = () => {
                 />
                 {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Input
                     label={t('reg.phone')}
