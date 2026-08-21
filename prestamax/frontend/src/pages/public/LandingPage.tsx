@@ -211,10 +211,10 @@ const LandingPage: React.FC = () => {
               <LanguageSwitcher />
               <button
                 type="button"
-                onClick={() => openInquiry('')}
+                onClick={() => navigate('/register')}
                 className="px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#152a45] transition"
               >
-                {t('lp.cta.request')}
+                {t('lp.cta.register')}
               </button>
             </nav>
 
@@ -241,10 +241,10 @@ const LandingPage: React.FC = () => {
               <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.login')}</Link>
               <button
                 type="button"
-                onClick={() => openInquiry('')}
+                onClick={() => { setMobileMenuOpen(false); navigate('/register') }}
                 className="block w-full px-3 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded text-center"
               >
-                {t('lp.cta.request')}
+                {t('lp.cta.register')}
               </button>
             </div>
           )}
@@ -275,10 +275,10 @@ const LandingPage: React.FC = () => {
             <div className="lp-hero-item lp-delay-4 mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 type="button"
-                onClick={() => { trackEvent('cta_request_plan', { location: 'hero' }); openInquiry('') }}
+                onClick={() => { trackEvent('cta_register', { location: 'hero' }); navigate('/register') }}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/30 hover:scale-[1.02]"
               >
-                {t('lp.cta.request')}
+                {t('lp.cta.register')}
                 <ArrowRight className="w-4 h-4" />
               </button>
               <a
@@ -679,10 +679,10 @@ const LandingPage: React.FC = () => {
           </p>
           <button
             type="button"
-            onClick={() => { trackEvent('cta_request_plan', { location: 'cta_banner' }); openInquiry('') }}
+            onClick={() => { trackEvent('cta_register', { location: 'cta_banner' }); navigate('/register') }}
             className="mt-8 inline-flex items-center gap-2 px-8 py-3 bg-white text-[#1e3a5f] font-semibold rounded-lg hover:bg-slate-50 transition shadow-lg hover:scale-[1.02]"
           >
-            {t('lp.cta.request_mine')}
+            {t('lp.cta.register')}
             <ArrowRight className="w-4 h-4" />
           </button>
         </Reveal>
@@ -721,6 +721,22 @@ const LandingPage: React.FC = () => {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* Asesoría — formulario para quienes prefieren que los contactemos */}
+      <section className="py-14 md:py-16 bg-slate-50 border-t border-slate-200">
+        <Reveal className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-900">{t('lp.advice.title')}</h2>
+          <p className="mt-3 text-slate-600">{t('lp.advice.subtitle')}</p>
+          <button
+            type="button"
+            onClick={() => { trackEvent('cta_advice', { location: 'advice_section' }); openInquiry('') }}
+            className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/20"
+          >
+            <MessageCircle className="w-4 h-4" />
+            {t('lp.advice.cta')}
+          </button>
+        </Reveal>
       </section>
 
       {/* Respaldo de marca — JPRS Digital Connect */}
