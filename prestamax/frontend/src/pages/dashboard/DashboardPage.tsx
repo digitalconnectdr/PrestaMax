@@ -2,6 +2,7 @@ import React, { useEffect, useState, useContext } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DollarSign, TrendingUp, AlertCircle, Calendar, Users, FileText, Briefcase, Wallet, ArrowDownCircle, CheckCircle2 } from 'lucide-react'
 import { TenantContext } from '@/contexts/TenantContext'
+import OnboardingChecklist from '@/components/dashboard/OnboardingChecklist'
 import Stat from '@/components/ui/Stat'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -184,6 +185,9 @@ const DashboardPage: React.FC = () => {
         <h1 className="page-title">{t('nav.dashboard')}</h1>
         <p className="text-slate-600 text-sm mt-1">{t('dash.subtitle')}</p>
       </div>
+
+      {/* Primeros pasos — checklist guiado con progreso automático */}
+      <OnboardingChecklist />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

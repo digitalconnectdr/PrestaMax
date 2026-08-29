@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { Menu, LogOut, Search } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Menu, LogOut, Search, HelpCircle } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import NotificationBell from '@/components/shared/NotificationBell'
 import GlobalSearch from '@/components/shared/GlobalSearch'
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
+import { guideForPath } from '@/lib/helpMap'
 import { useT } from '@/lib/i18n'
 
 interface HeaderProps {
@@ -15,7 +16,13 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onMenuClick, title }) => {
   const { state, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const t = useT()
+
+  const openHelp = () => {
+    const g = guideForPath(location.pathname)
+    navigate(g ? `/help?guide=${g}` : '/help')
+  }
   const [searchOpen, setSearchOpen] = useState(false)
 
   const handleLogout = () => {
@@ -72,6 +79,14 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, title }) => {
           </button>
 
           <div className="flex items-center gap-3 flex-shrink-0">
+            <button
+              onClick={openHelp}
+              className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-[#1e3a5f] transition-colors"
+              title={t('help.button')}
+              aria-label={t('help.button')}
+            >
+              <HelpCircle className="w-5 h-5" />
+            </button>
             <LanguageSwitcher />
             <NotificationBell />
             <div className="hidden md:flex items-center gap-3">

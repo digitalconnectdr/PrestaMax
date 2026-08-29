@@ -23,6 +23,7 @@ import portalInvestorRoutes from './portal_investor';
 import searchRoutes from './search';
 import accountingRoutes from './accounting';
 import inquiriesRoutes from './inquiries';
+import onboardingRoutes from './onboarding';
 
 export const router = Router();
 
@@ -52,3 +53,4 @@ router.use('/portal/investor', portalInvestorRoutes);
 router.use('/search', searchRoutes);
 router.use('/accounting', accountingRoutes);
 router.use('/admin/inquiries', inquiriesRoutes);
+router.use('/onboarding', onboardingRoutes);

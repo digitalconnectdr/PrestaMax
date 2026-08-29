@@ -3,7 +3,7 @@
 // si no tienes acceso al modulo, la guia no aparece.
 
 import React, { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import Card from '@/components/ui/Card'
 import {
   HelpCircle, ChevronDown, ChevronUp, Users, Building2, FileText,
@@ -360,6 +360,8 @@ const GUIDES: { section: string; items: Guide[] }[] = [
 const HelpPage: React.FC = () => {
   const { can } = usePermission()
   const [openId, setOpenId] = useState<string | null>(null)
+  const [params] = useSearchParams()
+  const guideParam = params.get('guide')
 
   // Filtrar guias por permisos del usuario
   const visibleGroups = useMemo(() => {
@@ -373,12 +375,20 @@ const HelpPage: React.FC = () => {
     })).filter(group => group.items.length > 0)
   }, [can])
 
-  // Abrir el primer item visible por defecto
+  // Si llegamos con ?guide=<id> (desde el botón de ayuda contextual "?"),
+  // abrir esa guía específica y hacer scroll hasta ella. Si no, abrir la
+  // primera visible por defecto.
   React.useEffect(() => {
-    if (openId === null && visibleGroups.length > 0 && visibleGroups[0].items.length > 0) {
+    if (openId !== null || visibleGroups.length === 0) return
+    if (guideParam && visibleGroups.some(g => g.items.some(i => i.id === guideParam))) {
+      setOpenId(guideParam)
+      setTimeout(() => {
+        document.getElementById(`guide-${guideParam}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+    } else if (visibleGroups[0].items.length > 0) {
       setOpenId(visibleGroups[0].items[0].id)
     }
-  }, [visibleGroups, openId])
+  }, [visibleGroups, openId, guideParam])
 
   const totalVisible = visibleGroups.reduce((sum, g) => sum + g.items.length, 0)
   const totalHidden = GUIDES.reduce((sum, g) => sum + g.items.length, 0) - totalVisible
@@ -430,7 +440,7 @@ const HelpPage: React.FC = () => {
           {group.items.map((g) => {
             const isOpen = openId === g.id
             return (
-              <Card key={g.id} className="overflow-hidden p-0">
+              <Card key={g.id} id={`guide-${g.id}`} className={`overflow-hidden p-0 scroll-mt-20 ${g.id === guideParam ? 'ring-2 ring-[#1e3a5f]/40' : ''}`}>
                 <button
                   onClick={() => setOpenId(isOpen ? null : g.id)}
                   className="w-full flex items-center justify-between gap-3 p-4 hover:bg-slate-50 transition text-left"
