@@ -36,6 +36,7 @@
     "react-simple-maps": "^3.0.0",
     "recharts": "^2.12.2",
     "tailwind-merge": "^2.2.1",
+    "world-atlas": "^2.0.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {

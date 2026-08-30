@@ -10,8 +10,10 @@ import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-
-const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
+// Empaquetado localmente (no via CDN externo): la CSP de producción solo permite
+// conexiones a dominios propios/whitelisted, así que un fetch a un CDN quedaría
+// bloqueado silenciosamente y el mapa se vería en blanco.
+import worldCountriesUrl from 'world-atlas/countries-110m.json?url'
 
 interface CityRow { country: string; city: string | null; lat: number | null; lng: number | null; count: number }
 interface CountryRow { country: string; count: number }
@@ -106,7 +108,7 @@ const GeographyPanel: React.FC = () => {
       <Card className="p-0 overflow-hidden">
         <div className="relative bg-slate-50">
           <ComposableMap projectionConfig={{ scale: 140 }} width={800} height={420} style={{ width: '100%', height: 'auto' }}>
-            <Geographies geography={GEO_URL}>
+            <Geographies geography={worldCountriesUrl}>
               {({ geographies }) =>
                 geographies.map(geo => (
                   <Geography key={geo.rsmKey} geography={geo} fill="#e2e8f0" stroke="#cbd5e1" strokeWidth={0.5} style={{ default: { outline: 'none' }, hover: { outline: 'none', fill: '#cbd5e1' }, pressed: { outline: 'none' } }} />
