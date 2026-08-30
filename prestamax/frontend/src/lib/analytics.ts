@@ -30,3 +30,18 @@ export function trackEvent(name: string, params?: Record<string, any>): void {
   if (!isAnalyticsEnabled()) return
   window.gtag!('event', name, params || {})
 }
+
+/**
+ * Registra una visita al landing en nuestra propia base de datos (geolocalizada
+ * por IP en el backend) para el mapa de "Geografía" del Admin Panel.
+ * Independiente de GA4: fire-and-forget, nunca debe afectar la carga de la página.
+ */
+export function trackLandingVisit(path: string): void {
+  const base = (import.meta as any).env?.VITE_API_URL || '/api'
+  fetch(`${base}/public/track-visit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+    keepalive: true,
+  }).catch(() => { /* silencioso: el tracking nunca debe romper la UX */ })
+}

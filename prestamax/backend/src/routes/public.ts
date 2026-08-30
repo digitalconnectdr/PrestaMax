@@ -1,8 +1,26 @@
 import { Router, Request, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
 import { sendInquiryNotification } from '../services/emailService';
+import { getClientIp, geolocateIp } from '../services/geoService';
 
 const router = Router();
+
+// Trackea una visita al landing page (para el mapa de "visitantes" en Admin Panel).
+// Publico, sin auth. Geolocaliza por IP; no guarda ningun dato personal aparte de eso.
+router.post('/track-visit', (req: Request, res: Response) => {
+  try {
+    const path = typeof req.body?.path === 'string' ? req.body.path.slice(0, 200) : '/';
+    const geo = geolocateIp(getClientIp(req));
+    const db = getDb();
+    db.prepare(`INSERT INTO page_views (id, path, country, city, lat, lng, ip_address, created_at)
+      VALUES (?,?,?,?,?,?,?,datetime('now'))`)
+      .run(uuid(), path, geo?.country || null, geo?.city || null, geo?.lat ?? null, geo?.lng ?? null, getClientIp(req));
+    res.status(204).end();
+  } catch (_e) {
+    // Nunca debe romper la experiencia del visitante por un fallo de tracking.
+    res.status(204).end();
+  }
+});
 
 // GET tenant info by public token (for the loan request form page header)
 router.get('/apply/:token', (req: Request, res: Response) => {

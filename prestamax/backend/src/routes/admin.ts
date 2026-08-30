@@ -476,6 +476,49 @@ router.get('/stats', authenticate, requirePlatformAdmin, (req: AuthRequest, res:
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
+// GET geolocalizacion agregada: visitantes del landing (page_views) y empresas
+// registradas (tenants.geo_*), agrupados por ciudad para pintar en un mapa.
+router.get('/geography', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const visitorsByCity = db.prepare(`
+      SELECT country, city, AVG(lat) as lat, AVG(lng) as lng, COUNT(*) as count
+      FROM page_views
+      WHERE country IS NOT NULL
+      GROUP BY country, COALESCE(city, '')
+      ORDER BY count DESC
+    `).all() as any[];
+    const visitorsByCountry = db.prepare(`
+      SELECT country, COUNT(*) as count
+      FROM page_views
+      WHERE country IS NOT NULL
+      GROUP BY country
+      ORDER BY count DESC
+    `).all() as any[];
+    const tenantsByCity = db.prepare(`
+      SELECT geo_country as country, geo_city as city, AVG(geo_lat) as lat, AVG(geo_lng) as lng, COUNT(*) as count
+      FROM tenants
+      WHERE geo_country IS NOT NULL
+      GROUP BY geo_country, COALESCE(geo_city, '')
+      ORDER BY count DESC
+    `).all() as any[];
+    const tenantsByCountry = db.prepare(`
+      SELECT geo_country as country, COUNT(*) as count
+      FROM tenants
+      WHERE geo_country IS NOT NULL
+      GROUP BY geo_country
+      ORDER BY count DESC
+    `).all() as any[];
+    const totalVisits = (db.prepare('SELECT COUNT(*) as c FROM page_views').get() as any).c;
+    const totalTenantsWithGeo = (db.prepare('SELECT COUNT(*) as c FROM tenants WHERE geo_country IS NOT NULL').get() as any).c;
+    const totalTenants = (db.prepare('SELECT COUNT(*) as c FROM tenants').get() as any).c;
+    res.json({
+      visitorsByCity, visitorsByCountry, tenantsByCity, tenantsByCountry,
+      totalVisits, totalTenantsWithGeo, totalTenants,
+    });
+  } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
 // ── Backups: VACUUM INTO atomico + gzip + retencion automatica ───────────────
 // Implementacion en services/backupService.ts (compartido con el cron diario).
 import { createBackup as svcCreateBackup, listBackups as svcListBackups,

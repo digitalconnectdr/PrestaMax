@@ -9,7 +9,7 @@ import {
   Download, Database, CheckCircle, XCircle, AlertCircle, RefreshCw, Crown,
   Calendar, Clock, RotateCcw, ChevronDown, ChevronUp, Edit2, X, Info,
   Trash2, Save, Activity, HardDrive, FileText, ClipboardList, Plus, Eye, EyeOff, KeyRound,
-  Lock, Unlock, Settings2
+  Lock, Unlock, Settings2, MapPin
 } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { PERM_BY_MODULE, PERM_DEFS, PermKey } from '@/lib/permissions'
@@ -177,12 +177,13 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   update_settings: { label: 'Configuración actualizada', color: 'bg-slate-100 text-slate-700' },
 }
 import InquiriesPanel from '@/components/admin/InquiriesPanel'
+import GeographyPanel from '@/components/admin/GeographyPanel'
 import { MessageSquare } from 'lucide-react'
 
 const PlatformAdminPage: React.FC = () => {
   const { state } = useAuth()
   const [searchParams] = useSearchParams()
-  const validTabs = ['overview','tenants','plans','users','logs','backup','inquiries']
+  const validTabs = ['overview','tenants','plans','users','logs','backup','inquiries','geography']
   const initialTab = validTabs.includes(searchParams.get('tab') || '') ? (searchParams.get('tab') as string) : 'overview'
   const [activeTab, setActiveTab] = useState(initialTab)
   const [isLoading, setIsLoading] = useState(true)
@@ -741,6 +742,7 @@ const PlatformAdminPage: React.FC = () => {
     { id: 'logs', label: 'Logs', icon: ClipboardList },
     { id: 'backup', label: 'Backups', icon: Database },
     { id: 'inquiries', label: 'Solicitudes', icon: MessageSquare },
+    { id: 'geography', label: 'Geografía', icon: MapPin },
   ]
 
   // Show bootstrap UI if user is logged in but not yet platform admin
@@ -2096,6 +2098,11 @@ const PlatformAdminPage: React.FC = () => {
             {/* ── INQUIRIES (Solicitudes de Plan desde landing) ── */}
       {activeTab === 'inquiries' && (
         <InquiriesPanel />
+      )}
+
+      {/* ── GEOGRAPHY (mapa de visitantes/empresas por ciudad) ── */}
+      {activeTab === 'geography' && (
+        <GeographyPanel />
       )}
 
       {/* ── MODAL: Confirmar Purga de Datos de Empresa ── */}

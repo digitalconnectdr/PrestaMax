@@ -33,7 +33,7 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 import ShareButton from '@/components/shared/ShareButton'
 import { useT } from '@/lib/i18n'
 import { Reveal, AnimatedCounter } from '@/components/shared/Reveal'
-import { trackEvent } from '@/lib/analytics'
+import { trackEvent, trackLandingVisit } from '@/lib/analytics'
 
 type TFn = (key: string) => string
 interface Plan {
@@ -181,6 +181,7 @@ const LandingPage: React.FC = () => {
   }
   const [openFaq, setOpenFaq] = useState<number | null>(0)
   const [scrolled, setScrolled] = useState(false)
+  useEffect(() => { trackLandingVisit('/') }, [])
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
     onScroll()

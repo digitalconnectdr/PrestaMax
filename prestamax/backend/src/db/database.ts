@@ -947,6 +947,30 @@ export function initializeDatabase(): void {
     db.exec(`UPDATE clients SET score = MIN(100, MAX(0, ROUND(score * 20))) WHERE score IS NOT NULL AND score BETWEEN 1 AND 5`);
   } catch(_) {}
 
+  // ── Geolocalizacion (mapa de empresas/visitantes en Admin Panel) ──────────
+  // geo_city/geo_country son distintos de la columna "city" ya existente
+  // (esa es la ciudad notarial de documentos legales, texto libre del tenant).
+  // Estas se llenan automaticamente por IP al registrarse, no por el usuario.
+  try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_country TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_city TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lat REAL`); } catch(_) {}
+  try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lng REAL`); } catch(_) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS page_views (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      country TEXT,
+      city TEXT,
+      lat REAL,
+      lng REAL,
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_page_views_country ON page_views(country);
+    CREATE INDEX IF NOT EXISTS idx_page_views_created ON page_views(created_at);
+  `);
+
   // Audit log enrichment columns (for existing databases without them)
   try { db.exec(`ALTER TABLE audit_logs ADD COLUMN user_name TEXT NOT NULL DEFAULT 'Sistema'`); } catch(_) {}
   try { db.exec(`ALTER TABLE audit_logs ADD COLUMN user_email TEXT`); } catch(_) {}

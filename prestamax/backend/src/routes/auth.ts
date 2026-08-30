@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { getDb, uuid, now } from '../db/database';
 import { authenticate, AuthRequest, isPlatformStaff } from '../middleware/auth';
 import { computePermissions } from '../lib/permissions';
+import { getClientIp, geolocateIp } from '../services/geoService';
 
 const router = Router();
 
@@ -186,9 +187,12 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     const trialEnd = isStartingWithPaidPlan
       ? null
       : new Date(Date.now() + trialDaysGranted * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`INSERT INTO tenants (id,name,slug,email,phone,currency,plan_id,subscription_status,subscription_start,subscription_end,is_active,created_at)
-      VALUES (?,?,?,?,?,?,?,?,datetime('now'),?,1,datetime('now'))`)
-      .run(tenantId, company_name.trim(), slug, normalizedEmail, phone || null, currency, effectivePlanId, initialStatus, trialEnd);
+    // Geolocalizacion automatica por IP (para el mapa de "empresas registradas" en Admin Panel)
+    const signupGeo = geolocateIp(getClientIp(req));
+    db.prepare(`INSERT INTO tenants (id,name,slug,email,phone,currency,plan_id,subscription_status,subscription_start,subscription_end,is_active,created_at,geo_country,geo_city,geo_lat,geo_lng)
+      VALUES (?,?,?,?,?,?,?,?,datetime('now'),?,1,datetime('now'),?,?,?,?)`)
+      .run(tenantId, company_name.trim(), slug, normalizedEmail, phone || null, currency, effectivePlanId, initialStatus, trialEnd,
+        signupGeo?.country || null, signupGeo?.city || null, signupGeo?.lat ?? null, signupGeo?.lng ?? null);
 
     // Marcar email como ya-uso-trial (solo si realmente esta usando trial)
     if (!trialAlreadyUsed && !isStartingWithPaidPlan) {
