@@ -23,6 +23,11 @@ interface Status {
 }
 
 const HIDE_KEY = 'credytek_onboarding_hidden'
+// Se dispara UNA sola vez por navegador: si el tenant entra con la cartera
+// vacía, lo guiamos directo a crear su primer cliente en vez de esperar a
+// que descubra el botón "Guíame" por su cuenta. Reduce fricción en el primer
+// contacto real con la app (el momento donde más gente se pierde y no vuelve).
+const AUTO_TOUR_KEY = 'credytek_auto_tour_shown'
 
 const OnboardingChecklist: React.FC = () => {
   const t = useT()
@@ -52,6 +57,24 @@ const OnboardingChecklist: React.FC = () => {
   const startTour = (tourId: string) => {
     runTour(tourId, getTourSteps(tourId, t), navigate, getTourLabels(t))
   }
+
+  useEffect(() => {
+    if (!status || status.client) return
+    let cancelled = false
+    // El flag se marca AL DISPARAR el tour (no al programar el timer): en
+    // desarrollo StrictMode monta/limpia/remonta este efecto una vez, y si
+    // marcáramos el flag de inmediato, la limpieza cancelaría el timer pero
+    // el remonte real ya vería el flag puesto y nunca lanzaría el tour.
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      try {
+        if (localStorage.getItem(AUTO_TOUR_KEY) === '1') return
+        localStorage.setItem(AUTO_TOUR_KEY, '1')
+      } catch { return }
+      startTour('client')
+    }, 700)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [status])
 
   if (!status) return null
 

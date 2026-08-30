@@ -1038,6 +1038,16 @@ const PlatformAdminPage: React.FC = () => {
                 </div>
               )}
 
+              {tenants.some(t => t.isActive && t.loanCount === 0 && t.clientCount === 0) && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5"/>
+                  <div className="text-sm text-orange-800">
+                    <strong>{tenants.filter(t => t.isActive && t.loanCount === 0 && t.clientCount === 0).length} empresa(s) sin actividad</strong>
+                    {' '}— se registraron pero nunca cargaron un cliente ni un préstamo. Puede valer la pena contactarlas para ver si necesitan ayuda con el onboarding.
+                  </div>
+                </div>
+              )}
+
               {tenants.length > 0 ? (
                 <div className="space-y-3">
                   {tenants.map(t => {
@@ -1066,6 +1076,11 @@ const PlatformAdminPage: React.FC = () => {
                               )}
                               {!t.planName && (
                                 <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Sin plan</span>
+                              )}
+                              {t.loanCount === 0 && t.clientCount === 0 && (
+                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-orange-200 bg-orange-50 text-orange-700 font-medium" title="Nunca registró un cliente ni un préstamo — puede necesitar ayuda para arrancar">
+                                  ⚠️ Sin actividad
+                                </span>
                               )}
                             </div>
                             <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5">

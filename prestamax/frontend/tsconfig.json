@@ -8,6 +8,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
+    "noEmit": true,
     "resolveJsonModule": true,
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
