@@ -330,7 +330,7 @@ const RegisterPage: React.FC = () => {
                   <option value="">{t('reg.plan_trial')}</option>
                   {plans.map(p => (
                     <option key={p.id} value={p.id}>
-                      {t('reg.plan_option').replace('{name}', p.name).replace('{price}', String(p.priceMonthly)).replace('{days}', String(p.trialDays || 10))}
+                      {t('reg.plan_option').replace('{name}', p.name).replace('{price}', String(p.priceMonthly)).replace('{days}', String(p.trialDays || 14))}
                     </option>
                   ))}
                 </select>

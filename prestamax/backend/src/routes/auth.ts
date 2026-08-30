@@ -173,15 +173,19 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     }
 
     // 2. Crear tenant
-    const trialPlan = plan_id ? null : (db.prepare('SELECT id FROM plans WHERE is_trial_default=1 LIMIT 1').get() as any);
+    const trialPlan = plan_id ? null : (db.prepare('SELECT id, trial_days FROM plans WHERE is_trial_default=1 LIMIT 1').get() as any);
     const effectivePlanId = plan_id || trialPlan?.id || null;
     const tenantId = uuid();
     // Si el usuario selecciono un plan pago, NO le damos trial - se cobra desde el inicio
     const isStartingWithPaidPlan = !!plan_id;
     const initialStatus = isStartingWithPaidPlan ? 'pending' : 'trial';
+    // FIX (jun 2026): antes usaba un numero fijo (10 dias) desincronizado del
+    // valor real anunciado en el landing/registro (14 dias). Ahora se lee
+    // trial_days del plan trial-default -> una sola fuente de verdad.
+    const trialDaysGranted = trialPlan?.trial_days ?? 14;
     const trialEnd = isStartingWithPaidPlan
       ? null
-      : new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+      : new Date(Date.now() + trialDaysGranted * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`INSERT INTO tenants (id,name,slug,email,phone,currency,plan_id,subscription_status,subscription_start,subscription_end,is_active,created_at)
       VALUES (?,?,?,?,?,?,?,?,datetime('now'),?,1,datetime('now'))`)
       .run(tenantId, company_name.trim(), slug, normalizedEmail, phone || null, currency, effectivePlanId, initialStatus, trialEnd);

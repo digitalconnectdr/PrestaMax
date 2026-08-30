@@ -212,15 +212,25 @@ router.get('/tenants', authenticate, requirePlatformAdmin, (req: AuthRequest, re
         if (daysRemaining < 0 && subscriptionStatus === 'active') subscriptionStatus = 'expired';
       }
 
-      // Trial countdown: based on created_at + plan trial_days
+      // Trial countdown: SIEMPRE a partir de subscription_end (fuente única de
+      // verdad, editable por el admin). FIX P0 (jun 2026): antes se recalculaba
+      // desde created_at + trial_days del plan, ignorando por completo cualquier
+      // extension manual de la fecha de vencimiento -> el contador quedaba
+      // "congelado" en el valor original aunque el admin alargara subscription_end.
+      // Fallback (subscription_end nulo, caso raro) usa trial_days como antes.
       let trialDaysRemaining: number | null = null;
       let trialEndDate: string | null = null;
       if (subscriptionStatus === 'trial') {
-        const trialDays = t.trial_days ?? 10;
-        const startDate = new Date(t.subscription_start || t.created_at);
-        const trialEnd = new Date(startDate.getTime() + trialDays * 24 * 60 * 60 * 1000);
-        trialEndDate = trialEnd.toISOString().slice(0, 10);
-        trialDaysRemaining = Math.ceil((trialEnd.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (t.subscription_end) {
+          trialEndDate = new Date(t.subscription_end).toISOString().slice(0, 10);
+          trialDaysRemaining = daysRemaining;
+        } else {
+          const trialDays = t.trial_days ?? 10;
+          const startDate = new Date(t.subscription_start || t.created_at);
+          const trialEnd = new Date(startDate.getTime() + trialDays * 24 * 60 * 60 * 1000);
+          trialEndDate = trialEnd.toISOString().slice(0, 10);
+          trialDaysRemaining = Math.ceil((trialEnd.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+        }
       }
 
       return { ...t, daysRemaining, subscriptionStatus, trialDaysRemaining, trialEndDate };
@@ -622,11 +632,13 @@ router.get('/my-subscription', authenticate, (req: AuthRequest, res: Response) =
     const clientCount = (db.prepare(`SELECT COUNT(*) as c FROM clients WHERE tenant_id=? AND is_active=1`).get(tenantId) as any).c;
     const collectorCount = (db.prepare(`SELECT COUNT(*) as c FROM tenant_memberships tm WHERE tm.tenant_id=? AND tm.is_active=1 AND JSON_EXTRACT(tm.roles,'$') LIKE '%collector%'`).get(tenantId) as any).c;
 
-    // Trial countdown
+    // Trial countdown — a partir de subscription_end (fuente única de verdad).
+    // FIX (jun 2026): usaba tenant.trial_end, una columna que no existe en el
+    // schema -> siempre devolvía null en silencio.
     const subscriptionStatus = tenant.subscription_status || 'trial';
     let trialDaysRemaining: number | null = null;
-    let trialEndDate = tenant.trial_end ? new Date(tenant.trial_end) : null;
-    if (trialEndDate) {
+    let trialEndDate = tenant.subscription_end ? new Date(tenant.subscription_end) : null;
+    if (trialEndDate && subscriptionStatus === 'trial') {
       trialDaysRemaining = Math.max(0, Math.ceil((trialEndDate.getTime() - todayDate.getTime()) / (1000*60*60*24)));
     }
 
