@@ -7,6 +7,14 @@
     <meta name="theme-color" content="#1e3a5f" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Google Fonts: preconnect + <link> en vez de @import en CSS. @import
+         serializa 3 round-trips (CSS -> fonts.googleapis.com -> fonts.gstatic.com)
+         antes de poder pintar texto, lo que golpea el LCP. Con preconnect el
+         navegador abre la conexión en paralelo a la descarga del HTML/JS. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" />
+
     <!-- Google tag (gtag.js) — GA4. Estático en el <head> para que la
          recolección de datos y la verificación de Search Console (método
          Google Analytics) funcionen de forma confiable. El Measurement ID
