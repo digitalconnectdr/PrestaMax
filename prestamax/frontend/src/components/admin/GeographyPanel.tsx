@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps'
-import { MapPin, Users, Globe2, RefreshCw } from 'lucide-react'
+import { MapPin, Users, Globe2, RefreshCw, CalendarDays, TrendingUp, DollarSign, Building2 } from 'lucide-react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import Card from '@/components/ui/Card'
@@ -17,6 +17,7 @@ import worldCountriesUrl from 'world-atlas/countries-110m.json?url'
 
 interface CityRow { country: string; city: string | null; lat: number | null; lng: number | null; count: number }
 interface CountryRow { country: string; count: number }
+interface RevenueRow { country: string; tenantCount: number; activeCount: number; monthlyRevenue: number }
 interface GeographyData {
   visitorsByCity: CityRow[]
   visitorsByCountry: CountryRow[]
@@ -25,6 +26,10 @@ interface GeographyData {
   totalVisits: number
   totalTenantsWithGeo: number
   totalTenants: number
+  visitsToday: number
+  visitsLast7Days: number
+  visitsLast30Days: number
+  revenueByCountry: RevenueRow[]
 }
 
 // Nombres legibles para los codigos ISO-2 mas comunes entre los clientes de CredyTek.
@@ -81,21 +86,6 @@ const GeographyPanel: React.FC = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg"><Users className="w-5 h-5 text-blue-700" /></div>
-          <div><div className="text-2xl font-bold text-slate-800">{data.totalVisits}</div><div className="text-xs text-slate-500">Visitas al landing registradas</div></div>
-        </Card>
-        <Card className="p-4 flex items-center gap-3">
-          <div className="p-2 bg-amber-100 rounded-lg"><Globe2 className="w-5 h-5 text-amber-700" /></div>
-          <div><div className="text-2xl font-bold text-slate-800">{data.totalTenantsWithGeo}<span className="text-sm text-slate-400 font-normal"> / {data.totalTenants}</span></div><div className="text-xs text-slate-500">Empresas con ubicación detectada</div></div>
-        </Card>
-        <Card className="p-4 flex items-center gap-3">
-          <div className="p-2 bg-slate-100 rounded-lg"><MapPin className="w-5 h-5 text-slate-700" /></div>
-          <div><div className="text-2xl font-bold text-slate-800">{byCountry.length}</div><div className="text-xs text-slate-500">Países distintos ({dataset === 'visitors' ? 'visitantes' : 'empresas'})</div></div>
-        </Card>
-      </div>
-
       <div className="flex gap-2 border-b border-slate-200">
         {(['visitors', 'tenants'] as Dataset[]).map(d => (
           <button key={d} onClick={() => setDataset(d)}
@@ -104,6 +94,46 @@ const GeographyPanel: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {dataset === 'visitors' ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-blue-100 rounded-lg"><Users className="w-5 h-5 text-blue-700" /></div>
+            <div><div className="text-2xl font-bold text-slate-800">{data.totalVisits}</div><div className="text-xs text-slate-500">Visitas totales</div></div>
+          </Card>
+          <Card className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-emerald-100 rounded-lg"><CalendarDays className="w-5 h-5 text-emerald-700" /></div>
+            <div><div className="text-2xl font-bold text-slate-800">{data.visitsToday}</div><div className="text-xs text-slate-500">Visitas hoy</div></div>
+          </Card>
+          <Card className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-indigo-100 rounded-lg"><TrendingUp className="w-5 h-5 text-indigo-700" /></div>
+            <div><div className="text-2xl font-bold text-slate-800">{data.visitsLast7Days}</div><div className="text-xs text-slate-500">Últimos 7 días</div></div>
+          </Card>
+          <Card className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-slate-100 rounded-lg"><MapPin className="w-5 h-5 text-slate-700" /></div>
+            <div><div className="text-2xl font-bold text-slate-800">{byCountry.length}</div><div className="text-xs text-slate-500">Países distintos</div></div>
+          </Card>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-amber-100 rounded-lg"><Globe2 className="w-5 h-5 text-amber-700" /></div>
+            <div><div className="text-2xl font-bold text-slate-800">{data.totalTenantsWithGeo}<span className="text-sm text-slate-400 font-normal"> / {data.totalTenants}</span></div><div className="text-xs text-slate-500">Con ubicación detectada</div></div>
+          </Card>
+          <Card className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-green-100 rounded-lg"><Building2 className="w-5 h-5 text-green-700" /></div>
+            <div><div className="text-2xl font-bold text-slate-800">{data.revenueByCountry.reduce((s, r) => s + r.activeCount, 0)}</div><div className="text-xs text-slate-500">Suscripciones activas</div></div>
+          </Card>
+          <Card className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-emerald-100 rounded-lg"><DollarSign className="w-5 h-5 text-emerald-700" /></div>
+            <div><div className="text-2xl font-bold text-slate-800">${data.revenueByCountry.reduce((s, r) => s + (r.monthlyRevenue || 0), 0).toFixed(0)}</div><div className="text-xs text-slate-500">Ingreso mensual estimado</div></div>
+          </Card>
+          <Card className="p-4 flex items-center gap-3">
+            <div className="p-2 bg-slate-100 rounded-lg"><MapPin className="w-5 h-5 text-slate-700" /></div>
+            <div><div className="text-2xl font-bold text-slate-800">{byCountry.length}</div><div className="text-xs text-slate-500">Países distintos</div></div>
+          </Card>
+        </div>
+      )}
 
       <Card className="p-0 overflow-hidden">
         <div className="relative bg-slate-50">
@@ -162,6 +192,25 @@ const GeographyPanel: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      {dataset === 'tenants' && (
+        <Card className="p-4">
+          <h3 className="font-semibold text-slate-800 mb-1">Ingreso mensual estimado por país</h3>
+          <p className="text-xs text-slate-500 mb-3">Solo suscripciones activas — el mejor indicador de dónde invertir en publicidad, no solo el volumen de registros.</p>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {data.revenueByCountry.length === 0 && <p className="text-sm text-slate-400">Sin datos aún.</p>}
+            {data.revenueByCountry.map(r => (
+              <div key={r.country} className="flex items-center justify-between text-sm py-1.5 border-b border-slate-100 last:border-0">
+                <span className="text-slate-700">
+                  {countryLabel(r.country)}
+                  <span className="text-slate-400"> · {r.activeCount} activa{r.activeCount === 1 ? '' : 's'} de {r.tenantCount}</span>
+                </span>
+                <span className="font-semibold text-emerald-700">${(r.monthlyRevenue || 0).toFixed(0)}/mes</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

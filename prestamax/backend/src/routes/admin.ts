@@ -512,9 +512,25 @@ router.get('/geography', authenticate, requirePlatformAdmin, (req: AuthRequest, 
     const totalVisits = (db.prepare('SELECT COUNT(*) as c FROM page_views').get() as any).c;
     const totalTenantsWithGeo = (db.prepare('SELECT COUNT(*) as c FROM tenants WHERE geo_country IS NOT NULL').get() as any).c;
     const totalTenants = (db.prepare('SELECT COUNT(*) as c FROM tenants').get() as any).c;
+    const visitsToday = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE date(created_at) = date('now')`).get() as any).c;
+    const visitsLast7Days = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now','-7 days')`).get() as any).c;
+    const visitsLast30Days = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now','-30 days')`).get() as any).c;
+    // Ingreso mensual estimado por pais (solo suscripciones activas) — para decidir
+    // donde enfocar publicidad segun de donde viene la facturacion, no solo el volumen.
+    const revenueByCountry = db.prepare(`
+      SELECT t.geo_country as country,
+             COUNT(t.id) as tenantCount,
+             SUM(CASE WHEN t.subscription_status='active' THEN 1 ELSE 0 END) as activeCount,
+             SUM(CASE WHEN t.subscription_status='active' THEN p.price_monthly ELSE 0 END) as monthlyRevenue
+      FROM tenants t LEFT JOIN plans p ON p.id = t.plan_id
+      WHERE t.geo_country IS NOT NULL
+      GROUP BY t.geo_country
+      ORDER BY monthlyRevenue DESC
+    `).all() as any[];
     res.json({
       visitorsByCity, visitorsByCountry, tenantsByCity, tenantsByCountry,
       totalVisits, totalTenantsWithGeo, totalTenants,
+      visitsToday, visitsLast7Days, visitsLast30Days, revenueByCountry,
     });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
