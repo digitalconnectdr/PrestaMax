@@ -15,6 +15,20 @@ interface SidebarProps {
   onClose?: () => void
 }
 
+// Marca los ítems del menú usados como "punto de partida" en los recorridos
+// guiados (ver src/lib/tourEngine.ts). El id debe coincidir con el selector
+// [data-tour="..."] usado en cada tour.
+const NAV_TOUR_MAP: Record<string, string> = {
+  '/settings/bank-accounts': 'nav-bank-accounts',
+  '/settings/products':      'nav-products',
+  '/clients':                'nav-clients',
+  '/loans':                  'nav-loans',
+  '/payments':               'nav-payments',
+  '/requests':                'nav-requests',
+  '/collections':            'nav-collections',
+  '/collections/promises':  'nav-promises',
+}
+
 const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -166,6 +180,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
                   return (
                     <button
                       key={item.path}
+                      data-tour={NAV_TOUR_MAP[item.path]}
                       onClick={() => { navigate(item.path); onClose?.() }}
                       title={item.label}
                       className={cn('sidebar-link w-full text-left', collapsed && 'lg:justify-center lg:px-2', active && 'bg-white/15 text-white font-medium')}

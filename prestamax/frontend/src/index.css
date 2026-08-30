@@ -101,3 +101,47 @@ html { scroll-behavior: smooth; }
   html { scroll-behavior: auto; }
   .reveal, .reveal.is-visible, .lp-hero-item, .lp-card-hover, .lp-float, .lp-blob { animation: none !important; opacity: 1 !important; transform: none !important; transition: none !important; }
 }
+
+/* Recorridos guiados interactivos (driver.js) — estilo de marca CredyTek */
+.credytek-tour-popover.driver-popover {
+  max-width: 340px;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 12px 32px -8px rgba(30, 58, 95, 0.35);
+}
+.credytek-tour-popover .driver-popover-title {
+  color: #1e3a5f;
+  font-size: 16px;
+}
+.credytek-tour-popover .driver-popover-description {
+  color: #475569;
+  font-size: 13.5px;
+}
+.credytek-tour-popover .driver-popover-progress-text {
+  color: #94a3b8;
+  font-weight: 600;
+}
+.credytek-tour-popover .driver-popover-footer-btn.driver-popover-next-btn {
+  background-color: #1e3a5f;
+  color: #fff;
+  border-color: #1e3a5f;
+  font-weight: 600;
+  padding: 6px 14px;
+}
+.credytek-tour-popover .driver-popover-footer-btn.driver-popover-next-btn:hover {
+  background-color: #152a45;
+}
+.credytek-tour-popover .driver-popover-footer-btn.driver-popover-prev-btn {
+  color: #1e3a5f;
+  border-color: #cbd5e1;
+}
+.credytek-tour-skip-btn {
+  all: unset;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 4px 6px;
+  align-self: center;
+}
+.credytek-tour-skip-btn:hover { color: #1e3a5f; text-decoration: underline; }

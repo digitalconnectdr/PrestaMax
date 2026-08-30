@@ -230,7 +230,7 @@ const LoanRequestsPage: React.FC = () => {
           <p className="text-slate-500 text-sm mt-0.5">{t('req.subtitle')}</p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowLinkPanel(!showLinkPanel)} className="flex items-center gap-1.5">
+          <Button data-tour="show-link-btn" size="sm" variant="outline" onClick={() => setShowLinkPanel(!showLinkPanel)} className="flex items-center gap-1.5">
             <Link2 className="w-4 h-4" />{t('req.portal_link')}
           </Button>
           <Button size="sm" variant="outline" onClick={loadRequests} className="flex items-center gap-1">

@@ -406,7 +406,7 @@ const LoansPage: React.FC = () => {
             </button>
           )}
           {can('loans.create') && (
-            <Button onClick={() => navigate('/loans/new')} className="flex items-center gap-2">
+            <Button data-tour="new-loan-btn" onClick={() => navigate('/loans/new')} className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
               {t('dash.quick.new_loan')}
             </Button>

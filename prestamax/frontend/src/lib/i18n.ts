@@ -101,7 +101,7 @@ const TR: Record<string, Tri> = {
   'onb.done_all':      { es: '¡Listo! Ya configuraste lo esencial de CredyTek. 🎉', en: 'Done! You set up the essentials of CredyTek. 🎉', pt: 'Pronto! Você configurou o essencial da CredyTek. 🎉' },
   'onb.hide':          { es: 'Ocultar', en: 'Hide', pt: 'Ocultar' },
   'onb.show':          { es: 'Ver primeros pasos', en: 'Show getting started', pt: 'Ver primeiros passos' },
-  'onb.go':            { es: 'Ir', en: 'Go', pt: 'Ir' },
+  'onb.go':            { es: 'Guíame', en: 'Guide me', pt: 'Me guie' },
   'onb.guide':         { es: 'Ver guía', en: 'View guide', pt: 'Ver guia' },
   'onb.done':          { es: 'Hecho', en: 'Done', pt: 'Feito' },
   'onb.s.bank':        { es: 'Crea tu cuenta bancaria', en: 'Create your bank account', pt: 'Crie sua conta bancária' },
@@ -118,6 +118,54 @@ const TR: Record<string, Tri> = {
   'onb.s.link_d':      { es: 'Enlace único para que tus clientes soliciten préstamos.', en: 'Unique link for clients to request loans.', pt: 'Link único para seus clientes solicitarem empréstimos.' },
   'onb.s.promise':     { es: 'Explora Mi Cartera y registra una promesa', en: 'Explore My Portfolio and log a promise', pt: 'Explore Minha Carteira e registre uma promessa' },
   'onb.s.promise_d':   { es: 'Pestañas "Cartera" (cuotas vencidas) y "Agenda" (tareas). Registra una promesa de pago cuando un cliente prometa pagar en una fecha.', en: '"Portfolio" (overdue) and "Agenda" (tasks) tabs. Log a promise when a client commits to a payment date.', pt: 'Abas "Carteira" (vencidas) e "Agenda" (tarefas). Registre uma promessa quando um cliente se comprometer com uma data.' },
+
+  // Recorridos guiados interactivos (tourEngine.ts / tours.ts)
+  'tour.next':  { es: 'Siguiente', en: 'Next', pt: 'Próximo' },
+  'tour.prev':  { es: 'Anterior', en: 'Previous', pt: 'Anterior' },
+  'tour.done':  { es: 'Finalizar', en: 'Finish', pt: 'Concluir' },
+  'tour.skip':  { es: 'Saltar', en: 'Skip', pt: 'Pular' },
+  'tour.of':    { es: 'de', en: 'of', pt: 'de' },
+
+  'tour.bank.1.t': { es: 'Cuentas Bancarias', en: 'Bank Accounts', pt: 'Contas Bancárias' },
+  'tour.bank.1.d': { es: 'Aquí defines de dónde sale el dinero de tus préstamos y a dónde entran los pagos. Haz clic en "Siguiente" para ir.', en: 'Here you define where your loan money comes from and where payments go in. Click "Next" to go there.', pt: 'Aqui você define de onde sai o dinheiro dos empréstimos e para onde entram os pagamentos. Clique em "Próximo" para ir.' },
+  'tour.bank.2.t': { es: 'Crea tu primera cuenta', en: 'Create your first account', pt: 'Crie sua primeira conta' },
+  'tour.bank.2.d': { es: 'Pulsa este botón, elige el banco, tipo de cuenta, moneda y el saldo inicial: tu capital disponible para prestar.', en: 'Click this button, choose the bank, account type, currency and starting balance: your capital available to lend.', pt: 'Clique neste botão, escolha o banco, tipo de conta, moeda e o saldo inicial: seu capital disponível para emprestar.' },
+
+  'tour.product.1.t': { es: 'Productos de préstamo', en: 'Loan Products', pt: 'Produtos de Empréstimo' },
+  'tour.product.1.d': { es: 'Son plantillas con tasa, plazo y tipo de préstamo que te ahorran tiempo al crear cada préstamo.', en: 'Templates with rate, term and loan type that save you time when creating each loan.', pt: 'São modelos com taxa, prazo e tipo de empréstimo que economizam tempo ao criar cada empréstimo.' },
+  'tour.product.2.t': { es: 'Crea un producto', en: 'Create a product', pt: 'Crie um produto' },
+  'tour.product.2.d': { es: 'Ponle un nombre, define tasa, plazo y tipo de amortización. Podrás ajustarlo en cada préstamo individual.', en: 'Give it a name, set the rate, term and amortization type. You can adjust it on each individual loan.', pt: 'Dê um nome, defina a taxa, prazo e tipo de amortização. Você poderá ajustá-lo em cada empréstimo individual.' },
+
+  'tour.client.1.t': { es: 'Clientes', en: 'Clients', pt: 'Clientes' },
+  'tour.client.1.d': { es: 'Aquí gestionas tu base de clientes: datos, historial crediticio, referencias y garantes.', en: 'Here you manage your client base: data, credit history, references and guarantors.', pt: 'Aqui você gerencia sua base de clientes: dados, histórico de crédito, referências e garantidores.' },
+  'tour.client.2.t': { es: 'Registra tu primer cliente', en: 'Register your first client', pt: 'Cadastre seu primeiro cliente' },
+  'tour.client.2.d': { es: 'Pulsa aquí para completar los datos, referencias y garantes de tu primer cliente.', en: 'Click here to fill in the data, references and guarantors of your first client.', pt: 'Clique aqui para preencher os dados, referências e garantidores do seu primeiro cliente.' },
+
+  'tour.loan.1.t': { es: 'Préstamos', en: 'Loans', pt: 'Empréstimos' },
+  'tour.loan.1.d': { es: 'Aquí ves y creas todos los préstamos de tu cartera.', en: 'Here you see and create all the loans in your portfolio.', pt: 'Aqui você vê e cria todos os empréstimos da sua carteira.' },
+  'tour.loan.2.t': { es: 'Crea tu primer préstamo', en: 'Create your first loan', pt: 'Crie seu primeiro empréstimo' },
+  'tour.loan.2.d': { es: 'Elige el cliente, el producto, el monto y las cuotas. El sistema calcula el plan de pago automáticamente.', en: 'Choose the client, product, amount and installments. The system calculates the payment plan automatically.', pt: 'Escolha o cliente, o produto, o valor e as parcelas. O sistema calcula o plano de pagamento automaticamente.' },
+
+  'tour.payment.1.t': { es: 'Pagos', en: 'Payments', pt: 'Pagamentos' },
+  'tour.payment.1.d': { es: 'Aquí registras y consultas todos los pagos de tus clientes.', en: 'Here you register and check all your clients\' payments.', pt: 'Aqui você registra e consulta todos os pagamentos dos seus clientes.' },
+  'tour.payment.2.t': { es: 'Registra un pago', en: 'Register a payment', pt: 'Registre um pagamento' },
+  'tour.payment.2.d': { es: 'Registra pagos completos o parciales; se aplican automáticamente a capital, interés o mora.', en: 'Register full or partial payments; they are automatically applied to principal, interest or late fees.', pt: 'Registre pagamentos completos ou parciais; são aplicados automaticamente a capital, juros ou mora.' },
+
+  'tour.link.1.t': { es: 'Solicitudes públicas', en: 'Public applications', pt: 'Solicitações públicas' },
+  'tour.link.1.d': { es: 'Aquí llegan las solicitudes de préstamo que tus clientes potenciales envían desde tu enlace público.', en: 'Loan applications that potential clients submit through your public link arrive here.', pt: 'Aqui chegam as solicitações de empréstimo que seus clientes em potencial enviam pelo seu link público.' },
+  'tour.link.2.t': { es: 'Genera tu enlace único', en: 'Generate your unique link', pt: 'Gere seu link único' },
+  'tour.link.2.d': { es: 'Pulsa aquí para ver y copiar tu enlace único. Compártelo por WhatsApp, redes sociales o como código QR.', en: 'Click here to view and copy your unique link. Share it via WhatsApp, social media or as a QR code.', pt: 'Clique aqui para ver e copiar seu link único. Compartilhe pelo WhatsApp, redes sociais ou como código QR.' },
+
+  'tour.coll.1.t': { es: 'Cobranzas', en: 'Collections', pt: 'Cobranças' },
+  'tour.coll.1.d': { es: 'Este módulo te ayuda a dar seguimiento a la mora y organizar el trabajo de tus cobradores.', en: 'This module helps you track overdue payments and organize your collectors\' work.', pt: 'Este módulo ajuda a acompanhar a inadimplência e organizar o trabalho dos seus cobradores.' },
+  'tour.coll.2.t': { es: 'Pestaña "Cartera"', en: '"Portfolio" tab', pt: 'Aba "Carteira"' },
+  'tour.coll.2.d': { es: 'Muestra las cuotas vencidas y por vencer. Si eres cobrador, solo ves las que tienes asignadas.', en: 'Shows overdue and upcoming installments. If you are a collector, you only see the ones assigned to you.', pt: 'Mostra as parcelas vencidas e a vencer. Se você é cobrador, só vê as que estão atribuídas a você.' },
+  'tour.coll.3.t': { es: 'Pestaña "Agenda"', en: '"Agenda" tab', pt: 'Aba "Agenda"' },
+  'tour.coll.3.d': { es: 'Aquí asignas y das seguimiento a tareas de cobro (visitas, llamadas) con fecha límite.', en: 'Here you assign and track collection tasks (visits, calls) with a due date.', pt: 'Aqui você atribui e acompanha tarefas de cobrança (visitas, ligações) com prazo.' },
+  'tour.coll.4.t': { es: 'Promesas de Pago', en: 'Payment Promises', pt: 'Promessas de Pagamento' },
+  'tour.coll.4.d': { es: 'Aquí ves todas las promesas de pago activas y su cumplimiento.', en: 'Here you see all active payment promises and how they are honored.', pt: 'Aqui você vê todas as promessas de pagamento ativas e seu cumprimento.' },
+  'tour.coll.5.t': { es: 'Registra una promesa', en: 'Log a promise', pt: 'Registre uma promessa' },
+  'tour.coll.5.d': { es: 'Cuando un cliente promete pagar en una fecha, regístralo aquí: monto y fecha prometida. El sistema pausa los avisos de mora hasta esa fecha.', en: 'When a client promises to pay by a date, log it here: amount and promised date. The system pauses overdue reminders until that date.', pt: 'Quando um cliente promete pagar em uma data, registre aqui: valor e data prometida. O sistema pausa os avisos de mora até essa data.' },
   'nav.admin':         { es: 'Admin Panel',        en: 'Admin Panel',        pt: 'Painel Admin' },
 
   // ── Estados de préstamo (reutilizable en toda la app) ────────────────────────

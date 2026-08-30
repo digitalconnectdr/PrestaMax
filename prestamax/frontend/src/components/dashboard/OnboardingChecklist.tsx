@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router-dom'
 import { Building2, Package, UserPlus, DollarSign, CreditCard, Link2, Truck, Calendar as CalendarIcon, ChevronDown, ChevronUp, X, PartyPopper } from 'lucide-react'
 import api from '@/lib/api'
 import { useT } from '@/lib/i18n'
+import { runTour } from '@/lib/tourEngine'
+import { getTourSteps, getTourLabels } from '@/lib/tours'
 
 interface Status {
   bankAccount: boolean
@@ -36,14 +38,18 @@ const OnboardingChecklist: React.FC = () => {
   }, [])
 
   const STEPS = [
-    { key: 'bankAccount',   icon: Building2,    label: t('onb.s.bank'),    desc: t('onb.s.bank_d'),    path: '/settings/bank-accounts', guide: 'crear-cuenta-bancaria' },
-    { key: 'product',       icon: Package,      label: t('onb.s.product'), desc: t('onb.s.product_d'), path: '/settings/products',      guide: 'crear-producto' },
-    { key: 'client',        icon: UserPlus,     label: t('onb.s.client'),  desc: t('onb.s.client_d'),  path: '/clients/new',            guide: 'crear-cliente' },
-    { key: 'loan',          icon: DollarSign,   label: t('onb.s.loan'),    desc: t('onb.s.loan_d'),    path: '/loans/new',              guide: 'crear-prestamo' },
-    { key: 'payment',       icon: CreditCard,   label: t('onb.s.payment'), desc: t('onb.s.payment_d'), path: '/payments',               guide: 'registrar-pago' },
-    { key: 'publicRequest', icon: Link2,        label: t('onb.s.link'),    desc: t('onb.s.link_d'),    path: '/settings',               guide: 'solicitudes-publicas' },
-    { key: 'promise',       icon: CalendarIcon, label: t('onb.s.promise'), desc: t('onb.s.promise_d'), path: '/collections',            guide: 'cartera-cobranza' },
+    { key: 'bankAccount',   icon: Building2,    label: t('onb.s.bank'),    desc: t('onb.s.bank_d'),    tourId: 'bank-account', guide: 'crear-cuenta-bancaria' },
+    { key: 'product',       icon: Package,      label: t('onb.s.product'), desc: t('onb.s.product_d'), tourId: 'product',      guide: 'crear-producto' },
+    { key: 'client',        icon: UserPlus,     label: t('onb.s.client'),  desc: t('onb.s.client_d'),  tourId: 'client',       guide: 'crear-cliente' },
+    { key: 'loan',          icon: DollarSign,   label: t('onb.s.loan'),    desc: t('onb.s.loan_d'),    tourId: 'loan',         guide: 'crear-prestamo' },
+    { key: 'payment',       icon: CreditCard,   label: t('onb.s.payment'), desc: t('onb.s.payment_d'), tourId: 'payment',      guide: 'registrar-pago' },
+    { key: 'publicRequest', icon: Link2,        label: t('onb.s.link'),    desc: t('onb.s.link_d'),    tourId: 'public-link',  guide: 'solicitudes-publicas' },
+    { key: 'promise',       icon: CalendarIcon, label: t('onb.s.promise'), desc: t('onb.s.promise_d'), tourId: 'collections',  guide: 'cartera-cobranza' },
   ] as const
+
+  const startTour = (tourId: string) => {
+    runTour(tourId, getTourSteps(tourId, t), navigate, getTourLabels(t))
+  }
 
   if (!status) return null
 
@@ -133,7 +139,7 @@ const OnboardingChecklist: React.FC = () => {
                       {t('onb.guide')}
                     </button>
                     <button
-                      onClick={() => navigate(step.path)}
+                      onClick={() => startTour(step.tourId)}
                       className="text-xs px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition"
                     >
                       {t('onb.go')}

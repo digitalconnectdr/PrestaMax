@@ -71,7 +71,7 @@ const ClientsPage: React.FC = () => {
           <p className="text-slate-600 text-sm mt-1">{t('cli.subtitle')}</p>
         </div>
         {can('clients.create') && (
-          <Button onClick={() => navigate('/clients/new')} className="flex items-center gap-2">
+          <Button data-tour="new-client-btn" onClick={() => navigate('/clients/new')} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
             {t('dash.quick.new_client')}
           </Button>
