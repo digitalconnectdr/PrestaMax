@@ -326,7 +326,7 @@ const PaymentsPage: React.FC = () => {
           <p className="text-slate-600 text-sm mt-1">{t('pay.subtitle')}</p>
         </div>
         {can('payments.create') && (
-          <Button onClick={() => setShowModal(true)} className="flex items-center gap-2">
+          <Button data-tour="new-payment-btn" onClick={() => setShowModal(true)} className="flex items-center gap-2">
             <Plus className="w-4 h-4" />{t('pay.register')}
           </Button>
         )}
@@ -612,8 +612,8 @@ const PaymentsPage: React.FC = () => {
                         })()}
                       </div>
                     </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      <table className="w-full text-xs">
+                    <div className="max-h-48 overflow-y-auto overflow-x-auto">
+                      <table className="w-full text-xs min-w-[420px]">
                         <thead className="bg-slate-50 sticky top-0">
                           <tr>
                             <th className="text-left px-3 py-1.5 font-semibold text-slate-600">#</th>

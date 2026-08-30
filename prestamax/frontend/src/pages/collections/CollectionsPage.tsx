@@ -275,6 +275,7 @@ const CollectionsPage: React.FC = () => {
       <div className="border-b border-slate-200">
         <div className="flex gap-0">
           <button
+            data-tour="collections-tab-portfolio"
             onClick={() => setMainTab('portfolio')}
             className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               mainTab === 'portfolio'
@@ -287,6 +288,7 @@ const CollectionsPage: React.FC = () => {
           </button>
           {(can('collections.tasks') || can('collections.tasks.manage')) && (
             <button
+              data-tour="collections-tab-agenda"
               onClick={() => setMainTab('agenda')}
               className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 mainTab === 'agenda'
@@ -586,8 +588,8 @@ const CollectionsPage: React.FC = () => {
                     })()}
                   </div>
                 </div>
-                <div className="max-h-40 overflow-y-auto">
-                  <table className="w-full text-xs">
+                <div className="max-h-40 overflow-y-auto overflow-x-auto">
+                  <table className="w-full text-xs min-w-[420px]">
                     <thead className="bg-slate-50 sticky top-0">
                       <tr>
                         <th className="text-left px-3 py-1.5 font-semibold text-slate-600">#</th>

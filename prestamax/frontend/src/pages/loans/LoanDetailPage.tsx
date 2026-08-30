@@ -1564,8 +1564,8 @@ const LoanDetailPage: React.FC = () => {
                         })()}
                       </div>
                     </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      <table className="w-full text-xs">
+                    <div className="max-h-48 overflow-y-auto overflow-x-auto">
+                      <table className="w-full text-xs min-w-[420px]">
                         <thead className="bg-slate-50 sticky top-0">
                           <tr>
                             <th className="text-left px-3 py-1.5 font-semibold text-slate-600">#</th>

@@ -1263,7 +1263,8 @@ const ReportsPage: React.FC = () => {
                   <p className="text-sm">Sin transacciones en este período</p>
                 </div>
               ) : (
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[720px]">
                   <thead>
                     <tr className="border-b border-slate-200">
                       <th className="text-left py-2 px-3 font-semibold text-slate-700 text-xs">Núm. Pago</th>
@@ -1301,6 +1302,7 @@ const ReportsPage: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
 

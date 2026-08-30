@@ -952,8 +952,9 @@ const SettingsPage: React.FC = () => {
                 </Card>
               )}
               {branches.length > 0 ? (
-                <Card>
-                  <table className="w-full text-sm">
+                <Card className="p-0 overflow-hidden">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[480px]">
                     <thead><tr className="border-b border-slate-200">
                       <th className="text-left py-3 px-4 font-semibold text-slate-700">{tGen('set.h_name')}</th>
                       <th className="text-left py-3 px-4 font-semibold text-slate-700">{tGen('set.h_address')}</th>
@@ -967,6 +968,7 @@ const SettingsPage: React.FC = () => {
                       </tr>
                     ))}</tbody>
                   </table>
+                  </div>
                 </Card>
               ) : (
                 <EmptyState icon={Building2} title={tGen('set.no_branches')} description={tGen('set.no_branches_desc')} action={{label:tGen('set.new_branch'),onClick:()=>setShowBranchForm(true)}} />
@@ -1104,7 +1106,7 @@ const SettingsPage: React.FC = () => {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="section-title">{tGen('set.products_title')}</h3>
-                <Button onClick={()=>setShowProductForm(!showProductForm)} size="sm" className="flex items-center gap-2">
+                <Button data-tour="new-product-btn" onClick={()=>setShowProductForm(!showProductForm)} size="sm" className="flex items-center gap-2">
                   <Plus className="w-4 h-4"/>{tGen('set.new_product')}
                 </Button>
               </div>
@@ -1206,7 +1208,7 @@ const SettingsPage: React.FC = () => {
                   <p className="text-sm text-slate-500 mt-1">{tGen('set.bank_subtitle')}</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={()=>{setEditingBank(null);setBankForm({bankName:'',accountNumber:'',accountType:'checking',accountHolder:'',currency:'DOP',initialBalance:'0'});setCustomBankMode(false);setShowBankForm(true)}} size="sm" className="flex items-center gap-2">
+                  <Button data-tour="new-bank-account-btn" onClick={()=>{setEditingBank(null);setBankForm({bankName:'',accountNumber:'',accountType:'checking',accountHolder:'',currency:'DOP',initialBalance:'0'});setCustomBankMode(false);setShowBankForm(true)}} size="sm" className="flex items-center gap-2">
                     <Plus className="w-4 h-4"/>{tGen('set.new_account')}
                   </Button>
                   <Button onClick={()=>setShowTransferModal(true)} size="sm" variant="outline" className="flex items-center gap-2">
