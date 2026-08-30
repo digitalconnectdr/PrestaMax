@@ -15,7 +15,7 @@ import {
   Settings, Building2, Users2, Package, FileText, Landmark,
   Plus, Trash2, Edit2, X, CheckCircle, XCircle, Save, Eye, KeyRound, Lock, Unlock,
   CreditCard, AlertCircle, Calendar, TrendingUp, Star, ArrowLeftRight, Upload, Image,
-  Shield, ShieldCheck, ShieldX, ToggleLeft, ToggleRight
+  Shield, ShieldCheck, ShieldX, ToggleLeft, ToggleRight, HelpCircle, ArrowRight
 } from 'lucide-react'
 import { SUPPORTED_CURRENCIES } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
@@ -670,6 +670,22 @@ const SettingsPage: React.FC = () => {
           {/* ── GENERAL ── */}
           {activeTab === 'general' && (
             <div className="space-y-6">
+              <Card className="bg-slate-50 border-slate-200">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-[#1e3a5f]/10 flex items-center justify-center flex-shrink-0">
+                      <HelpCircle className="w-5 h-5 text-[#1e3a5f]" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900 text-sm">{tGen('set.help_title')}</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">{tGen('set.help_desc')}</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => navigate('/help')} className="flex items-center gap-1.5 flex-shrink-0">
+                    {tGen('set.help_cta')}<ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </Card>
               <Card>
                 <h3 className="section-title mb-1">{tGen('common.language')}</h3>
                 <p className="text-sm text-slate-500 mb-4">{tGen('set.lang_desc')}</p>

@@ -24,8 +24,27 @@ export const HELP_MAP: { prefix: string; guide: string }[] = [
   { prefix: '/whatsapp',             guide: 'activar-whatsapp' },
 ]
 
-// Devuelve el id de guía para una ruta, o null si no hay una específica.
+// Devuelve el id de guía (texto estático) para una ruta, o null si no hay una específica.
 export function guideForPath(pathname: string): string | null {
   const hit = HELP_MAP.find(m => pathname === m.prefix || pathname.startsWith(m.prefix + '/') || pathname.startsWith(m.prefix))
   return hit ? hit.guide : null
+}
+
+// Mapeo ruta → id de recorrido INTERACTIVO (ver tourEngine.ts/tours.ts).
+// Solo existe para las pantallas que ya tienen un tour definido; el botón
+// de ayuda "?" del Header usa esto primero y, si no hay tour, cae al texto
+// estático de guideForPath. Rutas más específicas primero.
+export const TOUR_MAP: { prefix: string; tourId: string }[] = [
+  { prefix: '/settings/bank-accounts', tourId: 'bank-account' },
+  { prefix: '/settings/products',      tourId: 'product' },
+  { prefix: '/clients',                tourId: 'client' },
+  { prefix: '/loans',                  tourId: 'loan' },
+  { prefix: '/payments',               tourId: 'payment' },
+  { prefix: '/requests',               tourId: 'public-link' },
+  { prefix: '/collections',            tourId: 'collections' },
+]
+
+export function tourForPath(pathname: string): string | null {
+  const hit = TOUR_MAP.find(m => pathname === m.prefix || pathname.startsWith(m.prefix + '/'))
+  return hit ? hit.tourId : null
 }

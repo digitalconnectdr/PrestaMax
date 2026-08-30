@@ -38,14 +38,16 @@ const OnboardingChecklist: React.FC = () => {
   }, [])
 
   const STEPS = [
-    { key: 'bankAccount',   icon: Building2,    label: t('onb.s.bank'),    desc: t('onb.s.bank_d'),    tourId: 'bank-account', guide: 'crear-cuenta-bancaria' },
-    { key: 'product',       icon: Package,      label: t('onb.s.product'), desc: t('onb.s.product_d'), tourId: 'product',      guide: 'crear-producto' },
-    { key: 'client',        icon: UserPlus,     label: t('onb.s.client'),  desc: t('onb.s.client_d'),  tourId: 'client',       guide: 'crear-cliente' },
-    { key: 'loan',          icon: DollarSign,   label: t('onb.s.loan'),    desc: t('onb.s.loan_d'),    tourId: 'loan',         guide: 'crear-prestamo' },
-    { key: 'payment',       icon: CreditCard,   label: t('onb.s.payment'), desc: t('onb.s.payment_d'), tourId: 'payment',      guide: 'registrar-pago' },
-    { key: 'publicRequest', icon: Link2,        label: t('onb.s.link'),    desc: t('onb.s.link_d'),    tourId: 'public-link',  guide: 'solicitudes-publicas' },
-    { key: 'promise',       icon: CalendarIcon, label: t('onb.s.promise'), desc: t('onb.s.promise_d'), tourId: 'collections',  guide: 'cartera-cobranza' },
+    { key: 'bankAccount',   icon: Building2,    label: t('onb.s.bank'),    desc: t('onb.s.bank_d'),    tourId: 'bank-account' },
+    { key: 'product',       icon: Package,      label: t('onb.s.product'), desc: t('onb.s.product_d'), tourId: 'product' },
+    { key: 'client',        icon: UserPlus,     label: t('onb.s.client'),  desc: t('onb.s.client_d'),  tourId: 'client' },
+    { key: 'loan',          icon: DollarSign,   label: t('onb.s.loan'),    desc: t('onb.s.loan_d'),    tourId: 'loan' },
+    { key: 'payment',       icon: CreditCard,   label: t('onb.s.payment'), desc: t('onb.s.payment_d'), tourId: 'payment' },
+    { key: 'publicRequest', icon: Link2,        label: t('onb.s.link'),    desc: t('onb.s.link_d'),    tourId: 'public-link' },
+    { key: 'promise',       icon: CalendarIcon, label: t('onb.s.promise'), desc: t('onb.s.promise_d'), tourId: 'collections' },
   ] as const
+
+  const pendingSteps = status ? STEPS.filter(s => !status[s.key as keyof Status]) : []
 
   const startTour = (tourId: string) => {
     runTour(tourId, getTourSteps(tourId, t), navigate, getTourLabels(t))
@@ -118,34 +120,23 @@ const OnboardingChecklist: React.FC = () => {
 
       {!collapsed && !allDone && (
         <ul className="divide-y divide-slate-100">
-          {STEPS.map(step => {
+          {pendingSteps.map(step => {
             const Icon = step.icon
-            const isDone = status[step.key as keyof Status]
             return (
               <li key={step.key} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${isDone ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-slate-100 text-slate-400">
                   <Icon className="w-3.5 h-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className={`text-sm font-medium truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{step.label}</p>
+                  <p className="text-sm font-medium truncate text-slate-900">{step.label}</p>
                   <p className="text-xs text-slate-500 truncate">{step.desc}</p>
                 </div>
-                {!isDone && (
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => navigate(`/help?guide=${step.guide}`)}
-                      className="text-xs text-slate-500 hover:text-[#1e3a5f] font-medium hidden sm:inline"
-                    >
-                      {t('onb.guide')}
-                    </button>
-                    <button
-                      onClick={() => startTour(step.tourId)}
-                      className="text-xs px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition"
-                    >
-                      {t('onb.go')}
-                    </button>
-                  </div>
-                )}
+                <button
+                  onClick={() => startTour(step.tourId)}
+                  className="text-xs px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition flex-shrink-0"
+                >
+                  {t('onb.go')}
+                </button>
               </li>
             )
           })}

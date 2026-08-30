@@ -5,7 +5,9 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import NotificationBell from '@/components/shared/NotificationBell'
 import GlobalSearch from '@/components/shared/GlobalSearch'
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
-import { guideForPath } from '@/lib/helpMap'
+import { guideForPath, tourForPath } from '@/lib/helpMap'
+import { runTour } from '@/lib/tourEngine'
+import { getTourSteps, getTourLabels } from '@/lib/tours'
 import { useT } from '@/lib/i18n'
 
 interface HeaderProps {
@@ -19,7 +21,16 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, title }) => {
   const location = useLocation()
   const t = useT()
 
+  // Botón "?": si la pantalla actual tiene un recorrido interactivo, lo
+  // repite (útil para recordar cómo funciona una sección aunque ya se haya
+  // hecho el onboarding). Si no hay tour definido para esta ruta, cae al
+  // texto estático de la Guía del Sistema.
   const openHelp = () => {
+    const tourId = tourForPath(location.pathname)
+    if (tourId) {
+      runTour(tourId, getTourSteps(tourId, t), navigate, getTourLabels(t))
+      return
+    }
     const g = guideForPath(location.pathname)
     navigate(g ? `/help?guide=${g}` : '/help')
   }

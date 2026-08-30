@@ -102,7 +102,6 @@ const TR: Record<string, Tri> = {
   'onb.hide':          { es: 'Ocultar', en: 'Hide', pt: 'Ocultar' },
   'onb.show':          { es: 'Ver primeros pasos', en: 'Show getting started', pt: 'Ver primeiros passos' },
   'onb.go':            { es: 'Guíame', en: 'Guide me', pt: 'Me guie' },
-  'onb.guide':         { es: 'Ver guía', en: 'View guide', pt: 'Ver guia' },
   'onb.done':          { es: 'Hecho', en: 'Done', pt: 'Feito' },
   'onb.s.bank':        { es: 'Crea tu cuenta bancaria', en: 'Create your bank account', pt: 'Crie sua conta bancária' },
   'onb.s.bank_d':      { es: 'De dónde sale el dinero y entran los pagos.', en: 'Where money comes from and payments go in.', pt: 'De onde sai o dinheiro e entram os pagamentos.' },
@@ -125,6 +124,10 @@ const TR: Record<string, Tri> = {
   'tour.done':  { es: 'Finalizar', en: 'Finish', pt: 'Concluir' },
   'tour.skip':  { es: 'Saltar', en: 'Skip', pt: 'Pular' },
   'tour.of':    { es: 'de', en: 'of', pt: 'de' },
+
+  'set.help_title':   { es: '¿Necesitas ayuda?', en: 'Need help?', pt: 'Precisa de ajuda?' },
+  'set.help_desc':    { es: 'Consulta la Guía del Sistema: explica paso a paso todos los módulos de CredyTek.', en: 'Check the System Guide: it explains every CredyTek module step by step.', pt: 'Consulte o Guia do Sistema: explica passo a passo todos os módulos da CredyTek.' },
+  'set.help_cta':     { es: 'Ver Guía del Sistema', en: 'View System Guide', pt: 'Ver Guia do Sistema' },
 
   'tour.bank.1.t': { es: 'Cuentas Bancarias', en: 'Bank Accounts', pt: 'Contas Bancárias' },
   'tour.bank.1.d': { es: 'Aquí defines de dónde sale el dinero de tus préstamos y a dónde entran los pagos. Haz clic en "Siguiente" para ir.', en: 'Here you define where your loan money comes from and where payments go in. Click "Next" to go there.', pt: 'Aqui você define de onde sai o dinheiro dos empréstimos e para onde entram os pagamentos. Clique em "Próximo" para ir.' },
