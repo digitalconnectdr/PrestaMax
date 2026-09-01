@@ -956,6 +956,18 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lat REAL`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lng REAL`); } catch(_) {}
 
+  // Recordatorios de trial por email (evita reenviar el mismo hito 2 veces
+  // si el cron corre mas de una vez el mismo dia, o tras un redeploy).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trial_reminders_sent (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      days_left INTEGER NOT NULL,
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, days_left)
+    );
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS page_views (
       id TEXT PRIMARY KEY,

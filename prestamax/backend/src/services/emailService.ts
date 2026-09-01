@@ -133,30 +133,16 @@ function buildText(p: InquiryPayload): string {
   ].filter(Boolean).join('\n');
 }
 
-export async function sendInquiryNotification(p: InquiryPayload): Promise<boolean> {
+// Envio generico via Resend, con el mismo manejo de lazy-off + reintento que
+// ya usaba sendInquiryNotification. Compartido por todos los emails salientes.
+async function sendViaResend(to: string[], subject: string, html: string, text: string, logLabel: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  const to     = process.env.ADMIN_EMAIL;
-
   if (!apiKey) {
-    console.log('[email] RESEND_API_KEY no configurada — skip notificacion');
+    console.log(`[email] RESEND_API_KEY no configurada — skip ${logLabel}`);
     return false;
   }
-  if (!to) {
-    console.log('[email] ADMIN_EMAIL no configurada — skip notificacion');
-    return false;
-  }
-
   const from = process.env.FROM_EMAIL || 'CredyTek <onboarding@resend.dev>';
-  const recipients = to.split(',').map(s => s.trim()).filter(Boolean);
-  const subject = `[CredyTek] Lead nuevo: ${p.full_name}${p.business_name ? ' (' + p.business_name + ')' : ''}`;
-
-  const payload = {
-    from,
-    to: recipients,
-    subject,
-    html: buildHtml(p),
-    text: buildText(p),
-  };
+  const payload = { from, to, subject, html, text };
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -169,20 +155,94 @@ export async function sendInquiryNotification(p: InquiryPayload): Promise<boolea
         body: JSON.stringify(payload),
       });
       if (resp.ok) {
-        console.log(`[email] notificacion enviada a ${recipients.join(',')} (id=${p.id})`);
+        console.log(`[email] ${logLabel} enviado a ${to.join(',')}`);
         return true;
       }
       const err = await resp.text();
-      console.error(`[email] Resend ${resp.status}: ${err.slice(0, 200)}`);
+      console.error(`[email] Resend ${resp.status} (${logLabel}): ${err.slice(0, 200)}`);
       // 5xx → reintento; 4xx → no
       if (resp.status < 500) return false;
       await new Promise(r => setTimeout(r, 2000));
     } catch (e: any) {
-      console.error('[email] fetch fallo:', e?.message || e);
+      console.error(`[email] fetch fallo (${logLabel}):`, e?.message || e);
       if (attempt === 0) await new Promise(r => setTimeout(r, 2000));
     }
   }
   return false;
+}
+
+export async function sendInquiryNotification(p: InquiryPayload): Promise<boolean> {
+  const to = process.env.ADMIN_EMAIL;
+  if (!to) {
+    console.log('[email] ADMIN_EMAIL no configurada — skip notificacion');
+    return false;
+  }
+  const recipients = to.split(',').map(s => s.trim()).filter(Boolean);
+  const subject = `[CredyTek] Lead nuevo: ${p.full_name}${p.business_name ? ' (' + p.business_name + ')' : ''}`;
+  return sendViaResend(recipients, subject, buildHtml(p), buildText(p), `lead ${p.id}`);
+}
+
+// ─── Recordatorio de trial por vencer (al tenant, no al admin) ──────────────
+// Antes NINGUN email salia hacia el tenant -- se enteraba de que su prueba
+// terminaba solo al chocar con el bloqueo de pago. Se dispara a los 3, 1 y 0
+// dias restantes (ver trialReminderService.ts + cron en index.ts).
+interface TrialReminderPayload {
+  tenantId: string;
+  tenantName: string;
+  toEmail: string;
+  daysLeft: number;
+}
+
+function buildTrialReminderHtml(p: TrialReminderPayload): string {
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const headline = p.daysLeft <= 0
+    ? 'Tu prueba gratis de CredyTek termina hoy'
+    : p.daysLeft === 1
+    ? 'Tu prueba gratis de CredyTek termina mañana'
+    : `Tu prueba gratis de CredyTek termina en ${p.daysLeft} días`;
+  return `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;font-size:20px;">⏱️ ${headline}</h1>
+  </div>
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+    <p>Hola,</p>
+    <p><strong>${p.tenantName}</strong> ha estado usando CredyTek durante tu período de prueba. Para no perder acceso a tus clientes, préstamos y pagos ya cargados, elige un plan antes de que termine.</p>
+    <div style="margin-top:20px;">
+      <a href="${frontUrl}/settings/subscription" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Ver planes y continuar</a>
+    </div>
+    <p style="margin-top:20px;color:#6b7280;font-size:13px;">¿Dudas sobre qué plan te conviene? Responde este correo o escríbenos a credytek@digitalconnectdr.com.</p>
+    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">CredyTek · Notificación automática de tu cuenta</p>
+  </div>
+</body></html>`.trim();
+}
+
+function buildTrialReminderText(p: TrialReminderPayload): string {
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const headline = p.daysLeft <= 0
+    ? 'Tu prueba gratis de CredyTek termina hoy'
+    : p.daysLeft === 1
+    ? 'Tu prueba gratis de CredyTek termina mañana'
+    : `Tu prueba gratis de CredyTek termina en ${p.daysLeft} dias`;
+  return [
+    headline.toUpperCase(),
+    '',
+    `${p.tenantName} ha estado usando CredyTek durante tu periodo de prueba.`,
+    'Para no perder acceso a tus clientes, prestamos y pagos ya cargados, elige un plan antes de que termine.',
+    '',
+    `Ver planes: ${frontUrl}/settings/subscription`,
+    '',
+    'Dudas: credytek@digitalconnectdr.com',
+  ].join('\n');
+}
+
+export async function sendTrialReminderEmail(p: TrialReminderPayload): Promise<boolean> {
+  if (!p.toEmail) return false;
+  const subject = p.daysLeft <= 0
+    ? 'Tu prueba de CredyTek termina hoy'
+    : `Tu prueba de CredyTek termina en ${p.daysLeft} día${p.daysLeft === 1 ? '' : 's'}`;
+  return sendViaResend([p.toEmail], subject, buildTrialReminderHtml(p), buildTrialReminderText(p), `trial-reminder ${p.tenantId}/${p.daysLeft}d`);
 }
 
 export const EMAIL_CONFIG = {

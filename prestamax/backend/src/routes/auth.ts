@@ -129,6 +129,7 @@ router.get('/subscription-status', authenticate, async (req: AuthRequest, res: R
     res.json({
       expired: isExpired,
       status: tenant.subscription_status || 'unknown',
+      isTrial: tenant.subscription_status === 'trial' && !isExpired,
       expiresAt: tenant.subscription_end || null,
       daysLeft,
       planName: plan?.name || null,

@@ -189,9 +189,11 @@ app.use(errorHandler);
 import { runOverdueCron } from './services/whatsappService';
 import { createBackup, BACKUP_CONFIG } from './services/backupService';
 import { syncLoanStatuses } from './services/loanStatusSync';
+import { runTrialReminderCron } from './services/trialReminderService';
 let lastCronDate = '';
 let lastBackupDate = '';
 let lastStatusSyncDate = '';
+let lastTrialReminderDate = '';
 
 // FIX P2 (Jun 2026): sincronizar estados (in_mora/days_overdue/mora_balance)
 // al arrancar, para que listas y dashboards reflejen la realidad tras un deploy
@@ -230,10 +232,19 @@ setInterval(() => {
         .then(info => console.log(`[backup] cron OK: ${info.filename}`))
         .catch(e => console.error('[backup] cron fallo:', e?.message || e));
     }
+
+    // 9am: recordatorio de trial por vencer (3, 1 y 0 dias restantes)
+    if (hour === 9 && lastTrialReminderDate !== todayStr) {
+      lastTrialReminderDate = todayStr;
+      runTrialReminderCron(getDb())
+        .then(r => console.log(`[trial-reminder] cron OK: ${r.sent}/${r.checked} enviados`))
+        .catch(e => console.error('[trial-reminder] cron fallo:', e?.message || e));
+    }
   } catch (e) { console.error('[cron tick]', e); }
 }, 60 * 60 * 1000); // cada hora
 console.log('[whatsapp] cron de mora programado (chequeo cada hora, dispara a las 8am)');
 console.log(`[backup] cron diario programado (dispara a las 3am) | dir=${BACKUP_CONFIG.dir} | keep=${BACKUP_CONFIG.keepLast} | s3=${BACKUP_CONFIG.s3Enabled}`);
+console.log('[trial-reminder] cron programado (dispara a las 9am, hitos 3/1/0 dias)');
 
 app.listen(PORT, () => {
   console.log(`PrestaMax API running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'development'}]`);
