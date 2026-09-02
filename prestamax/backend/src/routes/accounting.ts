@@ -6,11 +6,59 @@
 // Todos devuelven CSV. Multi-tenant: filtran por req.tenant.id
 
 import { Router, Response } from 'express';
+import ExcelJS from 'exceljs';
 import { getDb } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { getReportLang, reportT } from '../lib/reportI18n';
 
 const router = Router();
+
+// ── Excel real (antes solo existia CSV plano / print-to-PDF del navegador) ──
+// No se toca NINGUNA linea de la logica de calculo de los 3 reportes de abajo:
+// esto solo re-serializa el mismo CSV ya generado (probado y correcto) como
+// un .xlsx real, parseando el propio CSV en vez de reconstruir cada valor.
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { result.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+async function sendXlsx(res: Response, filename: string, csv: string) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Reporte');
+  const clean = csv.replace(/^﻿/, '');
+  const lines = clean.split('\n').filter(l => l.length > 0);
+  lines.forEach((line, idx) => {
+    const cells = parseCsvLine(line);
+    const row = ws.addRow(cells.map(c => {
+      const trimmed = c.trim();
+      if (trimmed === '') return c;
+      const n = Number(trimmed);
+      return !isNaN(n) ? n : c;
+    }));
+    if (idx === 0) row.font = { bold: true };
+  });
+  ws.columns.forEach(col => { col.width = 20; });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  await wb.xlsx.write(res);
+  res.end();
+}
 
 function formatDate(d: any): string {
   if (!d) return '';
@@ -55,7 +103,7 @@ function sendCsv(res: Response, filename: string, csv: string) {
   res.send('﻿' + csv);  // BOM UTF-8 para Excel
 }
 
-router.get('/journal', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+router.get('/journal', authenticate, requireTenant, requirePermission('reports.dashboard'), async (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
@@ -129,6 +177,10 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
       csv += csvLine([formatDate(e.fecha), formatTime(e.fecha), tr('type.expense'), `${e.category}${e.description ? ': '+e.description : ''}`, '', '', e.currency, 0, e.monto, e.cuenta || '', '']);
     }
 
+    if (String(req.query.format) === 'xlsx') {
+      await sendXlsx(res, `${tr('file.journal')}_${from}_${to}.xlsx`, csv);
+      return;
+    }
     sendCsv(res, `${tr('file.journal')}_${from}_${to}.csv`, csv);
   } catch (e: any) {
     console.error('journal export error:', e);
@@ -136,7 +188,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
   }
 });
 
-router.get('/by-account', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+router.get('/by-account', authenticate, requireTenant, requirePermission('reports.dashboard'), async (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
@@ -188,6 +240,10 @@ router.get('/by-account', authenticate, requireTenant, requirePermission('report
       ]);
     }
 
+    if (String(req.query.format) === 'xlsx') {
+      await sendXlsx(res, `${tr('file.by_account')}_${from}_${to}.xlsx`, csv);
+      return;
+    }
     sendCsv(res, `${tr('file.by_account')}_${from}_${to}.csv`, csv);
   } catch (e: any) {
     console.error('by-account export error:', e);
@@ -195,7 +251,7 @@ router.get('/by-account', authenticate, requireTenant, requirePermission('report
   }
 });
 
-router.get('/summary', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+router.get('/summary', authenticate, requireTenant, requirePermission('reports.dashboard'), async (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
@@ -300,6 +356,10 @@ router.get('/summary', authenticate, requireTenant, requirePermission('reports.d
       csv += '\n';
     }
 
+    if (String(req.query.format) === 'xlsx') {
+      await sendXlsx(res, `${tr('file.summary')}_${from}_${to}.xlsx`, csv);
+      return;
+    }
     sendCsv(res, `${tr('file.summary')}_${from}_${to}.csv`, csv);
   } catch (e: any) {
     console.error('summary export error:', e);

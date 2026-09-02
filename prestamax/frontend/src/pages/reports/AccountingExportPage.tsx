@@ -22,17 +22,18 @@ const AccountingExportPage: React.FC = () => {
   const [to, setTo] = useState(lastOfMonth())
   const [downloading, setDownloading] = useState<string | null>(null)
 
-  const download = async (endpoint: string, filename: string, key: string) => {
-    setDownloading(key)
+  const download = async (endpoint: string, filename: string, key: string, format: 'csv' | 'xlsx' = 'csv') => {
+    setDownloading(`${key}-${format}`)
     try {
       // FIX (Jun 2026): enviar el idioma activo para que el backend traduzca
       // encabezados y etiquetas del CSV (libro diario, mayor, resumen).
-      const res = await api.get(`/accounting/${endpoint}?from=${from}&to=${to}&lang=${getLocale()}`, { responseType: 'blob' })
-      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' })
+      const res = await api.get(`/accounting/${endpoint}?from=${from}&to=${to}&lang=${getLocale()}&format=${format}`, { responseType: 'blob' })
+      const mime = format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv;charset=utf-8'
+      const blob = new Blob([res.data], { type: mime })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${filename}_${from}_${to}.csv`
+      a.download = `${filename}_${from}_${to}.${format}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -116,10 +117,16 @@ const AccountingExportPage: React.FC = () => {
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">{r.description}</p>
                 </div>
               </div>
-              <Button onClick={() => download(r.endpoint, r.filename, r.key)} isLoading={downloading === r.key} size="sm">
-                <Download className="w-3.5 h-3.5 mr-1.5" />
-                {t('acct.download_csv')}
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => download(r.endpoint, r.filename, r.key, 'xlsx')} isLoading={downloading === `${r.key}-xlsx`} size="sm">
+                  <Download className="w-3.5 h-3.5 mr-1.5" />
+                  Excel
+                </Button>
+                <Button onClick={() => download(r.endpoint, r.filename, r.key, 'csv')} isLoading={downloading === `${r.key}-csv`} size="sm" variant="outline">
+                  <Download className="w-3.5 h-3.5 mr-1.5" />
+                  CSV
+                </Button>
+              </div>
             </div>
           </Card>
         ))}
