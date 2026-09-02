@@ -121,6 +121,39 @@ router.delete('/:id', authenticate, requireTenant, requirePermission('clients.de
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
 
+// Habeas data / derecho al olvido: borra los datos PERSONALES del cliente a
+// su solicitud, pero conserva client_number, score e historial de
+// prestamos/pagos (retencion contable/legal). Es irreversible -- por eso
+// exige que el admin escriba el nombre completo actual como confirmacion,
+// igual que otras acciones destructivas del sistema (purga de tenant).
+router.post('/:id/anonymize', authenticate, requireTenant, requirePermission('clients.delete'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const client = db.prepare('SELECT id, full_name, anonymized_at FROM clients WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
+    if (!client) return res.status(404).json({ error: 'Cliente no encontrado' });
+    if (client.anonymized_at) return res.status(400).json({ error: 'Este cliente ya tiene sus datos personales eliminados' });
+    const confirmName = (req.body?.confirm_name || '').trim();
+    if (confirmName !== client.full_name) {
+      return res.status(400).json({ error: 'El nombre no coincide. Escribe el nombre completo exacto del cliente para confirmar.' });
+    }
+    const anonId = 'ANON-' + Date.now().toString(36).toUpperCase();
+    db.prepare(`UPDATE clients SET
+      full_name='Cliente eliminado a solicitud', first_name='Cliente', last_name='eliminado',
+      id_number=?, birth_date=NULL, gender=NULL, marital_status=NULL,
+      phone_personal=NULL, phone_work=NULL, phone_family=NULL, family_contact_name=NULL, family_relationship=NULL,
+      whatsapp=NULL, email=NULL, address=NULL, city=NULL, province=NULL,
+      occupation=NULL, employer=NULL, economic_activity=NULL, monthly_income=NULL, other_income=NULL,
+      photo_url=NULL, id_front_url=NULL, id_back_url=NULL,
+      notes=?, consent_data_processing=0, consent_whatsapp=0,
+      anonymized_at=?, updated_at=?
+      WHERE id=? AND tenant_id=?`)
+      .run(anonId, `[Datos personales eliminados a solicitud del titular el ${new Date().toISOString().slice(0,10)}]`, now(), now(), req.params.id, req.tenant.id);
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)')
+      .run(uuid(), req.tenant.id, req.user.id, req.user.full_name, 'anonymized', 'client', req.params.id, `Eliminó los datos personales de "${client.full_name}" a solicitud del titular (habeas data)`);
+    res.json({ success: true, message: 'Datos personales eliminados. El historial de préstamos y pagos se conserva por requisito legal/contable.' });
+  } catch(e: any) { console.error(e); res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
 // Reactivar un cliente previamente desactivado.
 router.post('/:id/reactivate', authenticate, requireTenant, requirePermission('clients.edit'), (req: AuthRequest, res: Response) => {
   try {

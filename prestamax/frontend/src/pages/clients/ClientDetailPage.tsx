@@ -40,6 +40,7 @@ interface Client {
   score: number | null
   scoreUpdatedAt: string | null
   isActive: number
+  anonymizedAt?: string | null
   loans?: any[]
   references?: any[]
   guarantors?: any[]
@@ -110,6 +111,9 @@ const ClientDetailPage: React.FC = () => {
   const [loans, setLoans] = useState<Loan[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'info' | 'loans' | 'contacts'>('info')
+  const [showAnonymizeModal, setShowAnonymizeModal] = useState(false)
+  const [anonymizeConfirmName, setAnonymizeConfirmName] = useState('')
+  const [isAnonymizing, setIsAnonymizing] = useState(false)
 
   // References & Guarantors forms
   const [showRefForm, setShowRefForm]   = useState(false)
@@ -220,6 +224,22 @@ const ClientDetailPage: React.FC = () => {
       reloadClient()
     } catch (err: any) {
       toast.error(err?.response?.data?.error || t('cd.reactivate_error'))
+    }
+  }
+
+  const handleAnonymize = async () => {
+    if (!client) return
+    setIsAnonymizing(true)
+    try {
+      await api.post(`/clients/${client.id}/anonymize`, { confirm_name: anonymizeConfirmName })
+      toast.success(t('cd.anon.success'))
+      setShowAnonymizeModal(false)
+      setAnonymizeConfirmName('')
+      reloadClient()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('cd.anon.error'))
+    } finally {
+      setIsAnonymizing(false)
     }
   }
 
@@ -538,9 +558,56 @@ const ClientDetailPage: React.FC = () => {
                     )}
                   </div>
                 )}
+                {can('clients.delete') && !client.anonymizedAt && (
+                  <button onClick={() => setShowAnonymizeModal(true)} className="w-full text-sm px-3 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 flex items-center gap-2 justify-center transition-colors">
+                    <Shield className="w-4 h-4"/>{t('cd.anon.button')}
+                  </button>
+                )}
+                {client.anonymizedAt && (
+                  <div className="text-center text-xs text-red-600 py-1.5 bg-red-50 rounded flex items-center justify-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5"/>{t('cd.anon.badge')}
+                  </div>
+                )}
               </div>
             </Card>
           </div>
+        </div>
+      )}
+
+      {showAnonymizeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center gap-2 mb-3">
+              <Shield className="w-5 h-5 text-red-600"/>
+              <h2 className="text-lg font-bold text-red-700">{t('cd.anon.modal_title')}</h2>
+            </div>
+            <p className="text-sm text-slate-600 mb-3">{t('cd.anon.modal_desc')}</p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-800">
+              {t('cd.anon.modal_keeps')}
+            </div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              {t('cd.anon.confirm_label').replace('{name}', client.fullName)}
+            </label>
+            <input
+              type="text"
+              value={anonymizeConfirmName}
+              onChange={e => setAnonymizeConfirmName(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
+              placeholder={client.fullName}
+            />
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => { setShowAnonymizeModal(false); setAnonymizeConfirmName('') }} disabled={isAnonymizing}>
+                {t('common.cancel')}
+              </Button>
+              <button
+                onClick={handleAnonymize}
+                disabled={isAnonymizing || anonymizeConfirmName.trim() !== client.fullName}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                {isAnonymizing ? t('cd.anon.deleting') : t('cd.anon.confirm_btn')}
+              </button>
+            </div>
+          </Card>
         </div>
       )}
 

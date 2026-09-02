@@ -10,6 +10,7 @@ import {
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { formatCurrency, formatDate, getLoanStatusConfig } from '@/lib/utils'
+import { useT, t as tg } from '@/lib/i18n'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ProjectionSummary {
@@ -64,7 +65,11 @@ const lastOfMonth = () => {
 }
 
 function exportCSV(items: ProjectionItem[], period: { from: string; to: string }) {
-  const headers = ['Cliente','Préstamo','Estado','Días Atraso','Cuotas','Capital','Interés','Mora','Prorroga','Total','Tipo Mora','Tasa Mora']
+  const headers = [
+    tg('proj.csv_cliente'), tg('proj.csv_prestamo'), tg('proj.csv_estado'), tg('proj.csv_dias_atraso'),
+    tg('proj.csv_cuotas'), tg('proj.csv_capital'), tg('proj.csv_interes'), tg('proj.csv_mora'),
+    tg('proj.csv_prorroga'), tg('proj.csv_total'), tg('proj.csv_tipo_mora'), tg('proj.csv_tasa_mora'),
+  ]
   const rows = items.map(i => [
     `"${i.clientName}"`,
     `"${i.loanNumber}"`,
@@ -76,7 +81,7 @@ function exportCSV(items: ProjectionItem[], period: { from: string; to: string }
     i.mora.toFixed(2),
     i.prorroga.toFixed(2),
     i.total.toFixed(2),
-    i.moraType === 'fixed' ? 'Fijo' : 'Diario',
+    i.moraType === 'fixed' ? tg('proj.csv_fijo') : tg('proj.csv_diario'),
     i.moraRate,
   ])
   const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
@@ -87,7 +92,7 @@ function exportCSV(items: ProjectionItem[], period: { from: string; to: string }
   link.download = `proyeccion-cobros-${period.from}-${period.to}.csv`
   link.click()
   URL.revokeObjectURL(url)
-  toast.success(`${items.length} registros exportados`)
+  toast.success(tg('proj.csv_exported').replace('{n}', String(items.length)))
 }
 
 // ── KPI Card ─────────────────────────────────────────────────────────────────
@@ -116,6 +121,7 @@ const KpiCard: React.FC<{
 // ── Main Page ─────────────────────────────────────────────────────────────────
 const ProjectionPage: React.FC = () => {
   const { can } = usePermission()
+  const t = useT()
 
   // Date mode: 'single' or 'range'
   const [dateMode, setDateMode]     = useState<'single' | 'range'>('range')
@@ -149,7 +155,7 @@ const ProjectionPage: React.FC = () => {
       setData(res.data)
       setHasLoaded(true)
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Error al cargar la proyección')
+      toast.error(err?.response?.data?.error || t('proj.load_error'))
     } finally {
       setIsLoading(false)
     }
@@ -189,8 +195,8 @@ const ProjectionPage: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
         <AlertCircle className="w-12 h-12 mb-3 opacity-40"/>
-        <p className="font-medium text-slate-600">Sin acceso</p>
-        <p className="text-sm mt-1">No tienes permiso para ver la proyección de cobros.</p>
+        <p className="font-medium text-slate-600">{t('proj.no_access')}</p>
+        <p className="text-sm mt-1">{t('proj.no_access_desc')}</p>
       </div>
     )
   }
@@ -205,10 +211,10 @@ const ProjectionPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <TrendingUp className="w-6 h-6 text-blue-600"/>
-            Proyección de Cobros
+            {t('nav.projection')}
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Estima los ingresos a cobrar según las cuotas vencidas o próximas a vencer
+            {t('proj.subtitle')}
           </p>
         </div>
         {data && (
@@ -217,7 +223,7 @@ const ProjectionPage: React.FC = () => {
             onClick={() => exportCSV(data.items, data.period)}
             className="flex items-center gap-1.5"
           >
-            <Download className="w-4 h-4"/>Exportar CSV
+            <Download className="w-4 h-4"/>{t('proj.export_csv')}
           </Button>
         )}
       </div>
@@ -227,19 +233,19 @@ const ProjectionPage: React.FC = () => {
         <div className="flex flex-wrap items-end gap-4">
           {/* Mode toggle */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Modo</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">{t('proj.mode_label')}</label>
             <div className="flex bg-slate-100 rounded-lg p-0.5">
               <button
                 onClick={() => setDateMode('single')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${dateMode === 'single' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                Fecha puntual
+                {t('proj.mode_single')}
               </button>
               <button
                 onClick={() => setDateMode('range')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${dateMode === 'range' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                Rango de fechas
+                {t('proj.mode_range')}
               </button>
             </div>
           </div>
@@ -248,7 +254,7 @@ const ProjectionPage: React.FC = () => {
           {dateMode === 'single' ? (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 flex items-center gap-1">
-                <Calendar className="w-3 h-3"/>Fecha
+                <Calendar className="w-3 h-3"/>{t('proj.date_label')}
               </label>
               <input
                 type="date"
@@ -260,7 +266,7 @@ const ProjectionPage: React.FC = () => {
           ) : (
             <>
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Desde</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">{t('common.from')}</label>
                 <input
                   type="date"
                   value={fromDate}
@@ -269,7 +275,7 @@ const ProjectionPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Hasta</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">{t('common.to')}</label>
                 <input
                   type="date"
                   value={toDate}
@@ -283,20 +289,20 @@ const ProjectionPage: React.FC = () => {
 
           {/* Quick presets */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-slate-400 font-medium">Accesos rápidos:</span>
+            <span className="text-xs text-slate-400 font-medium">{t('proj.quick_access')}</span>
             {[
-              { label: 'Hoy',          action: () => { setDateMode('single'); setSingleDate(today()) } },
-              { label: 'Esta semana',  action: () => {
+              { label: t('proj.preset_today'),   action: () => { setDateMode('single'); setSingleDate(today()) } },
+              { label: t('proj.preset_week'),    action: () => {
                 const d = new Date(); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1);
                 const mon = new Date(d.setDate(diff)); const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
                 setDateMode('range'); setFromDate(mon.toISOString().slice(0,10)); setToDate(sun.toISOString().slice(0,10));
               }},
-              { label: 'Este mes',     action: () => { setDateMode('range'); setFromDate(firstOfMonth()); setToDate(lastOfMonth()) } },
-              { label: 'Próx. 7 días', action: () => {
-                const f = today(); const t = new Date(); t.setDate(t.getDate()+6);
-                setDateMode('range'); setFromDate(f); setToDate(t.toISOString().slice(0,10));
+              { label: t('proj.preset_month'),   action: () => { setDateMode('range'); setFromDate(firstOfMonth()); setToDate(lastOfMonth()) } },
+              { label: t('proj.preset_next7'),   action: () => {
+                const f = today(); const tt = new Date(); tt.setDate(tt.getDate()+6);
+                setDateMode('range'); setFromDate(f); setToDate(tt.toISOString().slice(0,10));
               }},
-              { label: 'Vencidos',     action: () => {
+              { label: t('proj.preset_overdue'), action: () => {
                 setDateMode('range');
                 const y = new Date(); y.setFullYear(y.getFullYear()-2);
                 setFromDate(y.toISOString().slice(0,10)); setToDate(today());
@@ -314,8 +320,8 @@ const ProjectionPage: React.FC = () => {
 
           <Button onClick={fetchProjection} disabled={isLoading} className="flex items-center gap-1.5 ml-auto">
             {isLoading
-              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>Calculando...</>
-              : <><RefreshCw className="w-4 h-4"/>Calcular proyección</>
+              ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>{t('proj.calculating')}</>
+              : <><RefreshCw className="w-4 h-4"/>{t('proj.calculate_btn')}</>
             }
           </Button>
         </div>
@@ -325,15 +331,15 @@ const ProjectionPage: React.FC = () => {
       {!hasLoaded && !isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <TrendingUp className="w-14 h-14 mb-4 opacity-20"/>
-          <p className="font-medium text-slate-500">Selecciona un período y presiona "Calcular proyección"</p>
-          <p className="text-sm mt-1">Verás el detalle de cuotas, mora, capital e intereses a cobrar</p>
+          <p className="font-medium text-slate-500">{t('proj.empty_prompt')}</p>
+          <p className="text-sm mt-1">{t('proj.empty_prompt_desc')}</p>
         </div>
       )}
 
       {isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
           <div className="w-8 h-8 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin mb-4"/>
-          <p className="text-sm">Calculando proyección...</p>
+          <p className="text-sm">{t('proj.loading_text')}</p>
         </div>
       )}
 
@@ -343,7 +349,7 @@ const ProjectionPage: React.FC = () => {
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Calendar className="w-4 h-4"/>
             <span>
-              Período: <strong className="text-slate-700">
+              {t('proj.period_label')} <strong className="text-slate-700">
                 {data!.period.from === data!.period.to
                   ? formatDate(data!.period.from)
                   : `${formatDate(data!.period.from)} — ${formatDate(data!.period.to)}`}
@@ -354,33 +360,33 @@ const ProjectionPage: React.FC = () => {
           {/* ── KPI Cards ──────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             <KpiCard
-              label="Total a Cobrar"
+              label={t('proj.kpi_total')}
               value={formatCurrency(s.totalProjected)}
-              sub={`${s.totalLoans} préstamo(s) · ${s.totalInstallments} cuota(s)`}
+              sub={t('proj.kpi_total_sub').replace('{n}', String(s.totalLoans)).replace('{m}', String(s.totalInstallments))}
               icon={<DollarSign className="w-5 h-5 text-blue-600"/>}
               color="text-blue-700"
               bg="bg-blue-50"
             />
             <KpiCard
-              label="Capital"
+              label={t('proj.kpi_capital')}
               value={formatCurrency(s.totalCapital)}
-              sub="Saldo de capital en cuotas"
+              sub={t('proj.kpi_capital_sub')}
               icon={<TrendingUp className="w-5 h-5 text-teal-600"/>}
               color="text-teal-700"
               bg="bg-teal-50"
             />
             <KpiCard
-              label="Intereses"
+              label={t('proj.kpi_interest')}
               value={formatCurrency(s.totalInterest)}
-              sub="Intereses en cuotas del período"
+              sub={t('proj.kpi_interest_sub')}
               icon={<TrendingUp className="w-5 h-5 text-indigo-600"/>}
               color="text-indigo-700"
               bg="bg-indigo-50"
             />
             <KpiCard
-              label="Mora + Prórroga"
+              label={t('proj.kpi_mora_prorroga')}
               value={formatCurrency(s.totalMora + s.totalProrroga)}
-              sub={`Mora: ${formatCurrency(s.totalMora)} · Prórroga: ${formatCurrency(s.totalProrroga)}`}
+              sub={t('proj.kpi_mora_prorroga_sub').replace('{n}', formatCurrency(s.totalMora)).replace('{m}', formatCurrency(s.totalProrroga))}
               icon={<AlertCircle className="w-5 h-5 text-red-500"/>}
               color="text-red-600"
               bg="bg-red-50"
@@ -396,7 +402,7 @@ const ProjectionPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-emerald-700">{s.clientsOnTime}</p>
-                  <p className="text-xs text-slate-500 font-medium">Clientes al día</p>
+                  <p className="text-xs text-slate-500 font-medium">{t('proj.clients_ontime')}</p>
                 </div>
               </div>
             </Card>
@@ -407,7 +413,7 @@ const ProjectionPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-red-600">{s.clientsOverdue}</p>
-                  <p className="text-xs text-slate-500 font-medium">Clientes con atraso</p>
+                  <p className="text-xs text-slate-500 font-medium">{t('proj.clients_overdue')}</p>
                 </div>
               </div>
             </Card>
@@ -417,8 +423,8 @@ const ProjectionPage: React.FC = () => {
           {data!.items.length === 0 ? (
             <Card className="p-12 text-center">
               <TrendingUp className="w-10 h-10 text-slate-300 mx-auto mb-3"/>
-              <p className="font-medium text-slate-500">Sin datos en este período</p>
-              <p className="text-sm text-slate-400 mt-1">No hay cuotas vencidas ni próximas a vencer en las fechas seleccionadas.</p>
+              <p className="font-medium text-slate-500">{t('proj.empty_data_title')}</p>
+              <p className="text-sm text-slate-400 mt-1">{t('proj.empty_data_desc')}</p>
             </Card>
           ) : (
             <Card className="p-0 overflow-hidden">
@@ -428,7 +434,7 @@ const ProjectionPage: React.FC = () => {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400"/>
                   <input
                     type="text"
-                    placeholder="Buscar cliente o préstamo..."
+                    placeholder={t('proj.search_ph')}
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -437,9 +443,9 @@ const ProjectionPage: React.FC = () => {
                 <div className="flex items-center gap-1">
                   <Filter className="w-3.5 h-3.5 text-slate-400"/>
                   {([
-                    { val: 'all',     label: `Todos (${data!.items.length})` },
-                    { val: 'ontime',  label: `Al día (${s.clientsOnTime})` },
-                    { val: 'overdue', label: `Con atraso (${s.clientsOverdue})` },
+                    { val: 'all',     label: t('proj.filter_all').replace('{n}', String(data!.items.length)) },
+                    { val: 'ontime',  label: t('proj.filter_ontime').replace('{n}', String(s.clientsOnTime)) },
+                    { val: 'overdue', label: t('proj.filter_overdue').replace('{n}', String(s.clientsOverdue)) },
                   ] as const).map(f => (
                     <button
                       key={f.val}
@@ -450,7 +456,7 @@ const ProjectionPage: React.FC = () => {
                     </button>
                   ))}
                 </div>
-                <span className="text-xs text-slate-400 ml-auto">{filteredItems.length} resultado(s)</span>
+                <span className="text-xs text-slate-400 ml-auto">{t('proj.results_count').replace('{n}', String(filteredItems.length))}</span>
               </div>
 
               {/* Table */}
@@ -459,20 +465,20 @@ const ProjectionPage: React.FC = () => {
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th className="text-left px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:text-slate-800" onClick={() => toggleSort('clientName')}>
-                        Cliente / Préstamo <SortIcon field="clientName"/>
+                        {t('proj.col_client')} <SortIcon field="clientName"/>
                       </th>
-                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase">Estado</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase">{t('col.status')}</th>
                       <th className="text-center px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:text-slate-800" onClick={() => toggleSort('daysLate')}>
-                        Días atraso <SortIcon field="daysLate"/>
+                        {t('proj.col_days_late')} <SortIcon field="daysLate"/>
                       </th>
-                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase">Capital</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase">Interés</th>
+                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase">{t('proj.kpi_capital')}</th>
+                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase">{t('proj.col_interest')}</th>
                       <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:text-slate-800" onClick={() => toggleSort('mora')}>
-                        Mora <SortIcon field="mora"/>
+                        {t('proj.col_mora')} <SortIcon field="mora"/>
                       </th>
-                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase">Prórroga</th>
+                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase">{t('proj.col_prorroga')}</th>
                       <th className="text-right px-4 py-2.5 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:text-slate-800" onClick={() => toggleSort('total')}>
-                        Total <SortIcon field="total"/>
+                        {t('proj.col_total')} <SortIcon field="total"/>
                       </th>
                       <th className="w-8"/>
                     </tr>
@@ -546,37 +552,37 @@ const ProjectionPage: React.FC = () => {
                               <td colSpan={9} className="px-6 py-3">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                                   <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Cuotas en período</p>
-                                    <p className="text-slate-700 font-semibold">{item.installmentsInRange} cuota(s)</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('proj.detail_installments')}</p>
+                                    <p className="text-slate-700 font-semibold">{t('proj.installments_count').replace('{n}', String(item.installmentsInRange))}</p>
                                   </div>
                                   <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Fechas de vencimiento</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('proj.detail_due_dates')}</p>
                                     {item.dueDates.length > 0
                                       ? item.dueDates.map(d => (
                                           <p key={d} className="text-slate-700">{formatDate(d)}</p>
                                         ))
-                                      : <p className="text-slate-400 italic">Sin cuotas en este período</p>
+                                      : <p className="text-slate-400 italic">{t('proj.no_installments')}</p>
                                     }
                                   </div>
                                   <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tipo de mora</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('proj.detail_mora_type')}</p>
                                     <p className="text-slate-700">
                                       {item.moraType === 'fixed'
-                                        ? `Cargo fijo: ${formatCurrency(item.moraRate, item.currency)} por cuota vencida`
-                                        : `Tasa diaria: ${(item.moraRate * 100).toFixed(3)}%`
+                                        ? t('proj.mora_fixed').replace('{amount}', formatCurrency(item.moraRate, item.currency))
+                                        : t('proj.mora_daily').replace('{rate}', (item.moraRate * 100).toFixed(3))
                                       }
                                     </p>
                                   </div>
                                   <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Desglose total</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('proj.detail_breakdown')}</p>
                                     <table className="w-full text-[11px]">
                                       <tbody>
-                                        <tr><td className="text-slate-500 pr-2">Capital:</td><td className="text-right font-mono">{formatCurrency(item.capital, item.currency)}</td></tr>
-                                        <tr><td className="text-slate-500 pr-2">Interés:</td><td className="text-right font-mono">{formatCurrency(item.interest, item.currency)}</td></tr>
-                                        <tr><td className="text-red-500 pr-2">Mora:</td><td className="text-right font-mono text-red-600">{formatCurrency(item.mora, item.currency)}</td></tr>
-                                        <tr><td className="text-purple-500 pr-2">Prórroga:</td><td className="text-right font-mono text-purple-600">{formatCurrency(item.prorroga, item.currency)}</td></tr>
+                                        <tr><td className="text-slate-500 pr-2">{t('proj.bd_capital')}</td><td className="text-right font-mono">{formatCurrency(item.capital, item.currency)}</td></tr>
+                                        <tr><td className="text-slate-500 pr-2">{t('proj.bd_interest')}</td><td className="text-right font-mono">{formatCurrency(item.interest, item.currency)}</td></tr>
+                                        <tr><td className="text-red-500 pr-2">{t('proj.bd_mora')}</td><td className="text-right font-mono text-red-600">{formatCurrency(item.mora, item.currency)}</td></tr>
+                                        <tr><td className="text-purple-500 pr-2">{t('proj.bd_prorroga')}</td><td className="text-right font-mono text-purple-600">{formatCurrency(item.prorroga, item.currency)}</td></tr>
                                         <tr className="border-t border-slate-200 font-bold">
-                                          <td className="text-slate-700 pr-2 pt-1">Total:</td>
+                                          <td className="text-slate-700 pr-2 pt-1">{t('proj.bd_total')}</td>
                                           <td className="text-right font-mono pt-1">{formatCurrency(item.total, item.currency)}</td>
                                         </tr>
                                       </tbody>
@@ -596,7 +602,7 @@ const ProjectionPage: React.FC = () => {
                     <tfoot className="bg-slate-100 border-t-2 border-slate-200">
                       <tr>
                         <td className="px-4 py-3 font-bold text-slate-700 text-sm" colSpan={3}>
-                          Totales ({filteredItems.length} préstamos)
+                          {t('proj.totals_label').replace('{n}', String(filteredItems.length))}
                         </td>
                         <td className="px-3 py-3 text-right font-bold text-sm font-mono text-slate-700">
                           {formatCurrency(filteredItems.reduce((s, i) => s + i.capital, 0))}

@@ -973,6 +973,35 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lat REAL`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lng REAL`); } catch(_) {}
 
+  // Habeas data / derecho al olvido: marca cuando un cliente pidio que se
+  // borraran sus datos personales. Antes no existia ningun mecanismo para
+  // esto -- se implementa como ANONIMIZACION (no borrado duro) para conservar
+  // el historial financiero/contable que suele requerirse retener por ley,
+  // eliminando solo los datos personales identificables.
+  try { db.exec(`ALTER TABLE clients ADD COLUMN anonymized_at TEXT`); } catch(_) {}
+
+  // Reportes programados por email -- antes ningun reporte se enviaba
+  // automaticamente, el dueño tenia que entrar a buscarlo cada vez.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS report_subscriptions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      report_type TEXT NOT NULL DEFAULT 'dashboard',
+      frequency TEXT NOT NULL DEFAULT 'weekly',
+      recipients TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      last_sent_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+    );
+  `);
+
+  // Comision de cobradores/oficiales sobre lo que cobran -- antes el unico
+  // concepto de "comision" en el sistema era investors.commission_percent
+  // (liquidacion a inversionistas); no habia forma de incentivar al personal.
+  try { db.exec(`ALTER TABLE tenant_memberships ADD COLUMN commission_percent REAL NOT NULL DEFAULT 0`); } catch(_) {}
+
   // Sesiones: token_version permite invalidar TODOS los JWT emitidos hasta
   // ahora ("cerrar todas mis sesiones") sin necesidad de una tabla de
   // revocacion -- el JWT firma su tokenVersion; si no coincide con la del

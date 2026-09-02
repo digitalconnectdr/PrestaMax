@@ -192,10 +192,12 @@ import { runOverdueCron } from './services/whatsappService';
 import { createBackup, BACKUP_CONFIG } from './services/backupService';
 import { syncLoanStatuses } from './services/loanStatusSync';
 import { runTrialReminderCron } from './services/trialReminderService';
+import { runScheduledReportsCron } from './services/reportSubscriptionService';
 let lastCronDate = '';
 let lastBackupDate = '';
 let lastStatusSyncDate = '';
 let lastTrialReminderDate = '';
+let lastReportDigestDate = '';
 
 // FIX P2 (Jun 2026): sincronizar estados (in_mora/days_overdue/mora_balance)
 // al arrancar, para que listas y dashboards reflejen la realidad tras un deploy
@@ -241,6 +243,14 @@ setInterval(() => {
       runTrialReminderCron(getDb())
         .then(r => console.log(`[trial-reminder] cron OK: ${r.sent}/${r.checked} enviados`))
         .catch(e => console.error('[trial-reminder] cron fallo:', e?.message || e));
+    }
+
+    // 7am: resumen de dashboard programado (diario/semanal/mensual)
+    if (hour === 7 && lastReportDigestDate !== todayStr) {
+      lastReportDigestDate = todayStr;
+      runScheduledReportsCron(getDb())
+        .then(r => console.log(`[report-digest] cron OK: ${r.sent}/${r.checked} enviados`))
+        .catch(e => console.error('[report-digest] cron fallo:', e?.message || e));
     }
   } catch (e) { console.error('[cron tick]', e); }
 }, 60 * 60 * 1000); // cada hora

@@ -1,9 +1,42 @@
 import { Router, Response } from 'express';
-import { getDb } from '../db/database';
+import { getDb, uuid, now } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 // Importamos calcMora unificado para evitar drift entre copias.
 import { calcMora as libCalcMora } from '../lib/calculations';
 const router = Router();
+
+// ── Resumen de dashboard programado por email (diario/semanal/mensual) ──────
+// Antes ningun reporte se enviaba automaticamente; el dueño tenia que entrar
+// al sistema a revisarlo cada vez. El envio real lo hace el cron de
+// reportSubscriptionService.ts (7am); estas rutas solo gestionan la config.
+router.get('/subscriptions', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    res.json(db.prepare(`SELECT * FROM report_subscriptions WHERE tenant_id=? AND user_id=? ORDER BY created_at DESC`).all(req.tenant.id, req.user.id));
+  } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
+router.post('/subscriptions', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+  try {
+    const { frequency = 'weekly', recipients } = req.body;
+    if (!['daily', 'weekly', 'monthly'].includes(frequency)) return res.status(400).json({ error: 'Frecuencia inválida' });
+    const emails = (recipients || req.user.email || '').trim();
+    if (!emails) return res.status(400).json({ error: 'Al menos un correo destinatario es requerido' });
+    const db = getDb();
+    const id = uuid();
+    db.prepare(`INSERT INTO report_subscriptions (id, tenant_id, user_id, report_type, frequency, recipients) VALUES (?,?,?, 'dashboard', ?, ?)`)
+      .run(id, req.tenant.id, req.user.id, frequency, emails);
+    res.status(201).json(db.prepare('SELECT * FROM report_subscriptions WHERE id=?').get(id));
+  } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
+router.delete('/subscriptions/:id', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    db.prepare('DELETE FROM report_subscriptions WHERE id=? AND tenant_id=? AND user_id=?').run(req.params.id, req.tenant.id, req.user.id);
+    res.json({ success: true });
+  } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
 
 router.get('/dashboard', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
   try {
@@ -93,7 +126,10 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
 router.get('/portfolio', authenticate, requireTenant, requirePermission('reports.portfolio'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb(); const tid = req.tenant.id;
-    const loans = db.prepare(`SELECT l.*,c.full_name as client_name,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.status IN ('active','current','overdue','in_mora')`).all(tid);
+    const { branch_id } = req.query as any;
+    const branchFilter = branch_id ? ' AND l.branch_id=?' : '';
+    const params = branch_id ? [tid, branch_id] : [tid];
+    const loans = db.prepare(`SELECT l.*,c.full_name as client_name,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.status IN ('active','current','overdue','in_mora')${branchFilter}`).all(...params);
     const aging = { current:0, d1_7:0, d8_15:0, d16_30:0, over30:0, amounts: {current:0,d1_7:0,d8_15:0,d16_30:0,over30:0} };
     (loans as any[]).forEach((l:any) => {
       const d = l.days_overdue||0;
@@ -110,18 +146,50 @@ router.get('/portfolio', authenticate, requireTenant, requirePermission('reports
 router.get('/mora', authenticate, requireTenant, requirePermission('reports.mora'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    res.json(db.prepare(`SELECT l.*,c.full_name as client_name,c.phone_personal,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.is_voided=0 AND l.status IN ('overdue','in_mora') ORDER BY l.mora_balance DESC`).all(req.tenant.id));
+    const { branch_id } = req.query as any;
+    const branchFilter = branch_id ? ' AND l.branch_id=?' : '';
+    const params = branch_id ? [req.tenant.id, branch_id] : [req.tenant.id];
+    res.json(db.prepare(`SELECT l.*,c.full_name as client_name,c.phone_personal,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.is_voided=0 AND l.status IN ('overdue','in_mora')${branchFilter} ORDER BY l.mora_balance DESC`).all(...params));
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
 
 router.get('/collections', authenticate, requireTenant, requirePermission('reports.collections'), (req: AuthRequest, res: Response) => {
   try {
-    const db = getDb(); const { from, to } = req.query as any;
+    const db = getDb(); const { from, to, branch_id } = req.query as any;
     const start = from || new Date(Date.now()-30*86400000).toISOString().slice(0,10);
     const end = to || new Date().toISOString().slice(0,10);
-    const data = db.prepare(`SELECT p.collector_id, u.full_name as collector_name, SUM(p.amount) as total, COUNT(*) as count FROM payments p LEFT JOIN users u ON u.id=p.collector_id WHERE p.tenant_id=? AND p.is_voided=0 AND date(p.payment_date) BETWEEN ? AND ? GROUP BY p.collector_id`).all(req.tenant.id, start, end);
+    const branchFilter = branch_id ? ' AND p.branch_id=?' : '';
+    const params = branch_id ? [req.tenant.id, start, end, branch_id] : [req.tenant.id, start, end];
+    const data = db.prepare(`SELECT p.collector_id, u.full_name as collector_name, SUM(p.amount) as total, COUNT(*) as count FROM payments p LEFT JOIN users u ON u.id=p.collector_id WHERE p.tenant_id=? AND p.is_voided=0 AND date(p.payment_date) BETWEEN ? AND ?${branchFilter} GROUP BY p.collector_id`).all(...params);
     res.json(data);
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// Comision de cobradores/oficiales sobre lo cobrado en el periodo. Antes no
+// existia ningun concepto de incentivo/comision para el personal -- solo
+// para inversionistas. commission_percent vive en tenant_memberships.
+router.get('/commissions', authenticate, requireTenant, requirePermission('reports.collections'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const { from, to, branch_id } = req.query as any;
+    const start = from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const end = to || new Date().toISOString().slice(0, 10);
+    const branchFilter = branch_id ? ' AND p.branch_id=?' : '';
+    const data = db.prepare(`
+      SELECT p.collector_id, u.full_name as collector_name,
+             tm.commission_percent,
+             COALESCE(SUM(p.amount),0) as total_collected,
+             COUNT(*) as payment_count,
+             ROUND(COALESCE(SUM(p.amount),0) * COALESCE(tm.commission_percent,0) / 100, 2) as commission_amount
+      FROM payments p
+      LEFT JOIN users u ON u.id=p.collector_id
+      LEFT JOIN tenant_memberships tm ON tm.user_id=p.collector_id AND tm.tenant_id=?
+      WHERE p.tenant_id=? AND p.is_voided=0 AND date(p.payment_date) BETWEEN ? AND ? AND p.collector_id IS NOT NULL${branchFilter}
+      GROUP BY p.collector_id
+      ORDER BY commission_amount DESC
+    `).all(req.tenant.id, req.tenant.id, start, end, ...(branch_id ? [branch_id] : []));
+    res.json(data);
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
 });
 
 router.get('/audit', authenticate, requireTenant, requirePermission('reports.portfolio'), (req: AuthRequest, res: Response) => {

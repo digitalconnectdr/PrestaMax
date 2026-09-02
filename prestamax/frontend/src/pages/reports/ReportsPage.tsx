@@ -110,6 +110,8 @@ const PctBadge: React.FC<{ val: number }> = ({ val }) => (
   </span>
 )
 
+const DIGEST_FREQ_LABEL = { daily: 'diario', weekly: 'semanal', monthly: 'mensual' }
+
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Efectivo', bank_transfer: 'Transferencia', check: 'Cheque',
   card: 'Tarjeta', mobile_payment: 'Pago Móvil', other: 'Otro'
@@ -129,6 +131,12 @@ const ReportsPage: React.FC = () => {
   const [advanced, setAdvanced] = useState<AdvancedData | null>(null)
   const [bankData, setBankData] = useState<BankAccountReport | null>(null)
   const [incomeData, setIncomeData] = useState<IncomeExpenseReport | null>(null)
+  const [commissionsData, setCommissionsData] = useState<any[]>([])
+  const [subscriptions, setSubscriptions] = useState<any[]>([])
+  const [newDigestFreq, setNewDigestFreq] = useState('weekly')
+  const [isSavingDigest, setIsSavingDigest] = useState(false)
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
+  const [branchFilter, setBranchFilter] = useState('')
   // Bank account transaction drill-down
   const [txModal, setTxModal] = useState<{ accountId: string; accountName: string } | null>(null)
   const [txData, setTxData] = useState<{ transactions: AccountTransaction[]; account: any } | null>(null)
@@ -172,6 +180,10 @@ const ReportsPage: React.FC = () => {
         } else if (activeTab === 'income_expenses') {
           const res = await api.get(`/reports/income-expenses?${params}`)
           setIncomeData(res.data)
+        } else if (activeTab === 'commissions') {
+          const branchQs = branchFilter ? `&branch_id=${branchFilter}` : ''
+          const res = await api.get(`/reports/commissions?${params}${branchQs}`)
+          setCommissionsData(Array.isArray(res.data) ? res.data : [])
         }
       } catch (err) {
         if (isAccessDenied(err) || isSubscriptionExpired(err)) return
@@ -185,13 +197,41 @@ const ReportsPage: React.FC = () => {
     // nativo no se cierra prematuramente por re-render.
     const handler = setTimeout(load, 600)
     return () => clearTimeout(handler)
-  }, [activeTab, fromDate, toDate, advancedFrom, advancedTo])
+  }, [activeTab, fromDate, toDate, advancedFrom, advancedTo, branchFilter])
+
+  // Sucursales para el filtro del reporte de comisiones — opcional: si el
+  // usuario no tiene permiso de settings.branches simplemente no se muestra.
+  useEffect(() => {
+    api.get('/settings/branches').then(res => setBranches(Array.isArray(res.data) ? res.data : [])).catch(() => {})
+  }, [])
+
+  const loadSubscriptions = () => {
+    api.get('/reports/subscriptions').then(res => setSubscriptions(Array.isArray(res.data) ? res.data : [])).catch(() => {})
+  }
+  useEffect(() => { loadSubscriptions() }, [])
+
+  const handleAddDigest = async () => {
+    setIsSavingDigest(true)
+    try {
+      await api.post('/reports/subscriptions', { frequency: newDigestFreq })
+      toast.success('Resumen programado activado')
+      loadSubscriptions()
+    } catch (err: any) { toast.error(err?.response?.data?.error || 'No se pudo activar el resumen') }
+    finally { setIsSavingDigest(false) }
+  }
+  const handleRemoveDigest = async (id: string) => {
+    try {
+      await api.delete(`/reports/subscriptions/${id}`)
+      setSubscriptions(prev => prev.filter(s => s.id !== id))
+    } catch { toast.error('No se pudo desactivar') }
+  }
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard', show: can('reports.dashboard') },
     { id: 'advanced', label: 'Análisis Avanzado', show: can('reports.advanced') },
     { id: 'bank_accounts', label: 'Cuentas Bancarias', show: can('reports.portfolio') },
     { id: 'income_expenses', label: 'Ingresos y Gastos', show: can('reports.income') },
+    { id: 'commissions', label: 'Comisiones', show: can('reports.collections') },
     { id: 'datacredito', label: '📋 DataCrédito', show: can('reports.datacredito') },
   ].filter(t => t.show !== false).filter(t => t.show)
 
@@ -537,6 +577,32 @@ const ReportsPage: React.FC = () => {
                     <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
                       className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
+                </div>
+              </Card>
+
+              <Card className="bg-slate-50 border-slate-200">
+                <h3 className="section-title mb-1">📬 Resumen programado por email</h3>
+                <p className="text-xs text-slate-500 mb-3">Recibe las cifras clave del dashboard en tu correo, sin tener que entrar a revisarlas.</p>
+                {subscriptions.length > 0 && (
+                  <div className="space-y-1.5 mb-3">
+                    {subscriptions.map(s => (
+                      <div key={s.id} className="flex items-center justify-between text-sm bg-white border border-slate-200 rounded-lg px-3 py-2">
+                        <span>Resumen <strong>{(DIGEST_FREQ_LABEL as Record<string, string>)[s.frequency] || s.frequency}</strong> a {s.recipients}</span>
+                        <button onClick={() => handleRemoveDigest(s.id)} className="text-xs text-red-500 hover:underline">Desactivar</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 items-end">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Frecuencia</label>
+                    <select value={newDigestFreq} onChange={e => setNewDigestFreq(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="daily">Diario</option>
+                      <option value="weekly">Semanal</option>
+                      <option value="monthly">Mensual</option>
+                    </select>
+                  </div>
+                  <Button size="sm" onClick={handleAddDigest} disabled={isSavingDigest}>{isSavingDigest ? 'Guardando...' : 'Activar resumen'}</Button>
                 </div>
               </Card>
 
@@ -1044,6 +1110,67 @@ const ReportsPage: React.FC = () => {
           {/* ── DATACREDITO ── */}
           {activeTab === 'datacredito' && (
             <DataCreditoTab dcLoading={dcLoading} setDcLoading={setDcLoading} />
+          )}
+
+          {activeTab === 'commissions' && (
+            <div className="space-y-6">
+              <Card className="mb-4">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Desde</label>
+                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Hasta</label>
+                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  {branches.length > 0 && (
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Sucursal</label>
+                      <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
+                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Todas</option>
+                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </Card>
+              <Card className="p-0 overflow-hidden">
+                <div className="p-4 pb-0">
+                  <h3 className="section-title">Comisión por cobrador</h3>
+                  <p className="text-xs text-slate-500 mt-0.5 mb-3">
+                    Calculada sobre lo cobrado en el periodo × el % de comisión configurado en Configuración → Usuarios.
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead><tr className="border-b border-slate-200">
+                      <th className="text-left py-3 px-4 font-semibold text-slate-700">Cobrador</th>
+                      <th className="text-right py-3 px-4 font-semibold text-slate-700">Cobrado</th>
+                      <th className="text-center py-3 px-4 font-semibold text-slate-700">Pagos</th>
+                      <th className="text-center py-3 px-4 font-semibold text-slate-700">% Comisión</th>
+                      <th className="text-right py-3 px-4 font-semibold text-slate-700">Comisión</th>
+                    </tr></thead>
+                    <tbody>
+                      {commissionsData.length === 0 ? (
+                        <tr><td colSpan={5} className="text-center py-8 text-slate-400 text-sm">Sin pagos con cobrador asignado en este periodo.</td></tr>
+                      ) : commissionsData.map((row: any) => (
+                        <tr key={row.collectorId || 'sin-cobrador'} className="border-b border-slate-100">
+                          <td className="py-3 px-4 font-medium">{row.collectorName || 'Sin nombre'}</td>
+                          <td className="py-3 px-4 text-right">{formatCurrency(row.totalCollected)}</td>
+                          <td className="py-3 px-4 text-center">{row.paymentCount}</td>
+                          <td className="py-3 px-4 text-center">{row.commissionPercent || 0}%</td>
+                          <td className="py-3 px-4 text-right font-semibold text-emerald-700">{formatCurrency(row.commissionAmount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
           )}
 
           {activeTab === 'income_expenses' && (

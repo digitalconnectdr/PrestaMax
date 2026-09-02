@@ -181,20 +181,20 @@ router.get('/users', authenticate, requireTenant, requirePermission('settings.us
     const isTenantOwner = requesterMembership && (requesterMembership.roles || '').includes('tenant_owner');
     let users;
     if (isTenantOwner) {
-      users = db.prepare(`SELECT tm.id, tm.user_id, tm.roles, tm.is_active, tm.branch_id, tm.created_at,
+      users = db.prepare(`SELECT tm.id, tm.user_id, tm.roles, tm.is_active, tm.branch_id, tm.commission_percent, tm.created_at,
         u.full_name, u.email, u.phone, u.is_active as user_active, u.last_login
       FROM tenant_memberships tm JOIN users u ON u.id=tm.user_id
       WHERE tm.tenant_id=? ORDER BY u.full_name`).all(req.tenant.id);
     } else {
       // Non-owners cannot see platform admins/owners
-      users = db.prepare(`SELECT tm.id, tm.user_id, tm.roles, tm.is_active, tm.branch_id, tm.created_at,
+      users = db.prepare(`SELECT tm.id, tm.user_id, tm.roles, tm.is_active, tm.branch_id, tm.commission_percent, tm.created_at,
         u.full_name, u.email, u.phone, u.is_active as user_active, u.last_login
       FROM tenant_memberships tm JOIN users u ON u.id=tm.user_id
       WHERE tm.tenant_id=? AND (u.platform_role IS NULL OR u.platform_role NOT IN ('platform_owner','platform_admin','admin'))
       AND tm.user_id != ?
       ORDER BY u.full_name`).all(req.tenant.id, req.user.id);
       // Add the requester themselves back at the top
-      const self = db.prepare(`SELECT tm.id, tm.user_id, tm.roles, tm.is_active, tm.branch_id, tm.created_at,
+      const self = db.prepare(`SELECT tm.id, tm.user_id, tm.roles, tm.is_active, tm.branch_id, tm.commission_percent, tm.created_at,
         u.full_name, u.email, u.phone, u.is_active as user_active, u.last_login
       FROM tenant_memberships tm JOIN users u ON u.id=tm.user_id
       WHERE tm.tenant_id=? AND tm.user_id=?`).get(req.tenant.id, req.user.id);
@@ -211,6 +211,7 @@ router.put('/users/:membershipId', authenticate, requireTenant, requirePermissio
     const roles = req.body.roles;
     const is_active = req.body.is_active ?? req.body.isActive;
     const branch_id = req.body.branch_id ?? req.body.branchId;
+    const commission_percent = req.body.commission_percent ?? req.body.commissionPercent;
     const db = getDb();
     // Protect: tenant_owner role can never be assigned via API
     if (roles && Array.isArray(roles) && roles.includes('tenant_owner')) {
@@ -235,11 +236,13 @@ router.put('/users/:membershipId', authenticate, requireTenant, requirePermissio
       roles=COALESCE(?,roles),
       is_active=COALESCE(?,is_active),
       branch_id=COALESCE(?,branch_id),
+      commission_percent=COALESCE(?,commission_percent),
       updated_at=?
     WHERE id=? AND tenant_id=?`).run(
       roles ? JSON.stringify(roles) : null,
       is_active !== undefined ? (is_active ? 1 : 0) : null,
-      branch_id ?? null, now(),
+      branch_id ?? null,
+      commission_percent !== undefined ? parseFloat(commission_percent) : null, now(),
       req.params.membershipId, req.tenant.id
     );
     const targetMember = db.prepare('SELECT u.full_name FROM tenant_memberships tm JOIN users u ON u.id=tm.user_id WHERE tm.id=?').get(req.params.membershipId) as any;

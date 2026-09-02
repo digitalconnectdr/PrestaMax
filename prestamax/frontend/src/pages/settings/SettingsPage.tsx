@@ -28,7 +28,7 @@ interface TenantData { name: string; email: string; phone: string; address: stri
 interface SettingsData { moraRateDaily: number; moraGraceDays: number; rebateEnabled: number; rebateType: string; moraBase: string; moraFixedEnabled: number; moraFixedAmount: number }
 interface CurrencySettings { multiCurrencyEnabled: boolean; enabledCurrencies: string[] }
 interface LoanProduct { id: string; name: string; code: string; type: string; rate: number; minTerm: number; maxTerm: number; isActive: number; paymentFrequency: string; amortizationType: string; minAmount: number; maxAmount: number; requiresGuarantee?: boolean | number }
-interface Member { id: string; userId: string; fullName: string; email: string; roles: string; isActive: number; userActive: number; branchId: string | null; lastLogin: string | null }
+interface Member { id: string; userId: string; fullName: string; email: string; roles: string; isActive: number; userActive: number; branchId: string | null; commissionPercent?: number; lastLogin: string | null }
 interface Branch { id: string; name: string; address: string; phone: string; isActive: number }
 interface BankAccount { id: string; bankName: string; accountNumber: string; accountType: string; accountHolder: string; currency: string; isActive: number; initialBalance: number; currentBalance: number; loanedBalance: number }
 interface ContractTemplate { id: string; name: string; type: string; body: string; isDefault: number; version: number }
@@ -1082,8 +1082,8 @@ const SettingsPage: React.FC = () => {
                     <h4 className="font-semibold text-blue-900">{tGen('set.edit_member').replace('{name}', editingMember.fullName)}</h4>
                     <button onClick={()=>setEditingMember(null)} className="text-slate-500 hover:text-slate-700"><X className="w-4 h-4"/></button>
                   </div>
-                  <div className="flex gap-3 items-end">
-                    <div className="flex-1">
+                  <div className="flex gap-3 items-end flex-wrap">
+                    <div className="flex-1 min-w-[160px]">
                       <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.role')}</label>
                       <select defaultValue={editingMember.roles} id="edit-role-select" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value='["cobrador"]'>{tGen('set.role_cobrador')}</option>
@@ -1092,10 +1092,17 @@ const SettingsPage: React.FC = () => {
                         <option value='["prestamista"]'>{tGen('set.role_prestamista')}</option>
                       </select>
                     </div>
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.commission_pct')}</label>
+                      <input type="number" step="0.01" min="0" max="100" id="edit-commission-input" defaultValue={editingMember.commissionPercent || 0}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
                     <Button size="sm" onClick={()=>{
                       const sel = document.getElementById('edit-role-select') as HTMLSelectElement
                       let roles=['cobrador']; try { roles=JSON.parse(sel.value) } catch(_) {}
-                      handleUpdateMember(editingMember.id, { roles })
+                      const commInput = document.getElementById('edit-commission-input') as HTMLInputElement
+                      const commission_percent = parseFloat(commInput.value) || 0
+                      handleUpdateMember(editingMember.id, { roles, commission_percent })
                       setEditingMember(null)
                     }}>{tGen('set.save_role')}</Button>
                   </div>

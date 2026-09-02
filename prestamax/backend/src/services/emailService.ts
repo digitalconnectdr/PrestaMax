@@ -293,6 +293,60 @@ export async function sendNewLoginAlertEmail(p: { toEmail: string; fullName: str
   return sendViaResend([p.toEmail], 'Nuevo inicio de sesión en tu cuenta de CredyTek', html, text, 'new-login-alert');
 }
 
+// ─── Reporte de dashboard programado (digest) ────────────────────────────
+// Antes ningun reporte se enviaba automaticamente por email -- el dueño
+// tenia que entrar al sistema a revisarlo cada vez.
+interface DashboardDigestPayload {
+  toEmail: string;
+  tenantName: string;
+  frequency: string;
+  kpis: {
+    totalPortfolio: number;
+    activePortfolio: number;
+    activeLoans: number;
+    overdueLoans: number;
+    moraBalance: number;
+    todayPayments: number;
+    totalClients: number;
+  };
+}
+
+function buildDigestRow(label: string, value: string): string {
+  return `<tr><td style="padding:8px 0;color:#6b7280;">${label}</td><td style="padding:8px 0;text-align:right;font-weight:600;">${value}</td></tr>`;
+}
+
+export async function sendDashboardDigestEmail(p: DashboardDigestPayload): Promise<boolean> {
+  if (!p.toEmail) return false;
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const freqLabel: Record<string, string> = { daily: 'diario', weekly: 'semanal', monthly: 'mensual' };
+  const fmt = (n: number) => `RD$${(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const subject = `Tu resumen ${freqLabel[p.frequency] || ''} de CredyTek — ${p.tenantName}`;
+  const html = `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;font-size:20px;">📊 Resumen ${freqLabel[p.frequency] || ''} — ${p.tenantName}</h1>
+  </div>
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      ${buildDigestRow('Cartera total', fmt(p.kpis.totalPortfolio))}
+      ${buildDigestRow('Cartera activa', fmt(p.kpis.activePortfolio))}
+      ${buildDigestRow('Préstamos activos', String(p.kpis.activeLoans))}
+      ${buildDigestRow('Préstamos en mora', String(p.kpis.overdueLoans))}
+      ${buildDigestRow('Saldo en mora', fmt(p.kpis.moraBalance))}
+      ${buildDigestRow('Cobros de hoy', fmt(p.kpis.todayPayments))}
+      ${buildDigestRow('Clientes activos', String(p.kpis.totalClients))}
+    </table>
+    <div style="margin-top:20px;">
+      <a href="${frontUrl}/dashboard" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Ver dashboard completo</a>
+    </div>
+    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">CredyTek · Puedes desactivar este resumen desde Reportes → Resumen programado.</p>
+  </div>
+</body></html>`.trim();
+  const text = `Resumen ${freqLabel[p.frequency] || ''} de ${p.tenantName}\n\nCartera total: ${fmt(p.kpis.totalPortfolio)}\nCartera activa: ${fmt(p.kpis.activePortfolio)}\nPréstamos activos: ${p.kpis.activeLoans}\nPréstamos en mora: ${p.kpis.overdueLoans}\nSaldo en mora: ${fmt(p.kpis.moraBalance)}\nCobros de hoy: ${fmt(p.kpis.todayPayments)}\nClientes activos: ${p.kpis.totalClients}\n\nVer dashboard: ${frontUrl}/dashboard`;
+  return sendViaResend([p.toEmail], subject, html, text, 'dashboard-digest');
+}
+
 export const EMAIL_CONFIG = {
   enabled: !!(process.env.RESEND_API_KEY && process.env.ADMIN_EMAIL),
   to: process.env.ADMIN_EMAIL || null,
