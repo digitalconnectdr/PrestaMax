@@ -902,6 +902,114 @@ router.get('/:id/schedule', authenticate, requireTenant, requirePermission('loan
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
 
+// ── Garantias / colateral (casas de empeño y préstamos con aval en bien) ────
+// Antes solo existia la tabla loan_guarantees y un chequeo en /approve que
+// exigia al menos una fila -- pero no habia NINGUNA ruta para crear una,
+// asi que un producto con requires_guarantee=true era imposible de aprobar.
+router.get('/:id/guarantees', authenticate, requireTenant, requirePermission('loans.view'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const loan = db.prepare('SELECT id FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id);
+    if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
+    const rows = db.prepare(`
+      SELECT g.*, gc.name as category_name
+      FROM loan_guarantees g LEFT JOIN guarantee_categories gc ON gc.id=g.category_id
+      WHERE g.loan_id=? ORDER BY g.received_at DESC
+    `).all(req.params.id);
+    res.json(rows);
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
+});
+
+router.post('/:id/guarantees', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const loan = db.prepare('SELECT id, loan_number FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
+    if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
+    const d = req.body;
+    if (!d.description?.trim()) return res.status(400).json({ error: 'Descripción del bien es requerida' });
+    const id = uuid();
+    db.prepare(`INSERT INTO loan_guarantees (id, loan_id, category_id, description, estimated_value, photo_url, status, received_at)
+      VALUES (?,?,?,?,?,?, 'in_custody', datetime('now'))`)
+      .run(id, req.params.id, d.category_id || null, d.description.trim(), d.estimated_value != null ? parseFloat(d.estimated_value) : null, d.photo_url || null);
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)')
+      .run(uuid(), req.tenant.id, req.user.id, req.user.full_name, 'created', 'loan_guarantee', id, `Registró garantía "${d.description.trim()}" en el préstamo ${loan.loan_number}`);
+    const row = db.prepare('SELECT g.*, gc.name as category_name FROM loan_guarantees g LEFT JOIN guarantee_categories gc ON gc.id=g.category_id WHERE g.id=?').get(id);
+    res.status(201).json(row);
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
+});
+
+router.put('/guarantees/:guaranteeId', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const g = db.prepare(`
+      SELECT g.* FROM loan_guarantees g JOIN loans l ON l.id=g.loan_id
+      WHERE g.id=? AND l.tenant_id=?
+    `).get(req.params.guaranteeId, req.tenant.id) as any;
+    if (!g) return res.status(404).json({ error: 'Garantía no encontrada' });
+    if (g.status !== 'in_custody') return res.status(400).json({ error: 'Solo se puede editar una garantía en custodia' });
+    const d = req.body;
+    db.prepare(`UPDATE loan_guarantees SET category_id=?, description=?, estimated_value=?, photo_url=? WHERE id=?`)
+      .run(d.category_id ?? g.category_id, d.description?.trim() || g.description, d.estimated_value != null ? parseFloat(d.estimated_value) : g.estimated_value, d.photo_url ?? g.photo_url, req.params.guaranteeId);
+    const row = db.prepare('SELECT g.*, gc.name as category_name FROM loan_guarantees g LEFT JOIN guarantee_categories gc ON gc.id=g.category_id WHERE g.id=?').get(req.params.guaranteeId);
+    res.json(row);
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
+});
+
+router.delete('/guarantees/:guaranteeId', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const g = db.prepare(`
+      SELECT g.* FROM loan_guarantees g JOIN loans l ON l.id=g.loan_id
+      WHERE g.id=? AND l.tenant_id=?
+    `).get(req.params.guaranteeId, req.tenant.id) as any;
+    if (!g) return res.status(404).json({ error: 'Garantía no encontrada' });
+    if (g.status !== 'in_custody') return res.status(400).json({ error: 'No se puede eliminar una garantía ya liberada o ejecutada — es historial' });
+    db.prepare('DELETE FROM loan_guarantees WHERE id=?').run(req.params.guaranteeId);
+    res.json({ success: true });
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
+});
+
+// Devolver el bien al cliente (normalmente cuando el préstamo ya está liquidado)
+router.post('/guarantees/:guaranteeId/release', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const g = db.prepare(`
+      SELECT g.*, l.loan_number FROM loan_guarantees g JOIN loans l ON l.id=g.loan_id
+      WHERE g.id=? AND l.tenant_id=?
+    `).get(req.params.guaranteeId, req.tenant.id) as any;
+    if (!g) return res.status(404).json({ error: 'Garantía no encontrada' });
+    if (g.status !== 'in_custody') return res.status(400).json({ error: 'Esta garantía ya no está en custodia' });
+    db.prepare(`UPDATE loan_guarantees SET status='released', released_at=datetime('now') WHERE id=?`).run(req.params.guaranteeId);
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)')
+      .run(uuid(), req.tenant.id, req.user.id, req.user.full_name, 'released', 'loan_guarantee', g.id, `Liberó la garantía "${g.description}" del préstamo ${g.loan_number}`);
+    res.json({ success: true });
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
+});
+
+// Ejecutar la garantía (venta/remate) cuando el préstamo cae en incumplimiento.
+// Solo deja constancia de la venta -- NO registra automáticamente un pago en
+// el préstamo (evita duplicar/desalinear la lógica de aplicación de pagos a
+// capital/interés/mora ya probada en payments.ts). El usuario registra el
+// pago correspondiente por separado si aplica lo recuperado al saldo.
+router.post('/guarantees/:guaranteeId/execute', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const g = db.prepare(`
+      SELECT g.*, l.loan_number FROM loan_guarantees g JOIN loans l ON l.id=g.loan_id
+      WHERE g.id=? AND l.tenant_id=?
+    `).get(req.params.guaranteeId, req.tenant.id) as any;
+    if (!g) return res.status(404).json({ error: 'Garantía no encontrada' });
+    if (g.status !== 'in_custody') return res.status(400).json({ error: 'Esta garantía ya no está en custodia' });
+    const d = req.body;
+    const mode = d.mode === 'auctioned' ? 'auctioned' : 'sold'; // 'sold' (venta directa) | 'auctioned' (remate)
+    db.prepare(`UPDATE loan_guarantees SET status=?, released_at=datetime('now'), sale_amount=?, sale_notes=? WHERE id=?`)
+      .run(mode, d.sale_amount != null ? parseFloat(d.sale_amount) : null, d.sale_notes || null, req.params.guaranteeId);
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)')
+      .run(uuid(), req.tenant.id, req.user.id, req.user.full_name, mode, 'loan_guarantee', g.id, `Marcó como ${mode === 'sold' ? 'vendida' : 'rematada'} la garantía "${g.description}" del préstamo ${g.loan_number}${d.sale_amount ? ` por ${d.sale_amount}` : ''}`);
+    res.json({ success: true });
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
+});
+
 // ── Void / Cancel a loan ───────────────────────────────────────────────────────
 // POST /loans/:id/write-off — Mark loan as uncollectible (incobrable)
 router.post('/:id/write-off', authenticate, requireTenant, requirePermission('loans.write_off'), async (req: AuthRequest, res: Response) => {

@@ -26,7 +26,7 @@ import { AMORTIZATION_TYPES } from '@/lib/amortization'
 interface TenantData { name: string; email: string; phone: string; address: string; currency: string; scoreMode: string; signatureMode: string; rnc: string; representativeName: string; logoUrl: string; signatureUrl: string; city: string; notaryName: string; notaryCollegiateNumber: string; notaryOfficeAddress: string; acreedorIdNumber: string; testigo1Nombre: string; testigo1Id: string; testigo1Domicilio: string; testigo2Nombre: string; testigo2Id: string; testigo2Domicilio: string }
 interface SettingsData { moraRateDaily: number; moraGraceDays: number; rebateEnabled: number; rebateType: string; moraBase: string; moraFixedEnabled: number; moraFixedAmount: number }
 interface CurrencySettings { multiCurrencyEnabled: boolean; enabledCurrencies: string[] }
-interface LoanProduct { id: string; name: string; code: string; type: string; rate: number; minTerm: number; maxTerm: number; isActive: number; paymentFrequency: string; amortizationType: string; minAmount: number; maxAmount: number }
+interface LoanProduct { id: string; name: string; code: string; type: string; rate: number; minTerm: number; maxTerm: number; isActive: number; paymentFrequency: string; amortizationType: string; minAmount: number; maxAmount: number; requiresGuarantee?: boolean | number }
 interface Member { id: string; userId: string; fullName: string; email: string; roles: string; isActive: number; userActive: number; branchId: string | null; lastLogin: string | null }
 interface Branch { id: string; name: string; address: string; phone: string; isActive: number }
 interface BankAccount { id: string; bankName: string; accountNumber: string; accountType: string; accountHolder: string; currency: string; isActive: number; initialBalance: number; currentBalance: number; loanedBalance: number }
@@ -83,7 +83,7 @@ const SettingsPage: React.FC = () => {
   const [products, setProducts] = useState<LoanProduct[]>([])
   const [showProductForm, setShowProductForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<LoanProduct | null>(null)
-  const [newProduct, setNewProduct] = useState({ name:'', code:'', description:'', type:'personal', minAmount:'', maxAmount:'', minTerm:'', maxTerm:'', interestRate:'', paymentFrequency:'monthly', amortizationType:'fixed_installment' })
+  const [newProduct, setNewProduct] = useState({ name:'', code:'', description:'', type:'personal', minAmount:'', maxAmount:'', minTerm:'', maxTerm:'', interestRate:'', paymentFrequency:'monthly', amortizationType:'fixed_installment', requiresGuarantee: false })
 
   // Users
   const [members, setMembers] = useState<Member[]>([])
@@ -288,7 +288,7 @@ const SettingsPage: React.FC = () => {
       minAmount: String(p.minAmount), maxAmount: String(p.maxAmount),
       minTerm: String(p.minTerm), maxTerm: String(p.maxTerm),
       interestRate: String(p.rate), paymentFrequency: p.paymentFrequency,
-      amortizationType: p.amortizationType,
+      amortizationType: p.amortizationType, requiresGuarantee: !!p.requiresGuarantee,
     })
     setShowProductForm(true)
   }
@@ -301,6 +301,7 @@ const SettingsPage: React.FC = () => {
       minTerm: parseInt(newProduct.minTerm)||0, maxTerm: parseInt(newProduct.maxTerm)||0,
       interestRate: parseFloat(newProduct.interestRate)||0,
       paymentFrequency: newProduct.paymentFrequency, amortizationType: newProduct.amortizationType,
+      requiresGuarantee: newProduct.requiresGuarantee,
     }
     try {
       if (editingProduct) {
@@ -312,7 +313,7 @@ const SettingsPage: React.FC = () => {
       }
       setShowProductForm(false)
       setEditingProduct(null)
-      setNewProduct({ name:'', code:'', description:'', type:'personal', minAmount:'', maxAmount:'', minTerm:'', maxTerm:'', interestRate:'', paymentFrequency:'monthly', amortizationType:'fixed_installment' })
+      setNewProduct({ name:'', code:'', description:'', type:'personal', minAmount:'', maxAmount:'', minTerm:'', maxTerm:'', interestRate:'', paymentFrequency:'monthly', amortizationType:'fixed_installment', requiresGuarantee: false })
       loadTab('products')
     } catch (err: any) { toast.error(err?.response?.data?.error || tGen('set.prod_error')) }
   }
@@ -1130,7 +1131,7 @@ const SettingsPage: React.FC = () => {
                 <Card className="bg-slate-50">
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="font-semibold">{editingProduct ? tGen('set.edit_product') : tGen('set.create_product')}</h4>
-                    <button onClick={()=>{setShowProductForm(false);setEditingProduct(null);setNewProduct({name:'',code:'',description:'',type:'personal',minAmount:'',maxAmount:'',minTerm:'',maxTerm:'',interestRate:'',paymentFrequency:'monthly',amortizationType:'fixed_installment'})}} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>
+                    <button onClick={()=>{setShowProductForm(false);setEditingProduct(null);setNewProduct({name:'',code:'',description:'',type:'personal',minAmount:'',maxAmount:'',minTerm:'',maxTerm:'',interestRate:'',paymentFrequency:'monthly',amortizationType:'fixed_installment',requiresGuarantee:false})}} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <Input label={tGen('set.name_req')} value={newProduct.name} onChange={e=>setNewProduct(p=>({...p,name:e.target.value}))} />
@@ -1167,6 +1168,18 @@ const SettingsPage: React.FC = () => {
                         ))}
                       </select>
                     </div>
+                    <label className="md:col-span-2 flex items-start gap-2.5 p-3 bg-white border border-slate-200 rounded-lg cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={newProduct.requiresGuarantee}
+                        onChange={e => setNewProduct(p => ({ ...p, requiresGuarantee: e.target.checked }))}
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-slate-800">{tGen('set.requires_guarantee')}</span>
+                        <span className="block text-xs text-slate-500 mt-0.5">{tGen('set.requires_guarantee_desc')}</span>
+                      </span>
+                    </label>
                   </div>
                   <div className="flex gap-2 mt-4">
                     <Button size="sm" onClick={handleAddProduct}>{editingProduct ? tGen('set.update') : tGen('set.create')}</Button>
@@ -1191,7 +1204,14 @@ const SettingsPage: React.FC = () => {
                         <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
                           <td className="py-3 px-4 font-medium">{p.name}</td>
                           <td className="py-3 px-4 font-mono text-xs">{p.code}</td>
-                          <td className="py-3 px-4 capitalize">{p.type}</td>
+                          <td className="py-3 px-4 capitalize">
+                            {p.type}
+                            {!!p.requiresGuarantee && (
+                              <span className="ml-1.5 inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 align-middle" title={tGen('set.requires_guarantee')}>
+                                🔒 {tGen('set.requires_guarantee')}
+                              </span>
+                            )}
+                          </td>
                           <td className="py-3 px-4 text-right">{p.rate}%</td>
                           <td className="py-3 px-4 text-center">{tGen('set.term_months').replace('{min}', String(p.minTerm)).replace('{max}', String(p.maxTerm))}</td>
                           <td className="py-3 px-4 text-center">

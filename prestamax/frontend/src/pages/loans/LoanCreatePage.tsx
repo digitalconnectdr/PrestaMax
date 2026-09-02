@@ -40,6 +40,7 @@ interface LoanProduct {
   paymentFrequency: string
   amortizationType: string
   requiresApproval: boolean
+  requiresGuarantee?: boolean
   isReditos: boolean
   isSanType: boolean
   moraRateDaily: number
@@ -76,6 +77,18 @@ interface BankAccount {
   isActive: number
 }
 
+interface GuaranteeCategory {
+  id: string
+  name: string
+}
+
+interface GuaranteeDraft {
+  categoryId: string
+  description: string
+  estimatedValue: string
+  photoUrl: string
+}
+
 interface LoanFormData {
   clientId: string
   productId: string
@@ -107,6 +120,9 @@ const LoanCreatePage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([])
   const [products, setProducts] = useState<LoanProduct[]>([])
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
+  const [guaranteeCategories, setGuaranteeCategories] = useState<GuaranteeCategory[]>([])
+  const [guarantees, setGuarantees] = useState<GuaranteeDraft[]>([])
+  const [guaranteeDraft, setGuaranteeDraft] = useState<GuaranteeDraft>({ categoryId: '', description: '', estimatedValue: '', photoUrl: '' })
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
@@ -172,6 +188,7 @@ const LoanCreatePage: React.FC = () => {
         if (settingsResult.status === 'fulfilled') {
           const accounts = (settingsResult.value.data?.bankAccounts || []).filter((a: BankAccount) => a.isActive !== 0)
           setBankAccounts(accounts)
+          setGuaranteeCategories(settingsResult.value.data?.guaranteeCategories || [])
           if (accounts.length === 1) {
             const acc = accounts[0]
             setForm(f => ({
@@ -264,6 +281,16 @@ const LoanCreatePage: React.FC = () => {
     setPreviewSchedule(schedule)
   }
 
+  const addGuaranteeDraft = () => {
+    if (!guaranteeDraft.description.trim()) {
+      toast.error(t('lc.guarantee.err_description'))
+      return
+    }
+    setGuarantees(g => [...g, guaranteeDraft])
+    setGuaranteeDraft({ categoryId: '', description: '', estimatedValue: '', photoUrl: '' })
+  }
+  const removeGuaranteeDraft = (idx: number) => setGuarantees(g => g.filter((_, i) => i !== idx))
+
   const handleSubmit = async () => {
     if (!form.clientId || !form.productId || !form.requestedAmount || !form.term) {
       toast.error(t('lc.err_required'))
@@ -271,6 +298,10 @@ const LoanCreatePage: React.FC = () => {
     }
     if (!form.disbursementBankAccountId) {
       toast.error(t('lc.err_account'))
+      return
+    }
+    if (selectedProduct?.requiresGuarantee && guarantees.length === 0) {
+      toast.error(t('lc.guarantee.err_required'))
       return
     }
     if (form.currency !== 'DOP' && (!form.exchangeRateToDop || parseFloat(form.exchangeRateToDop) <= 0)) {
@@ -306,6 +337,20 @@ const LoanCreatePage: React.FC = () => {
       }
       const res = await api.post('/loans', payload)
       const loanId = res.data.id
+
+      // Registrar los bienes en garantía agregados en el paso de confirmación.
+      // No bloqueante: si uno falla no queremos perder el préstamo ya creado,
+      // solo avisamos para que se agreguen manualmente desde el detalle.
+      if (guarantees.length > 0) {
+        const results = await Promise.allSettled(guarantees.map(g => api.post(`/loans/${loanId}/guarantees`, {
+          categoryId: g.categoryId || null,
+          description: g.description,
+          estimatedValue: g.estimatedValue ? parseFloat(g.estimatedValue) : null,
+          photoUrl: g.photoUrl || null,
+        })))
+        const failed = results.filter(r => r.status === 'rejected').length
+        if (failed > 0) toast.error(t('lc.guarantee.err_partial').replace('{n}', String(failed)))
+      }
 
       // If product doesn't require approval, immediately disburse
       if (!selectedProduct?.requiresApproval) {
@@ -976,6 +1021,80 @@ const LoanCreatePage: React.FC = () => {
               </div>
             )}
           </Card>
+
+          {selectedProduct.requiresGuarantee && (
+            <Card>
+              <h3 className="font-semibold text-slate-700 mb-1">{t('lc.guarantee.title')}</h3>
+              <p className="text-xs text-slate-500 mb-4">{t('lc.guarantee.subtitle')}</p>
+
+              {guarantees.length > 0 ? (
+                <div className="space-y-2 mb-4">
+                  {guarantees.map((g, idx) => {
+                    const cat = guaranteeCategories.find(c => c.id === g.categoryId)
+                    return (
+                      <div key={idx} className="flex items-start justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-800">{g.description}{cat && <span className="text-slate-400 font-normal"> — {cat.name}</span>}</p>
+                          {g.estimatedValue && <p className="text-slate-500">{formatCurrency(parseFloat(g.estimatedValue) || 0, form.currency)}</p>}
+                        </div>
+                        <button type="button" onClick={() => removeGuaranteeDraft(idx)} className="text-red-500 hover:text-red-700 text-xs font-medium flex-shrink-0">
+                          {t('lc.guarantee.remove')}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 mb-4">{t('lc.guarantee.empty')}</p>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t('lc.guarantee.description')}</label>
+                  <input
+                    type="text"
+                    value={guaranteeDraft.description}
+                    onChange={e => setGuaranteeDraft(d => ({ ...d, description: e.target.value }))}
+                    placeholder={t('lc.guarantee.description_ph')}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t('lc.guarantee.category')}</label>
+                  <select
+                    value={guaranteeDraft.categoryId}
+                    onChange={e => setGuaranteeDraft(d => ({ ...d, categoryId: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">{t('lc.guarantee.category_none')}</option>
+                    {guaranteeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t('lc.guarantee.value')}</label>
+                  <input
+                    type="number"
+                    value={guaranteeDraft.estimatedValue}
+                    onChange={e => setGuaranteeDraft(d => ({ ...d, estimatedValue: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">{t('lc.guarantee.photo_url')}</label>
+                  <input
+                    type="text"
+                    value={guaranteeDraft.photoUrl}
+                    onChange={e => setGuaranteeDraft(d => ({ ...d, photoUrl: e.target.value }))}
+                    placeholder="https://..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Button type="button" size="sm" variant="outline" onClick={addGuaranteeDraft}>{t('lc.guarantee.add')}</Button>
+                </div>
+              </div>
+            </Card>
+          )}
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep(3)} className="flex items-center gap-2">

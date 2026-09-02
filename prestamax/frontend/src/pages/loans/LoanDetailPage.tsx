@@ -9,7 +9,7 @@ import {
   ArrowLeft, DollarSign, FileText, Send, CheckCircle,
   XCircle, User, Calendar, Percent, CreditCard, AlertTriangle, X,
   TrendingDown, Coins, Zap, Info, Edit2, Trash2, Users, MessageCircle,
-  Printer, FileCheck, ChevronDown, Globe
+  Printer, FileCheck, ChevronDown, Globe, Shield
 } from 'lucide-react'
 import { formatCurrency, formatDate, getCurrencySymbol } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
@@ -175,6 +175,13 @@ const LoanDetailPage: React.FC = () => {
   const [isWritingOff, setIsWritingOff] = useState(false)
   const [loanPayments, setLoanPayments] = useState<LoanPayment[]>([])
   const [isLoadingPayments, setIsLoadingPayments] = useState(false)
+  const [guarantees, setGuarantees] = useState<any[]>([])
+  const [guaranteeCategories, setGuaranteeCategories] = useState<{ id: string; name: string }[]>([])
+  const [showAddGuaranteeModal, setShowAddGuaranteeModal] = useState(false)
+  const [guaranteeForm, setGuaranteeForm] = useState({ categoryId: '', description: '', estimatedValue: '', photoUrl: '' })
+  const [executingGuarantee, setExecutingGuarantee] = useState<any | null>(null)
+  const [executeForm, setExecuteForm] = useState({ mode: 'sold', saleAmount: '', saleNotes: '' })
+  const [isSubmittingGuarantee, setIsSubmittingGuarantee] = useState(false)
 
   // Permission: can edit loan if platform owner/admin or tenant owner
   const platformRole: string = (authState.user as any)?.platform_role || (authState.user as any)?.platformRole || ''
@@ -231,7 +238,68 @@ const LoanDetailPage: React.FC = () => {
     }
     fetchLoan()
     api.get('/settings/bank-accounts').then(r => setBankAccounts(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    loadGuarantees()
+    api.get('/settings').then(r => setGuaranteeCategories(r.data?.guaranteeCategories || [])).catch(() => {})
   }, [id])
+
+  const loadGuarantees = async () => {
+    if (!id) return
+    try {
+      const res = await api.get(`/loans/${id}/guarantees`)
+      setGuarantees(Array.isArray(res.data) ? res.data : [])
+    } catch { setGuarantees([]) }
+  }
+
+  const handleAddGuarantee = async () => {
+    if (!guaranteeForm.description.trim()) { toast.error(t('lc.guarantee.err_description')); return }
+    setIsSubmittingGuarantee(true)
+    try {
+      await api.post(`/loans/${id}/guarantees`, {
+        categoryId: guaranteeForm.categoryId || null,
+        description: guaranteeForm.description,
+        estimatedValue: guaranteeForm.estimatedValue ? parseFloat(guaranteeForm.estimatedValue) : null,
+        photoUrl: guaranteeForm.photoUrl || null,
+      })
+      toast.success(t('ld.guarantee.added'))
+      setShowAddGuaranteeModal(false)
+      setGuaranteeForm({ categoryId: '', description: '', estimatedValue: '', photoUrl: '' })
+      loadGuarantees()
+    } catch (err: any) { toast.error(err?.response?.data?.error || t('ld.guarantee.add_error')) }
+    finally { setIsSubmittingGuarantee(false) }
+  }
+
+  const handleReleaseGuarantee = async (guaranteeId: string) => {
+    if (!confirm(t('ld.guarantee.confirm_release'))) return
+    try {
+      await api.post(`/loans/guarantees/${guaranteeId}/release`)
+      toast.success(t('ld.guarantee.released'))
+      loadGuarantees()
+    } catch (err: any) { toast.error(err?.response?.data?.error || t('ld.guarantee.action_error')) }
+  }
+
+  const handleExecuteGuarantee = async () => {
+    if (!executingGuarantee) return
+    setIsSubmittingGuarantee(true)
+    try {
+      await api.post(`/loans/guarantees/${executingGuarantee.id}/execute`, {
+        mode: executeForm.mode,
+        saleAmount: executeForm.saleAmount ? parseFloat(executeForm.saleAmount) : null,
+        saleNotes: executeForm.saleNotes || null,
+      })
+      toast.success(t('ld.guarantee.executed'))
+      setExecutingGuarantee(null)
+      setExecuteForm({ mode: 'sold', saleAmount: '', saleNotes: '' })
+      loadGuarantees()
+    } catch (err: any) { toast.error(err?.response?.data?.error || t('ld.guarantee.action_error')) }
+    finally { setIsSubmittingGuarantee(false) }
+  }
+
+  const GUARANTEE_STATUS_LABEL: Record<string, { label: string; color: string }> = {
+    in_custody: { label: t('ld.guarantee.status_custody'), color: 'bg-blue-100 text-blue-700' },
+    released:   { label: t('ld.guarantee.status_released'), color: 'bg-emerald-100 text-emerald-700' },
+    sold:       { label: t('ld.guarantee.status_sold'), color: 'bg-amber-100 text-amber-700' },
+    auctioned:  { label: t('ld.guarantee.status_auctioned'), color: 'bg-amber-100 text-amber-700' },
+  }
 
   const loadPayments = async () => {
     if (!id) return
@@ -1195,8 +1263,144 @@ const LoanDetailPage: React.FC = () => {
               </div>
             </div>
           </Card>
+
+          {/* Garantias / colateral */}
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="section-title flex items-center gap-2">
+                <Shield className="w-4 h-4" /> {t('ld.guarantee.title')}
+              </h3>
+              {can('loans.edit') && (
+                <button onClick={() => setShowAddGuaranteeModal(true)} className="text-xs font-semibold text-[#1e3a5f] hover:underline">
+                  {t('ld.guarantee.add_button')}
+                </button>
+              )}
+            </div>
+            {guarantees.length === 0 ? (
+              <p className="text-sm text-slate-400">{t('ld.guarantee.empty')}</p>
+            ) : (
+              <div className="space-y-2">
+                {guarantees.map((g: any) => {
+                  const statusInfo = GUARANTEE_STATUS_LABEL[g.status] || GUARANTEE_STATUS_LABEL.in_custody
+                  return (
+                    <div key={g.id} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-800 truncate">{g.description}</p>
+                          {g.categoryName && <p className="text-xs text-slate-500">{g.categoryName}</p>}
+                          <p className="text-xs text-slate-500">
+                            {g.estimatedValue ? formatCurrency(g.estimatedValue, loan.currency || 'DOP') : t('ld.guarantee.no_value')}
+                          </p>
+                          {g.saleAmount != null && (
+                            <p className="text-xs text-emerald-700 font-medium">{formatCurrency(g.saleAmount, loan.currency || 'DOP')}</p>
+                          )}
+                        </div>
+                        <span className={`flex-shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                          {statusInfo.label}
+                        </span>
+                      </div>
+                      {g.status === 'in_custody' && can('loans.edit') && (
+                        <div className="flex gap-3 mt-2 pt-2 border-t border-slate-200">
+                          <button onClick={() => handleReleaseGuarantee(g.id)} className="text-xs font-semibold text-emerald-700 hover:underline">
+                            {t('ld.guarantee.release_btn')}
+                          </button>
+                          <button onClick={() => setExecutingGuarantee(g)} className="text-xs font-semibold text-amber-700 hover:underline">
+                            {t('ld.guarantee.execute_btn')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
+
+      {/* Add Guarantee Modal */}
+      {showAddGuaranteeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Shield className="w-5 h-5" /> {t('ld.guarantee.add_modal_title')}</h2>
+              <button onClick={() => setShowAddGuaranteeModal(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('lc.guarantee.description')}</label>
+                <input type="text" value={guaranteeForm.description} onChange={e => setGuaranteeForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder={t('lc.guarantee.description_ph')} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('ld.guarantee.category')}</label>
+                <select value={guaranteeForm.categoryId} onChange={e => setGuaranteeForm(f => ({ ...f, categoryId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">{t('lc.guarantee.category_none')}</option>
+                  {guaranteeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('lc.guarantee.value')}</label>
+                <input type="number" value={guaranteeForm.estimatedValue} onChange={e => setGuaranteeForm(f => ({ ...f, estimatedValue: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('lc.guarantee.photo_url')}</label>
+                <input type="text" value={guaranteeForm.photoUrl} onChange={e => setGuaranteeForm(f => ({ ...f, photoUrl: e.target.value }))}
+                  placeholder="https://..." className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Button variant="secondary" className="flex-1" onClick={() => setShowAddGuaranteeModal(false)} disabled={isSubmittingGuarantee}>{t('common.cancel')}</Button>
+              <Button className="flex-1" onClick={handleAddGuarantee} isLoading={isSubmittingGuarantee}>{t('lc.guarantee.add')}</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Execute Guarantee Modal */}
+      {executingGuarantee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Shield className="w-5 h-5 text-amber-600" /> {t('ld.guarantee.execute_modal_title')}</h2>
+              <button onClick={() => setExecutingGuarantee(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-sm text-slate-600 mb-4">{executingGuarantee.description}</p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-800">
+              {t('ld.guarantee.execute_hint')}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('ld.guarantee.mode')}</label>
+                <select value={executeForm.mode} onChange={e => setExecuteForm(f => ({ ...f, mode: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                  <option value="sold">{t('ld.guarantee.mode_sold')}</option>
+                  <option value="auctioned">{t('ld.guarantee.mode_auctioned')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('ld.guarantee.sale_amount')}</label>
+                <input type="number" value={executeForm.saleAmount} onChange={e => setExecuteForm(f => ({ ...f, saleAmount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">{t('ld.guarantee.sale_notes')}</label>
+                <textarea value={executeForm.saleNotes} onChange={e => setExecuteForm(f => ({ ...f, saleNotes: e.target.value }))}
+                  rows={2} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Button variant="secondary" className="flex-1" onClick={() => setExecutingGuarantee(null)} disabled={isSubmittingGuarantee}>{t('common.cancel')}</Button>
+              <button onClick={handleExecuteGuarantee} disabled={isSubmittingGuarantee}
+                className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors">
+                {t('ld.guarantee.execute_btn')}
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Disbursement Modal */}
       {showDisbursementModal && (

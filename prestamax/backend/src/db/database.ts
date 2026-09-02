@@ -303,6 +303,12 @@ export function initializeDatabase(): void {
       category_id TEXT,
       description TEXT NOT NULL,
       estimated_value REAL,
+      status TEXT NOT NULL DEFAULT 'in_custody',
+      photo_url TEXT,
+      received_at TEXT NOT NULL DEFAULT (datetime('now')),
+      released_at TEXT,
+      sale_amount REAL,
+      sale_notes TEXT,
       FOREIGN KEY (loan_id) REFERENCES loans(id)
     );
 
@@ -947,6 +953,17 @@ export function initializeDatabase(): void {
     db.exec(`UPDATE clients SET score = MIN(100, MAX(0, ROUND(score * 20))) WHERE score IS NOT NULL AND score BETWEEN 1 AND 5`);
   } catch(_) {}
 
+  // ── Garantias/colateral: ciclo de vida real (antes solo existia la tabla,
+  //    sin forma de crear/editar/liberar/ejecutar una garantia desde ningun
+  //    lado -- un producto con requires_guarantee=true era imposible de
+  //    aprobar en la practica). ──────────────────────────────────────────
+  try { db.exec(`ALTER TABLE loan_guarantees ADD COLUMN status TEXT NOT NULL DEFAULT 'in_custody'`); } catch(_) {}
+  try { db.exec(`ALTER TABLE loan_guarantees ADD COLUMN photo_url TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE loan_guarantees ADD COLUMN received_at TEXT NOT NULL DEFAULT (datetime('now'))`); } catch(_) {}
+  try { db.exec(`ALTER TABLE loan_guarantees ADD COLUMN released_at TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE loan_guarantees ADD COLUMN sale_amount REAL`); } catch(_) {}
+  try { db.exec(`ALTER TABLE loan_guarantees ADD COLUMN sale_notes TEXT`); } catch(_) {}
+
   // ── Geolocalizacion (mapa de empresas/visitantes en Admin Panel) ──────────
   // geo_city/geo_country son distintos de la columna "city" ya existente
   // (esa es la ciudad notarial de documentos legales, texto libre del tenant).
@@ -1138,6 +1155,37 @@ export function initializeDatabase(): void {
       }
     }
   } catch(e: any) { console.error('Error seeding contract templates:', e?.message); }
+
+  // ── Producto de préstamo por defecto ──────────────────────────────────────
+  // Friccion de onboarding detectada: el usuario se registra y no entiende
+  // como crear un producto de prestamo (tasa, plazo, tipo de amortizacion) --
+  // eso lo bloquea antes de poder crear su primer prestamo real. Se le da un
+  // producto de ejemplo ya configurado y editable, asi solo debe preocuparse
+  // por cuenta bancaria + cliente + prestamo. Corre en cada boot (como los
+  // templates de contrato arriba) para que tambien alcance a tenants ya
+  // existentes que quedaron sin ningun producto.
+  try {
+    const tenantsWithoutProducts = db.prepare(`
+      SELECT t.id FROM tenants t
+      WHERE NOT EXISTS (SELECT 1 FROM loan_products p WHERE p.tenant_id = t.id)
+    `).all() as any[];
+    if (tenantsWithoutProducts.length > 0) {
+      const insertDefaultProduct = db.prepare(`
+        INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
+          min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,mora_rate_daily,mora_grace_days,
+          requires_guarantee,requires_approval,allows_prepayment,rebate_policy,is_san_type,is_reditos)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0.001,3,0,0,1,'proportional',0,0)
+      `);
+      for (const t of tenantsWithoutProducts) {
+        insertDefaultProduct.run(
+          crypto.randomUUID(), t.id, 'Préstamo General', 'GENERAL', 'personal',
+          'Producto de ejemplo creado automáticamente. Personalízalo o crea más productos desde Configuración → Productos.',
+          1000, 50000, 10, 'monthly', 1, 12, 'months', 'monthly', 'fixed_installment'
+        );
+      }
+      console.log(`✅ Producto "Préstamo General" creado para ${tenantsWithoutProducts.length} empresa(s) sin productos`);
+    }
+  } catch(e: any) { console.error('Error seeding default loan product:', e?.message); }
 
   // Always ensure the 4 default subscription plans exist (INSERT OR IGNORE = safe to run every boot)
   // FIX P2 (Jun 2026): Starter incluía collections.tasks (ver agenda) pero NO
