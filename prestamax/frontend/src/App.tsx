@@ -27,6 +27,8 @@ import LoginPage from '@/pages/auth/LoginPage'
 
 // Resto de páginas: lazy-loaded → no entran en el bundle inicial del landing.
 const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'))
+const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'))
 const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'))
 const ClientsPage = lazy(() => import('@/pages/clients/ClientsPage'))
 const ClientDetailPage = lazy(() => import('@/pages/clients/ClientDetailPage'))
@@ -91,6 +93,8 @@ const AppRoutes: React.FC = () => {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/apply/:token" element={<LoanRequestPublicPage />} />
 
       {state.isAuthenticated && isInvestorOnly && (

@@ -151,6 +151,8 @@ const bulkLimiter = rateLimit({
 app.use('/api/auth/login',           authLimiter);
 app.use('/api/auth/register-tenant', registerLimiter);
 app.use('/api/auth/change-password', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password',  authLimiter);
 app.use('/api/admin',                adminLimiter);
 app.use('/api/loans/import',         bulkLimiter);
 app.use('/api/public/plan-inquiry',  publicFormsLimiter);

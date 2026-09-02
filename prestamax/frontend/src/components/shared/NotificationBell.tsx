@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Bell, CheckCheck, ClipboardList, CheckCircle2, X , MessageSquare } from 'lucide-react'
+import { Bell, CheckCheck, ClipboardList, CheckCircle2, X , MessageSquare, DollarSign, AlertTriangle, FileSignature } from 'lucide-react'
 import api from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { useNavigate } from 'react-router-dom'
@@ -88,6 +88,15 @@ const NotificationBell: React.FC = () => {
     } else if (notif.entityType === 'plan_inquiry') {
       navigate('/admin?tab=inquiries')
       setIsOpen(false)
+    } else if (notif.entityType === 'loan' && notif.entityId) {
+      navigate(`/loans/${notif.entityId}`)
+      setIsOpen(false)
+    } else if (notif.entityType === 'payment') {
+      navigate('/payments')
+      setIsOpen(false)
+    } else if (notif.entityType === 'loan_request') {
+      navigate('/requests')
+      setIsOpen(false)
     }
   }
 
@@ -95,6 +104,9 @@ const NotificationBell: React.FC = () => {
     if (type === 'task_assigned') return <ClipboardList className="w-4 h-4 text-blue-500" />
     if (type === 'task_completed') return <CheckCircle2 className="w-4 h-4 text-emerald-500" />
     if (type === 'plan_inquiry') return <MessageSquare className="w-4 h-4 text-amber-500" />
+    if (type === 'payment_received') return <DollarSign className="w-4 h-4 text-emerald-500" />
+    if (type === 'loan_overdue') return <AlertTriangle className="w-4 h-4 text-red-500" />
+    if (type === 'loan_request') return <FileSignature className="w-4 h-4 text-blue-500" />
     return <Bell className="w-4 h-4 text-slate-400" />
   }
 

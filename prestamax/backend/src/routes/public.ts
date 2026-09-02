@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
 import { sendInquiryNotification } from '../services/emailService';
 import { getClientIp, geolocateIp } from '../services/geoService';
+import { notifyTenantAdmins } from '../lib/notify';
 
 const router = Router();
 
@@ -101,6 +102,11 @@ router.post('/apply/:token', (req: Request, res: Response) => {
       familyContactName || null, familyRelationship || null,
       occupation || null, employer || null, workAddress || null, monthlyIncome || null, economicActivity || null,
     );
+
+    // Antes ninguna notificacion in-app avisaba de una solicitud nueva del
+    // enlace publico -- solo se veia si alguien entraba a revisar la lista.
+    notifyTenantAdmins(db, tenant.id, 'loan_request', 'Nueva solicitud de préstamo',
+      `${clientName} solicitó un préstamo${loanAmount ? ` de ${loanAmount}` : ''} desde tu enlace público.`, 'loan_request', id);
 
     res.status(201).json({
       success: true,

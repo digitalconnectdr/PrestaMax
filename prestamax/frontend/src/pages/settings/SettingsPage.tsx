@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { TenantContext } from '@/contexts/TenantContext'
+import { useAuth } from '@/hooks/useAuth'
 import { PERM_BY_MODULE, PERM_DEFS, PermKey } from '@/lib/permissions'
 import { usePermission } from '@/hooks/usePermission'
 import { useT } from '@/lib/i18n'
@@ -68,6 +69,10 @@ const parseRoles = (rolesStr: string): string[] => { try { return JSON.parse(rol
 const SettingsPage: React.FC = () => {
   const location = useLocation()
   const navigate = useNavigate()
+  const { logout } = useAuth()
+  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
+  const [isChangingPw, setIsChangingPw] = useState(false)
+  const [isLoggingOutEverywhere, setIsLoggingOutEverywhere] = useState(false)
   const { state: tenantState, refreshCurrentTenant } = useContext(TenantContext)
   const activeTab = PATH_TO_TAB[location.pathname] || 'general'
   const [isLoading, setIsLoading] = useState(true)
@@ -278,6 +283,31 @@ const SettingsPage: React.FC = () => {
         ? prev.enabledCurrencies.filter(c => c !== code)
         : [...prev.enabledCurrencies, code],
     }))
+  }
+
+  // ─── SEGURIDAD DE LA CUENTA ──────────────────────────────────────
+  const handleChangePassword = async () => {
+    if (!pwForm.current || !pwForm.next) return toast.error(tGen('set.sec.err_required'))
+    if (pwForm.next !== pwForm.confirm) return toast.error(tGen('set.sec.err_mismatch'))
+    setIsChangingPw(true)
+    try {
+      await api.post('/auth/change-password', { current_password: pwForm.current, new_password: pwForm.next })
+      toast.success(tGen('set.sec.pw_updated'))
+      setPwForm({ current: '', next: '', confirm: '' })
+    } catch (err: any) { toast.error(err?.response?.data?.error || tGen('set.sec.pw_error')) }
+    finally { setIsChangingPw(false) }
+  }
+
+  const handleLogoutEverywhere = async () => {
+    if (!confirm(tGen('set.sec.confirm_logout_everywhere'))) return
+    setIsLoggingOutEverywhere(true)
+    try {
+      await api.post('/auth/logout-everywhere')
+      toast.success(tGen('set.sec.logged_out_everywhere'))
+      logout()
+      navigate('/login')
+    } catch (err: any) { toast.error(err?.response?.data?.error || tGen('set.sec.pw_error')) }
+    finally { setIsLoggingOutEverywhere(false) }
   }
 
   // ─── PRODUCTS ────────────────────────────────────────────────────
@@ -684,6 +714,26 @@ const SettingsPage: React.FC = () => {
                   </div>
                   <Button variant="outline" size="sm" onClick={() => navigate('/help')} className="flex items-center gap-1.5 flex-shrink-0">
                     {tGen('set.help_cta')}<ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </Card>
+              <Card>
+                <h3 className="section-title mb-1 flex items-center gap-2"><KeyRound className="w-4 h-4" />{tGen('set.sec.title')}</h3>
+                <p className="text-sm text-slate-500 mb-4">{tGen('set.sec.subtitle')}</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                  <Input type="password" label={tGen('set.sec.current_pw')} value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} />
+                  <Input type="password" label={tGen('set.sec.new_pw')} value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} />
+                  <Input type="password" label={tGen('set.sec.confirm_pw')} value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} />
+                </div>
+                <Button size="sm" onClick={handleChangePassword} disabled={isChangingPw}>{isChangingPw ? tGen('common.saving') : tGen('set.sec.change_pw')}</Button>
+
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">{tGen('set.sec.logout_everywhere')}</p>
+                    <p className="text-xs text-slate-500">{tGen('set.sec.logout_everywhere_desc')}</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={handleLogoutEverywhere} disabled={isLoggingOutEverywhere}>
+                    {isLoggingOutEverywhere ? tGen('common.saving') : tGen('set.sec.logout_everywhere_cta')}
                   </Button>
                 </div>
               </Card>

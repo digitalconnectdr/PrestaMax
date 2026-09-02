@@ -5,6 +5,8 @@ import { getDb, uuid, now } from '../db/database';
 import { authenticate, AuthRequest, isPlatformStaff } from '../middleware/auth';
 import { computePermissions } from '../lib/permissions';
 import { getClientIp, geolocateIp } from '../services/geoService';
+import { sendPasswordResetEmail, sendNewLoginAlertEmail } from '../services/emailService';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -26,10 +28,22 @@ router.post('/login', async (req: Request, res: Response) => {
     // si el email existe o no.
     const valid = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
     if (!user || !valid) return res.status(401).json({ error: 'Credenciales invalidas' });
-    db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(now(), user.id);
+
+    // Alerta de login sospechoso: comparar la ciudad/pais de este login contra
+    // la del ultimo login exitoso. No se dispara en el primer login (no hay
+    // "habitual" con qué comparar) ni si la geolocalizacion falla (IP local, etc).
+    const loginIp = getClientIp(req);
+    const loginGeo = geolocateIp(loginIp);
+    const hadPreviousLogin = !!user.last_login;
+    if (hadPreviousLogin && loginGeo && (loginGeo.city !== user.last_login_city || loginGeo.country !== user.last_login_country)) {
+      sendNewLoginAlertEmail({ toEmail: user.email, fullName: user.full_name, city: loginGeo.city, country: loginGeo.country, ip: loginIp }).catch(() => {});
+    }
+    db.prepare('UPDATE users SET last_login = ?, last_login_ip = ?, last_login_city = ?, last_login_country = ? WHERE id = ?')
+      .run(now(), loginIp, loginGeo?.city || null, loginGeo?.country || null, user.id);
+
     const JWT_SECRET = process.env.JWT_SECRET;
     if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, tokenVersion: user.token_version || 0 }, JWT_SECRET, { expiresIn: '7d' });
     const memberships = db.prepare(`
       SELECT tm.*, t.name as t_name, t.slug as t_slug, t.logo_url as t_logo, t.currency as t_currency, t.phone as t_phone, t.email as t_email, t.address as t_address, t.is_active as t_active, p.features as plan_features
       FROM tenant_memberships tm JOIN tenants t ON t.id = tm.tenant_id
@@ -225,7 +239,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     db.prepare('UPDATE users SET last_login=? WHERE id=?').run(now(), userId);
     const JWT_SECRET_REG = process.env.JWT_SECRET;
     if (!JWT_SECRET_REG) throw new Error('JWT_SECRET environment variable is required');
-    const token = jwt.sign({ userId }, JWT_SECRET_REG, { expiresIn: '7d' });
+    const token = jwt.sign({ userId, tokenVersion: 0 }, JWT_SECRET_REG, { expiresIn: '7d' });
     const membership = db.prepare(`
       SELECT tm.*, t.name as t_name, t.slug as t_slug, t.logo_url as t_logo, t.currency as t_currency, p.features as plan_features
       FROM tenant_memberships tm JOIN tenants t ON t.id=tm.tenant_id
@@ -269,6 +283,69 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
     db.prepare('UPDATE users SET password_hash=?, updated_at=? WHERE id=?').run(hash, now(), req.user.id);
     res.json({ success: true, message: 'Contrasena actualizada correctamente' });
   } catch(e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
+// ── Recuperacion de contraseña self-service ──────────────────────────────
+// Antes, si un usuario olvidaba su clave, dependia 100% de que el admin de
+// su empresa se la reseteara a mano. Token de un solo uso, expira en 2 horas,
+// se guarda solo el HASH (nunca el token crudo) por si la tabla se filtrara.
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  // Respuesta SIEMPRE generica (exista o no el email) para no permitir
+  // enumeracion de usuarios registrados -- misma filosofia que /login.
+  const genericMsg = { success: true, message: 'Si existe una cuenta con ese correo, te enviamos un enlace para restablecer tu contraseña.' };
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string') return res.json(genericMsg);
+    const db = getDb();
+    const user = db.prepare('SELECT id, email, full_name FROM users WHERE email=? AND is_active=1').get(email.toLowerCase().trim()) as any;
+    if (user) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      db.prepare('INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES (?,?,?,?)').run(uuid(), user.id, tokenHash, expiresAt);
+      const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+      const resetUrl = `${frontUrl}/reset-password?token=${rawToken}`;
+      sendPasswordResetEmail({ toEmail: user.email, fullName: user.full_name, resetUrl }).catch(() => {});
+    }
+    res.json(genericMsg);
+  } catch (e: any) { console.error(e); res.json(genericMsg); }
+});
+
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, new_password } = req.body;
+    if (!token || typeof token !== 'string') return res.status(400).json({ error: 'Enlace inválido' });
+    if (!new_password || new_password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+    if (!/[A-Z]/.test(new_password)) return res.status(400).json({ error: 'La contraseña debe contener al menos una letra mayúscula' });
+    if (!/[0-9]/.test(new_password)) return res.status(400).json({ error: 'La contraseña debe contener al menos un número' });
+    if (!/[^A-Za-z0-9]/.test(new_password)) return res.status(400).json({ error: 'La contraseña debe contener al menos un carácter especial (!@#$%^&*)' });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const db = getDb();
+    const reset = db.prepare('SELECT * FROM password_resets WHERE token_hash=?').get(tokenHash) as any;
+    if (!reset) return res.status(400).json({ error: 'Enlace inválido o ya utilizado' });
+    if (reset.used_at) return res.status(400).json({ error: 'Este enlace ya fue utilizado' });
+    if (new Date(reset.expires_at) < new Date()) return res.status(400).json({ error: 'Este enlace expiró — solicita uno nuevo' });
+
+    const hash = await bcrypt.hash(new_password, 12);
+    // Se invalidan TODAS las sesiones activas del usuario al resetear la
+    // contraseña por este medio -- si alguien mas tenia acceso, queda afuera.
+    db.prepare('UPDATE users SET password_hash=?, updated_at=?, token_version=token_version+1 WHERE id=?').run(hash, now(), reset.user_id);
+    db.prepare('UPDATE password_resets SET used_at=? WHERE id=?').run(now(), reset.id);
+    // Invalidar cualquier otro token de reset pendiente para este usuario
+    db.prepare('UPDATE password_resets SET used_at=? WHERE user_id=? AND used_at IS NULL').run(now(), reset.user_id);
+    res.json({ success: true, message: 'Contraseña actualizada. Ya puedes iniciar sesión.' });
+  } catch (e: any) { console.error(e); res.status(500).json({ error: 'No se pudo restablecer la contraseña' }); }
+});
+
+// "Cerrar todas mis sesiones" — invalida todos los JWT emitidos hasta ahora
+// (incluido el que hace esta misma llamada); el usuario debe volver a entrar.
+router.post('/logout-everywhere', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    db.prepare('UPDATE users SET token_version=token_version+1 WHERE id=?').run(req.user.id);
+    res.json({ success: true, message: 'Se cerraron todas las sesiones. Vuelve a iniciar sesión.' });
+  } catch (e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
 export { router };

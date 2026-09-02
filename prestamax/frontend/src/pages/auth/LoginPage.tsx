@@ -162,6 +162,11 @@ const LoginPage: React.FC = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+                <div className="text-right mt-1.5">
+                  <Link to="/forgot-password" className="text-xs text-slate-500 hover:text-[#1e3a5f] hover:underline">
+                    {t('fp.link')}
+                  </Link>
+                </div>
               </div>
 
               {error && (

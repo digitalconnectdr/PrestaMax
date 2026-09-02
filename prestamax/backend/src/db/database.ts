@@ -973,6 +973,32 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lat REAL`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lng REAL`); } catch(_) {}
 
+  // Sesiones: token_version permite invalidar TODOS los JWT emitidos hasta
+  // ahora ("cerrar todas mis sesiones") sin necesidad de una tabla de
+  // revocacion -- el JWT firma su tokenVersion; si no coincide con la del
+  // usuario en BD, el token se rechaza aunque no haya expirado.
+  try { db.exec(`ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0`); } catch(_) {}
+  // Ubicacion del ultimo login exitoso, para poder avisar de un ingreso desde
+  // una ciudad distinta a la habitual (alerta de login sospechoso).
+  try { db.exec(`ALTER TABLE users ADD COLUMN last_login_ip TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN last_login_city TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN last_login_country TEXT`); } catch(_) {}
+
+  // Recuperacion de contraseña self-service: guarda solo el HASH del token
+  // (nunca el token crudo), de un solo uso, expira a las 2 horas.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+  `);
+
   // Recordatorios de trial por email (evita reenviar el mismo hito 2 veces
   // si el cron corre mas de una vez el mismo dia, o tras un redeploy).
   db.exec(`

@@ -11,6 +11,7 @@
 
 import { r2, now } from '../db/database';
 import { calcMora, utcDateOnlyMs, calendarDaysSince } from '../lib/calculations';
+import { notifyTenantAdmins } from '../lib/notify';
 
 export function syncLoanStatuses(db: any): { checked: number; updated: number } {
   const loans = db.prepare(`SELECT * FROM loans WHERE status IN ('active','in_mora')`).all() as any[];
@@ -46,6 +47,18 @@ export function syncLoanStatuses(db: any): { checked: number; updated: number } 
           `UPDATE loans SET status=?, days_overdue=?, mora_balance=?, total_balance=?, updated_at=? WHERE id=?`
         ).run(newStatus, daysOverdue, moraBalance, totalBalance, now(), loan.id);
         updated++;
+
+        // Antes ninguna notificacion in-app avisaba de un prestamo que cae en
+        // mora -- solo se veia si alguien entraba a revisar la lista. Se
+        // dispara una sola vez, justo en la transicion active -> in_mora.
+        if (newStatus === 'in_mora' && loan.status !== 'in_mora') {
+          notifyTenantAdmins(
+            db, loan.tenant_id, 'loan_overdue',
+            'Préstamo en mora',
+            `El préstamo ${loan.loan_number} entró en mora (${daysOverdue} día${daysOverdue === 1 ? '' : 's'} de atraso).`,
+            'loan', loan.id
+          );
+        }
       }
     } catch (e: any) {
       console.error(`[loan-status-sync] error en prestamo ${loan.id}:`, e?.message || e);

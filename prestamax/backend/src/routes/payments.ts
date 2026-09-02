@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { getDb, uuid, now, r2, nextDocNumber } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { generateDraft } from '../services/whatsappService';
+import { notifyTenantAdmins } from '../lib/notify';
 // FIX P0/P1 (Jun 2026): usar el motor UNIFICADO de calculations.ts.
 // Antes este archivo tenia copias locales de allocatePayment/calcMora con el
 // mismo codigo — riesgo de drift. Ademas la libreria ahora hace la aritmetica
@@ -386,6 +387,8 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       );
       recalcClientScore(db, loan.client_id);
       db.exec('COMMIT');
+      notifyTenantAdmins(db, req.tenant.id, 'payment_received', 'Pago registrado',
+        `${req.user.full_name} registró un cargo de prórroga de ${loanCurrency} ${totalCharge.toLocaleString()} en el préstamo ${loan.loan_number}.`, 'payment', payId2);
 
       // Devolver el payment con registered_by_name resuelto (LEFT JOIN users)
       // para que el recibo en el frontend muestre "Registrado por: <Nombre>".
@@ -550,6 +553,12 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     // ── Generar draft de WhatsApp transaccional (payment_received). Best-effort.
     // Fuera de la transaccion: un fallo aqui no debe revertir el pago.
     generateDraft(db, req.tenant.id, 'payment_received', { payment_id: payId, loan_id: loan.id, user_id: req.user.id });
+
+    // Antes ningun aviso in-app existia para "entro un pago" -- el dueño solo
+    // se enteraba si abria el sistema a revisar. Se avisa a los admins del
+    // tenant (no al que registro el pago, ya lo sabe).
+    notifyTenantAdmins(db, req.tenant.id, 'payment_received', 'Pago registrado',
+      `${req.user.full_name} registró un pago de ${loanCurrency} ${Number(amount).toLocaleString()} en el préstamo ${loan.loan_number}.`, 'payment', payId);
 
     // Devolver el payment con registered_by_name resuelto (LEFT JOIN users) para
     // que el recibo en el frontend muestre "Registrado por: <Nombre>" en vez de "—".

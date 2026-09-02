@@ -17,6 +17,9 @@ function cleanOrphanNotifications(db: any) {
     // payment-related → payments.id
     db.prepare(`DELETE FROM notifications WHERE entity_type='payment'
       AND entity_id NOT IN (SELECT id FROM payments)`).run();
+    // loan_request → loan_requests.id
+    db.prepare(`DELETE FROM notifications WHERE entity_type='loan_request'
+      AND entity_id NOT IN (SELECT id FROM loan_requests)`).run();
   } catch (_) { /* no critical */ }
 }
 

@@ -245,6 +245,54 @@ export async function sendTrialReminderEmail(p: TrialReminderPayload): Promise<b
   return sendViaResend([p.toEmail], subject, buildTrialReminderHtml(p), buildTrialReminderText(p), `trial-reminder ${p.tenantId}/${p.daysLeft}d`);
 }
 
+// ─── Recuperacion de contraseña ──────────────────────────────────────────
+export async function sendPasswordResetEmail(p: { toEmail: string; fullName: string; resetUrl: string }): Promise<boolean> {
+  if (!p.toEmail) return false;
+  const html = `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;font-size:20px;">🔑 Restablece tu contraseña</h1>
+  </div>
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+    <p>Hola ${p.fullName || ''},</p>
+    <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta de CredyTek. Este enlace expira en 2 horas.</p>
+    <div style="margin-top:20px;">
+      <a href="${p.resetUrl}" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Restablecer contraseña</a>
+    </div>
+    <p style="margin-top:20px;color:#6b7280;font-size:13px;">Si no solicitaste esto, ignora este correo — tu contraseña actual sigue siendo válida.</p>
+    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">CredyTek · Notificación automática de seguridad</p>
+  </div>
+</body></html>`.trim();
+  const text = `Restablece tu contraseña de CredyTek\n\nEnlace (expira en 2 horas): ${p.resetUrl}\n\nSi no solicitaste esto, ignora este correo.`;
+  return sendViaResend([p.toEmail], 'Restablece tu contraseña de CredyTek', html, text, 'password-reset');
+}
+
+// ─── Alerta de inicio de sesion desde ubicacion nueva ────────────────────
+export async function sendNewLoginAlertEmail(p: { toEmail: string; fullName: string; city: string | null; country: string | null; ip: string | null }): Promise<boolean> {
+  if (!p.toEmail) return false;
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const where = [p.city, p.country].filter(Boolean).join(', ') || 'una ubicación desconocida';
+  const html = `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;font-size:20px;">🛡️ Nuevo inicio de sesión</h1>
+  </div>
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+    <p>Hola ${p.fullName || ''},</p>
+    <p>Detectamos un inicio de sesión en tu cuenta de CredyTek desde <strong>${where}</strong>${p.ip ? ` (IP ${p.ip})` : ''}.</p>
+    <p>Si fuiste tú, no necesitas hacer nada. Si no reconoces este acceso, cambia tu contraseña de inmediato.</p>
+    <div style="margin-top:20px;">
+      <a href="${frontUrl}/settings" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Ir a mi cuenta</a>
+    </div>
+    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">CredyTek · Notificación automática de seguridad</p>
+  </div>
+</body></html>`.trim();
+  const text = `Nuevo inicio de sesión en CredyTek desde ${where}${p.ip ? ` (IP ${p.ip})` : ''}.\n\nSi no fuiste tú, cambia tu contraseña de inmediato: ${frontUrl}/settings`;
+  return sendViaResend([p.toEmail], 'Nuevo inicio de sesión en tu cuenta de CredyTek', html, text, 'new-login-alert');
+}
+
 export const EMAIL_CONFIG = {
   enabled: !!(process.env.RESEND_API_KEY && process.env.ADMIN_EMAIL),
   to: process.env.ADMIN_EMAIL || null,

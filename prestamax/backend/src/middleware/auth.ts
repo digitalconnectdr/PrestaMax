@@ -32,6 +32,11 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const db = getDb();
     const user = db.prepare("SELECT * FROM users WHERE id = ? AND is_active = 1").get(decoded.userId) as any;
     if (!user) return res.status(401).json({ error: "Usuario invalido" });
+    // "Cerrar todas mis sesiones": si el token fue emitido con una version
+    // anterior a la actual del usuario, se rechaza aunque no haya expirado.
+    if ((decoded.tokenVersion || 0) !== (user.token_version || 0)) {
+      return res.status(401).json({ error: "Sesión cerrada remotamente. Inicia sesión de nuevo.", code: "SESSION_REVOKED" });
+    }
     req.user = user;
     next();
   } catch { return res.status(401).json({ error: "Token invalido" }); }
