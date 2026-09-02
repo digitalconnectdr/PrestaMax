@@ -71,7 +71,7 @@ export function getLoanStatusLabel(status: LoanStatus | string): string {
     rejected: 'Rechazado', active: 'Activo', disbursed: 'Desembolsado',
     in_mora: 'En Mora', liquidated: 'Liquidado', paid: 'Pagado',
     cancelled: 'Cancelado', voided: 'Anulado', written_off: 'Incobrable',
-    restructured: 'Reestructurado',
+    restructured: 'Reestructurado', pending_manager_approval: 'Pend. Aprobación Gerencial',
   }
   return map[status] || status
 }
@@ -129,6 +129,7 @@ export function getLoanStatusConfig(status: LoanStatus | string): LoanStatusConf
     voided:       { label: 'Anulado',        color: 'text-red-700',     bg: 'bg-red-100'     },
     written_off:  { label: 'Incobrable',     color: 'text-red-700',     bg: 'bg-red-100'     },
     restructured: { label: 'Reestructurado', color: 'text-purple-600',  bg: 'bg-purple-100'  },
+    pending_manager_approval: { label: 'Pend. Aprobación Gerencial', color: 'text-amber-600', bg: 'bg-amber-100' },
   }
   return map[status as string] || { label: String(status), color: 'text-slate-600', bg: 'bg-slate-100' }
 }

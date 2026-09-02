@@ -115,6 +115,13 @@ const ClientDetailPage: React.FC = () => {
   const [anonymizeConfirmName, setAnonymizeConfirmName] = useState('')
   const [isAnonymizing, setIsAnonymizing] = useState(false)
 
+  // Consolidacion/refinanciamiento de prestamos
+  const [selectedForConsolidation, setSelectedForConsolidation] = useState<string[]>([])
+  const [showConsolidateModal, setShowConsolidateModal] = useState(false)
+  const [consolidateProducts, setConsolidateProducts] = useState<any[]>([])
+  const [consolidateForm, setConsolidateForm] = useState({ productId: '', rate: '', term: '', termUnit: 'months', paymentFrequency: 'monthly', firstPaymentDate: '', notes: '' })
+  const [isConsolidating, setIsConsolidating] = useState(false)
+
   // References & Guarantors forms
   const [showRefForm, setShowRefForm]   = useState(false)
   const [showGuarForm, setShowGuarForm] = useState(false)
@@ -243,11 +250,54 @@ const ClientDetailPage: React.FC = () => {
     }
   }
 
+  const toggleConsolidationSelection = (loanId: string) => {
+    setSelectedForConsolidation(prev => prev.includes(loanId) ? prev.filter(x => x !== loanId) : [...prev, loanId])
+  }
+
+  const openConsolidateModal = async () => {
+    setShowConsolidateModal(true)
+    try {
+      const res = await api.get('/products')
+      setConsolidateProducts(Array.isArray(res.data) ? res.data : [])
+    } catch { /* el select simplemente queda vacio */ }
+  }
+
+  const handleConsolidate = async () => {
+    if (selectedForConsolidation.length < 2) return toast.error(t('cd.cons.min_two'))
+    if (!consolidateForm.productId) return toast.error(t('cd.cons.product_req'))
+    if (!consolidateForm.rate || parseFloat(consolidateForm.rate) <= 0) return toast.error(t('cd.cons.rate_req'))
+    if (!consolidateForm.term || parseInt(consolidateForm.term) <= 0) return toast.error(t('cd.cons.term_req'))
+    setIsConsolidating(true)
+    try {
+      const res = await api.post('/loans/consolidate', {
+        loanIds: selectedForConsolidation,
+        productId: consolidateForm.productId,
+        rate: parseFloat(consolidateForm.rate),
+        term: parseInt(consolidateForm.term),
+        termUnit: consolidateForm.termUnit,
+        paymentFrequency: consolidateForm.paymentFrequency,
+        firstPaymentDate: consolidateForm.firstPaymentDate || undefined,
+        notes: consolidateForm.notes || undefined,
+      })
+      toast.success(t('cd.cons.success'))
+      setShowConsolidateModal(false)
+      setSelectedForConsolidation([])
+      setConsolidateForm({ productId: '', rate: '', term: '', termUnit: 'months', paymentFrequency: 'monthly', firstPaymentDate: '', notes: '' })
+      await reloadClient()
+      if (res.data?.id) navigate(`/loans/${res.data.id}`)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('cd.cons.error'))
+    } finally {
+      setIsConsolidating(false)
+    }
+  }
+
   if (isLoading) return <PageLoadingState />
   if (!client) return null
 
   const activeLoans = loans.filter(l => ['active', 'in_mora', 'disbursed', 'overdue'].includes(l.status))
   const completedLoans = loans.filter(l => l.status === 'liquidated')
+  const consolidatableStatuses = ['active', 'in_mora']
   const score = client.score ?? 50
 
   return (
@@ -611,15 +661,94 @@ const ClientDetailPage: React.FC = () => {
         </div>
       )}
 
+      {showConsolidateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <Card className="w-full max-w-lg my-8">
+            <h2 className="text-lg font-bold text-purple-700 mb-1">{t('cd.cons.modal_title')}</h2>
+            <p className="text-sm text-slate-600 mb-3">{t('cd.cons.modal_desc')}</p>
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4 text-xs text-purple-900 space-y-1">
+              {loans.filter(l => selectedForConsolidation.includes(l.id)).map(l => (
+                <div key={l.id} className="flex justify-between">
+                  <span className="font-mono">{l.loanNumber}</span>
+                  <span className="font-semibold">{formatCurrency(l.totalBalance || 0)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between border-t border-purple-200 pt-1 mt-1 font-bold">
+                <span>{t('cd.cons.new_amount')}</span>
+                <span>{formatCurrency(loans.filter(l => selectedForConsolidation.includes(l.id)).reduce((s, l) => s + (l.totalBalance || 0), 0))}</span>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('cd.cons.product')}</label>
+                <select
+                  value={consolidateForm.productId}
+                  onChange={e => setConsolidateForm(p => ({ ...p, productId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">{t('cd.cons.select_product')}</option>
+                  {consolidateProducts.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('cd.cons.rate')}</label>
+                  <input type="number" step="0.01" min="0" value={consolidateForm.rate}
+                    onChange={e => setConsolidateForm(p => ({ ...p, rate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Ej: 10" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('cd.cons.term')}</label>
+                  <input type="number" min="1" value={consolidateForm.term}
+                    onChange={e => setConsolidateForm(p => ({ ...p, term: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Ej: 12" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('cd.cons.notes')}</label>
+                <textarea value={consolidateForm.notes}
+                  onChange={e => setConsolidateForm(p => ({ ...p, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  rows={2} />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button variant="secondary" className="flex-1" onClick={() => setShowConsolidateModal(false)} disabled={isConsolidating}>
+                {t('common.cancel')}
+              </Button>
+              <button
+                onClick={handleConsolidate}
+                disabled={isConsolidating}
+                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                {isConsolidating ? t('cd.cons.consolidating') : t('cd.cons.confirm_btn')}
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* ── TAB: LOANS ── */}
       {activeTab === 'loans' && (
         <div className="space-y-4">
           {activeLoans.length > 0 && (
             <Card>
-              <h3 className="section-title mb-4">{t('cd.active_loans_n').replace('{n}', String(activeLoans.length))}</h3>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 className="section-title">{t('cd.active_loans_n').replace('{n}', String(activeLoans.length))}</h3>
+                {can('loans.consolidate') && selectedForConsolidation.length >= 2 && (
+                  <Button size="sm" onClick={openConsolidateModal} className="bg-purple-600 hover:bg-purple-700">
+                    {t('cd.cons.button').replace('{n}', String(selectedForConsolidation.length))}
+                  </Button>
+                )}
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-slate-200">
+                    {can('loans.consolidate') && <th className="w-8"></th>}
                     <th className="text-left py-2 px-3 font-semibold text-slate-700">{t('cd.h_number')}</th>
                     <th className="text-left py-2 px-3 font-semibold text-slate-700">{t('cd.h_product')}</th>
                     <th className="text-right py-2 px-3 font-semibold text-slate-700">{t('cd.h_disbursed')}</th>
@@ -629,6 +758,18 @@ const ClientDetailPage: React.FC = () => {
                   </tr></thead>
                   <tbody>{activeLoans.map(l => (
                     <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/loans/${l.id}`)}>
+                      {can('loans.consolidate') && (
+                        <td className="py-2 px-3" onClick={e => e.stopPropagation()}>
+                          {consolidatableStatuses.includes(l.status) && (
+                            <input
+                              type="checkbox"
+                              checked={selectedForConsolidation.includes(l.id)}
+                              onChange={() => toggleConsolidationSelection(l.id)}
+                              className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                            />
+                          )}
+                        </td>
+                      )}
                       <td className="py-2 px-3 font-medium text-blue-700 font-mono">{l.loanNumber}</td>
                       <td className="py-2 px-3 text-slate-600 text-xs">{l.productName}</td>
                       <td className="py-2 px-3 text-right">{formatCurrency(l.disbursedAmount || l.approvedAmount || 0)}</td>

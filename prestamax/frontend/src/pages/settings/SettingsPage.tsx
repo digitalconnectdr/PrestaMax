@@ -83,6 +83,8 @@ const SettingsPage: React.FC = () => {
   const [moraSettings, setMoraSettings] = useState<SettingsData>({ moraRateDaily: 0.001, moraGraceDays: 3, rebateEnabled: 1, rebateType: 'proportional', moraBase: 'cuota_vencida', moraFixedEnabled: 0, moraFixedAmount: 0 })
   const [currencySettings, setCurrencySettings] = useState<CurrencySettings>({ multiCurrencyEnabled: false, enabledCurrencies: ['DOP'] })
   const [isSavingCurrencies, setIsSavingCurrencies] = useState(false)
+  // Umbral para aprobacion en dos niveles ('' = deshabilitado)
+  const [approvalThreshold, setApprovalThreshold] = useState<string>('')
 
   // Products
   const [products, setProducts] = useState<LoanProduct[]>([])
@@ -183,6 +185,8 @@ const SettingsPage: React.FC = () => {
             multiCurrencyEnabled: !!(d.settings.multiCurrencyEnabled || d.settings.multi_currency_enabled),
             enabledCurrencies: parsedCurrencies.length ? parsedCurrencies : ['DOP'],
           })
+          const threshold = d.settings.approvalThresholdAmount
+          setApprovalThreshold(threshold != null ? String(threshold) : '')
         }
       } else if (tab === 'products') {
         const res = await api.get('/products')
@@ -250,6 +254,9 @@ const SettingsPage: React.FC = () => {
         moraBase: moraSettings.moraBase,
         moraFixedEnabled: moraSettings.moraFixedEnabled,
         moraFixedAmount: moraSettings.moraFixedAmount,
+      })
+      await api.put('/settings/approvals', {
+        approvalThresholdAmount: approvalThreshold.trim() === '' ? null : parseFloat(approvalThreshold),
       })
       toast.success(tGen('set.saved_ok'))
     } catch (err: any) {
@@ -933,6 +940,23 @@ const SettingsPage: React.FC = () => {
                     </select>
                   </div>
                 </div>
+              </Card>
+
+              <Card>
+                <h3 className="section-title mb-1">{tGen('set.approval_title')}</h3>
+                <p className="text-xs text-slate-500 mb-4">{tGen('set.approval_desc')}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label={tGen('set.approval_threshold')}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={approvalThreshold}
+                    onChange={e => setApprovalThreshold(e.target.value)}
+                    placeholder={tGen('set.approval_threshold_ph')}
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-2">{tGen('set.approval_threshold_help')}</p>
               </Card>
 
               <Button onClick={handleSaveGeneral} isLoading={isSaving} disabled={isSaving} className="flex items-center gap-2">

@@ -142,6 +142,25 @@ router.put('/mora', authenticate, requireTenant, requirePermission('settings.gen
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
+// PUT approval threshold — a partir de que monto un prestamo requiere una
+// segunda aprobacion (permiso loans.approve_high_value). NULL/0 = deshabilitado.
+router.put('/approvals', authenticate, requireTenant, requirePermission('settings.general'), (req: AuthRequest, res: Response) => {
+  try {
+    const d = req.body; const db = getDb();
+    const threshold = d.approval_threshold_amount === '' || d.approval_threshold_amount === null || d.approval_threshold_amount === undefined
+      ? null : parseFloat(d.approval_threshold_amount);
+    const existing = db.prepare('SELECT id FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id) as any;
+    if (existing) {
+      db.prepare('UPDATE tenant_settings SET approval_threshold_amount=?, updated_at=? WHERE tenant_id=?')
+        .run(threshold, now(), req.tenant.id);
+    } else {
+      db.prepare('INSERT INTO tenant_settings (id,tenant_id,approval_threshold_amount) VALUES (?,?,?)')
+        .run(uuid(), req.tenant.id, threshold);
+    }
+    res.json(db.prepare('SELECT * FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id));
+  } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
 // PUT multi-currency settings
 router.put('/currencies', authenticate, requireTenant, requirePermission('settings.general'), (req: AuthRequest, res: Response) => {
   try {

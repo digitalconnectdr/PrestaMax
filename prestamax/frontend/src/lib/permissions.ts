@@ -10,6 +10,7 @@ export type PermKey =
   | 'loans.view' | 'loans.create' | 'loans.edit'
   | 'loans.approve' | 'loans.reject' | 'loans.disburse'
   | 'loans.write_off' | 'loans.void' | 'loans.import'
+  | 'loans.approve_high_value' | 'loans.consolidate'
   // Payments
   | 'payments.view' | 'payments.create' | 'payments.void' | 'payments.edit'
   // Receipts
@@ -59,6 +60,7 @@ const PERM_PAIRS: { key: PermKey; module: string }[] = [
   { key:'loans.reject', module:'loans' }, { key:'loans.disburse', module:'loans' },
   { key:'loans.write_off', module:'loans' }, { key:'loans.void', module:'loans' },
   { key:'loans.import', module:'loans' },
+  { key:'loans.approve_high_value', module:'loans' }, { key:'loans.consolidate', module:'loans' },
   { key:'payments.view', module:'payments' }, { key:'payments.create', module:'payments' },
   { key:'payments.void', module:'payments' }, { key:'payments.edit', module:'payments' },
   { key:'receipts.view', module:'receipts' }, { key:'receipts.reprint', module:'receipts' },

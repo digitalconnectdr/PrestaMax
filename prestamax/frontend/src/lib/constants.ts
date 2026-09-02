@@ -9,6 +9,7 @@ export const LOAN_STATUSES = [
   { value: 'current', label: 'Al día' },
   { value: 'overdue', label: 'Vencido' },
   { value: 'in_mora', label: 'En mora' },
+  { value: 'pending_manager_approval', label: 'Pend. Aprobación Gerencial' },
   { value: 'restructured', label: 'Reestructurado' },
   { value: 'liquidated', label: 'Liquidado' },
   { value: 'written_off', label: 'Castigado' },

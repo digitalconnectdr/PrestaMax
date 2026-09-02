@@ -120,6 +120,7 @@ export type LoanStatus =
   | 'current'
   | 'overdue'
   | 'in_mora'
+  | 'pending_manager_approval'
   | 'restructured'
   | 'liquidated'
   | 'written_off'

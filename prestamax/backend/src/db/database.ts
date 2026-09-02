@@ -973,6 +973,15 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lat REAL`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN geo_lng REAL`); } catch(_) {}
 
+  // Aprobacion en dos niveles: si se configura un umbral, un prestamo por
+  // encima de ese monto necesita una SEGUNDA aprobacion (permiso
+  // loans.approve_high_value) ademas de la del oficial. NULL = deshabilitado,
+  // se aprueba en un solo paso como siempre (comportamiento por defecto,
+  // opt-in por tenant).
+  try { db.exec(`ALTER TABLE tenant_settings ADD COLUMN approval_threshold_amount REAL`); } catch(_) {}
+  // Consolidacion: a que prestamo nuevo quedo consolidado un prestamo viejo.
+  try { db.exec(`ALTER TABLE loans ADD COLUMN consolidated_into_loan_id TEXT`); } catch(_) {}
+
   // Habeas data / derecho al olvido: marca cuando un cliente pidio que se
   // borraran sus datos personales. Antes no existia ningun mecanismo para
   // esto -- se implementa como ANONIMIZACION (no borrado duro) para conservar
@@ -1254,8 +1263,8 @@ export function initializeDatabase(): void {
   // correctas. La migracion mas abajo (UPDATE plans SET features=...) propaga
   // el fix a los tenants existentes.
   const basicFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "templates.edit", "templates.delete", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections"]);
-  const proFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "templates.edit", "templates.delete", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "investors.view", "investors.create", "investors.edit", "investors.delete", "investors.assign", "investors.payouts", "investors.portal"]);
-  const enterpriseFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "templates.edit", "templates.delete", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "reports.datacredito", "investors.view", "investors.create", "investors.edit", "investors.delete", "investors.assign", "investors.payouts", "investors.portal"]);
+  const proFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "templates.edit", "templates.delete", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "investors.view", "investors.create", "investors.edit", "investors.delete", "investors.assign", "investors.payouts", "investors.portal", "loans.approve_high_value", "loans.consolidate"]);
+  const enterpriseFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "templates.edit", "templates.delete", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "reports.datacredito", "investors.view", "investors.create", "investors.edit", "investors.delete", "investors.assign", "investors.payouts", "investors.portal", "loans.approve_high_value", "loans.consolidate"]);
   const defaultPlans = [
     { id: 'plan-starter', name: 'Starter', slug: 'starter', price: 29.99, collectors: 1, clients: 100, users: 3, trial: 14, features: starterFeatures, desc: 'Ideal para iniciar. Funciones básicas de préstamos.' },
     { id: 'plan-basico', name: 'Básico', slug: 'basico', price: 59.99, collectors: 3, clients: 500, users: 8, trial: 14, features: basicFeatures, desc: 'Para prestamistas en crecimiento con WhatsApp y sucursales.' },
@@ -1282,10 +1291,17 @@ export function initializeDatabase(): void {
 
   // ── MIGRACION: actualizar features de planes existentes (incluye collections.tasks, etc.) ──
   // Sin esto, tenants creados antes de esta version siguen con la lista vieja sin agenda.
-  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-starter'`).run(starterFeatures); } catch(_) {}
-  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-basico'`).run(basicFeatures); } catch(_) {}
-  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-profesional'`).run(proFeatures); } catch(_) {}
-  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-enterprise'`).run(enterpriseFeatures); } catch(_) {}
+  // FIX (Sep 2026): esta migracion solo hacia match por id='plan-x'. Pero en
+  // instalaciones mas viejas los planes "Basico/Profesional/Empresarial" ya
+  // existian con id=UUID aleatorio (creados antes de que estos ids fijos
+  // existieran) y solo coinciden por slug -- el UPDATE por id nunca los
+  // tocaba, asi que CADA feature nueva agregada a estos planes (incluyendo
+  // loans.approve_high_value y loans.consolidate de esta misma migracion)
+  // jamas llegaba a esos tenants reales. Se hace match por id O por slug.
+  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-starter' OR slug='starter'`).run(starterFeatures); } catch(_) {}
+  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-basico' OR slug='basico'`).run(basicFeatures); } catch(_) {}
+  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-profesional' OR slug='profesional'`).run(proFeatures); } catch(_) {}
+  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-enterprise' OR slug='enterprise' OR slug='empresarial'`).run(enterpriseFeatures); } catch(_) {}
 
   const planCount = (db.prepare('SELECT COUNT(*) as c FROM plans').get() as any).c;
   console.log(`✅ Plans table: ${planCount} plans available`);

@@ -86,6 +86,7 @@ const STATUS_COLORS: Record<string, string> = {
   draft: '#94a3b8', voided: '#64748b', rejected: '#ef4444',
   cancelled: '#94a3b8', written_off: '#7f1d1d', restructured: '#a855f7',
   paid: '#10b981', current: '#3b82f6', disbursed: '#10b981',
+  pending_manager_approval: '#d97706',
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -94,7 +95,7 @@ const STATUS_LABELS: Record<string, string> = {
   liquidated: 'Liquidado', draft: 'Borrador', disbursed: 'Desembolsado',
   voided: 'Anulado', rejected: 'Rechazado', cancelled: 'Cancelado',
   written_off: 'Incobrable', restructured: 'Reestructurado',
-  paid: 'Pagado', current: 'Al día',
+  paid: 'Pagado', current: 'Al día', pending_manager_approval: 'Pend. Aprob. Gerencial',
 }
 
 const MOM_COLOR = (val: number) => val >= 0 ? '#10b981' : '#ef4444'

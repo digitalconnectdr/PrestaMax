@@ -367,12 +367,16 @@ const LoanDetailPage: React.FC = () => {
     if (!confirm(t('ld.approve_confirm'))) return
     try {
       setIsSubmitting(true)
-      await api.post(`/loans/${id}/approve`)
-      toast.success(t('ld.approved'))
-      const res = await api.get(`/loans/${id}`)
-      setLoan(res.data)
-    } catch (err) {
-      toast.error(t('ld.approve_error'))
+      const res = await api.post(`/loans/${id}/approve`)
+      if (res.data?.status === 'pending_manager_approval') {
+        toast.success(t('ld.approve_first_tier_ok'))
+      } else {
+        toast.success(t('ld.approved'))
+      }
+      const full = await api.get(`/loans/${id}`)
+      setLoan(full.data)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || t('ld.approve_error'))
     } finally {
       setIsSubmitting(false)
     }
@@ -1071,6 +1075,37 @@ const LoanDetailPage: React.FC = () => {
                       <CheckCircle className="w-4 h-4" />
                       {t('ld.approve_loan')}
                     </Button>
+                  )}
+                  {can('loans.reject') && (
+                    <Button
+                      size="md"
+                      variant="outline"
+                      className="w-full flex items-center justify-center gap-2 text-red-600 border-red-300 hover:bg-red-50"
+                      onClick={handleReject}
+                      disabled={isSubmitting}
+                    >
+                      <XCircle className="w-4 h-4" />
+                      {t('ld.reject')}
+                    </Button>
+                  )}
+                </>
+              )}
+              {loan.status === 'pending_manager_approval' && (
+                <>
+                  {can('loans.approve_high_value') ? (
+                    <Button
+                      size="md"
+                      className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700"
+                      onClick={handleApprove}
+                      disabled={isSubmitting}
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      {t('ld.approve_high_value')}
+                    </Button>
+                  ) : (
+                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      {t('ld.pending_manager_approval_note')}
+                    </div>
                   )}
                   {can('loans.reject') && (
                     <Button

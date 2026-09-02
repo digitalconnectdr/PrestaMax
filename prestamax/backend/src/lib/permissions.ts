@@ -9,8 +9,8 @@ export type PermKey =
   | 'clients.view' | 'clients.create' | 'clients.edit' | 'clients.delete'
   // Loans
   | 'loans.view' | 'loans.create' | 'loans.edit'
-  | 'loans.approve' | 'loans.reject' | 'loans.disburse'
-  | 'loans.write_off' | 'loans.void' | 'loans.import'
+  | 'loans.approve' | 'loans.approve_high_value' | 'loans.reject' | 'loans.disburse'
+  | 'loans.write_off' | 'loans.void' | 'loans.import' | 'loans.consolidate'
   // Payments
   | 'payments.view' | 'payments.create' | 'payments.void' | 'payments.edit'
   // Receipts
@@ -60,6 +60,8 @@ export const PERM_DEFS: PermDef[] = [
   { key:'loans.create',     module:'loans',      moduleLabel:'Préstamos',     label:'Crear préstamos',       description:'Registrar nuevos préstamos' },
   { key:'loans.edit',       module:'loans',      moduleLabel:'Préstamos',     label:'Editar préstamos',      description:'Modificar condiciones de préstamos existentes' },
   { key:'loans.approve',    module:'loans',      moduleLabel:'Préstamos',     label:'Aprobar préstamos',     description:'Aprobar solicitudes de préstamo pendientes' },
+  { key:'loans.approve_high_value', module:'loans', moduleLabel:'Préstamos',  label:'Aprobar montos altos',   description:'Dar la segunda aprobación (gerencial) a préstamos por encima del umbral configurado' },
+  { key:'loans.consolidate', module:'loans',     moduleLabel:'Préstamos',     label:'Consolidar/refinanciar', description:'Combinar varios préstamos activos de un cliente en uno nuevo' },
   { key:'loans.reject',     module:'loans',      moduleLabel:'Préstamos',     label:'Rechazar préstamos',    description:'Rechazar solicitudes de préstamo' },
   { key:'loans.disburse',   module:'loans',      moduleLabel:'Préstamos',     label:'Desembolsar préstamos', description:'Marcar préstamos como desembolsados y generar cuotas' },
   { key:'loans.write_off',  module:'loans',      moduleLabel:'Préstamos',     label:'Marcar incobrable',     description:'Marcar un préstamo como incobrable (write-off)' },
@@ -141,7 +143,7 @@ const ADMIN_DEFAULTS: PermKey[] = [...ALL_KEYS] as PermKey[]
 
 const OFICIAL_DEFAULTS: PermKey[] = [
   'clients.view','clients.create','clients.edit',
-  'loans.view','loans.create','loans.edit','loans.approve','loans.reject','loans.disburse','loans.void','loans.import',
+  'loans.view','loans.create','loans.edit','loans.approve','loans.reject','loans.disburse','loans.void','loans.import','loans.consolidate',
   'payments.view','payments.create','payments.void','payments.edit',
   'receipts.view','receipts.reprint',
   'contracts.view','contracts.create','contracts.sign',

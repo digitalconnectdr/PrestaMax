@@ -65,6 +65,7 @@ const STATUS_COLORS: Record<string, string> = {
   in_mora: '#ef4444',
   overdue: '#f59e0b',
   pending_review: '#8b5cf6',
+  pending_manager_approval: '#d97706',
   liquidated: '#6b7280',
 }
 
@@ -85,6 +86,7 @@ const STATUS_LABELS: Record<string, string> = {
   restructured: 'Reestructurado',
   paid: 'Pagado',
   current: 'Al día',
+  pending_manager_approval: 'Pend. Aprob. Gerencial',
 }
 
 const DashboardPage: React.FC = () => {

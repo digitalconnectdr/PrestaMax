@@ -8,8 +8,26 @@ import { generateDraft } from '../services/whatsappService';
 // INFLADAS hasta ~90%. Ahora todos los motores (preview, calculadora, BD) usan
 // la misma logica.
 import { generateSchedule as libGenerateSchedule, getInstallmentCount, getNextDate, calcMoraDetails } from '../lib/calculations';
+import { computePermissions, PermKey } from '../lib/permissions';
 
 const router = Router();
+
+// Chequeo de permiso DENTRO de un handler (no como middleware de ruta) --
+// necesario para la aprobacion en dos niveles, donde el permiso requerido
+// depende del MONTO del prestamo, no se puede decidir al registrar la ruta.
+function requesterHasPermission(req: AuthRequest, db: any, permKey: PermKey): boolean {
+  if (isPlatformStaff(req.user)) return true;
+  const membership = req.membership;
+  if (!membership) return false;
+  const roles: string[] = (() => { try { return JSON.parse(membership.roles || '[]') } catch(_) { return [] } })();
+  const explicit: Record<string, boolean> = (() => { try { return JSON.parse(membership.permissions || '{}') } catch(_) { return {} } })();
+  const planRow = db.prepare('SELECT p.features FROM tenants t LEFT JOIN plans p ON p.id=t.plan_id WHERE t.id=?').get(req.tenant.id) as any;
+  let planFeatures: string[] | null = null;
+  try { planFeatures = planRow?.features ? JSON.parse(planRow.features) : null; } catch(_) {}
+  const isLegacy = !!planFeatures && planFeatures.length > 0 && planFeatures.every(f => !f.includes('.'));
+  const granted = computePermissions(roles, explicit, isLegacy ? null : planFeatures);
+  return granted.has(permKey);
+}
 
 // Wrapper que mantiene la firma anterior (params object) y delega a la libreria.
 // Pasa la frecuencia REAL para que getRatePerInstallment(rate, rateType, freq) calcule bien.
@@ -123,6 +141,111 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to create loan' }); }
 });
 
+// ─── POST /loans/consolidate ──────────────────────────────────────────────
+// Refinanciamiento/consolidacion: combina 2+ prestamos activos/en mora de un
+// mismo cliente en un unico prestamo nuevo. La tasa la define el usuario
+// manualmente (no se calcula un promedio ponderado) -- decision explicita
+// del negocio. El monto del nuevo prestamo es la suma de los saldos totales
+// pendientes (capital+interes+mora) de los prestamos viejos; no es dinero
+// nuevo, por lo que no se mueve ninguna cuenta bancaria ni se genera un
+// desembolso real -- el nuevo prestamo nace directamente en estado 'active'
+// con su propio plan de cuotas. Los prestamos viejos quedan en estado
+// 'restructured' (reutilizando el status ya existente en el sistema) y
+// apuntando a consolidated_into_loan_id.
+router.post('/consolidate', authenticate, requireTenant, requirePermission('loans.consolidate'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const d = req.body;
+    const loanIds: string[] = Array.isArray(d.loan_ids) ? [...new Set(d.loan_ids as string[])] : [];
+    if (loanIds.length < 2) return res.status(400).json({ error: 'Selecciona al menos 2 préstamos para consolidar' });
+    if (!d.product_id) return res.status(400).json({ error: 'Producto de préstamo requerido' });
+    if (!d.rate || parseFloat(d.rate) <= 0) return res.status(400).json({ error: 'La tasa debe ser mayor a cero' });
+    if (!d.term || parseInt(d.term) <= 0) return res.status(400).json({ error: 'El plazo debe ser mayor a cero' });
+
+    const placeholders = loanIds.map(() => '?').join(',');
+    const oldLoans = db.prepare(`SELECT * FROM loans WHERE id IN (${placeholders}) AND tenant_id=?`).all(...loanIds, req.tenant.id) as any[];
+    if (oldLoans.length !== loanIds.length) return res.status(404).json({ error: 'Uno o más préstamos no fueron encontrados en esta empresa' });
+
+    const clientId = oldLoans[0].client_id;
+    if (!oldLoans.every(l => l.client_id === clientId)) {
+      return res.status(400).json({ error: 'Todos los préstamos a consolidar deben ser del mismo cliente' });
+    }
+    for (const l of oldLoans) {
+      if (!['active', 'in_mora'].includes(l.status)) {
+        return res.status(400).json({ error: `El préstamo ${l.loan_number} está en estado '${l.status}' y no puede consolidarse (solo préstamos activos o en mora).` });
+      }
+      if (l.consolidated_into_loan_id) {
+        return res.status(400).json({ error: `El préstamo ${l.loan_number} ya fue consolidado anteriormente.` });
+      }
+    }
+
+    const client = db.prepare('SELECT id, full_name, is_active FROM clients WHERE id=? AND tenant_id=?').get(clientId, req.tenant.id) as any;
+    if (!client) return res.status(404).json({ error: 'Cliente no encontrado en esta empresa' });
+    if (client.is_active === 0) {
+      return res.status(403).json({ error: `El cliente "${client.full_name}" está desactivado. Reactívalo antes de consolidar sus préstamos.` });
+    }
+
+    const totalAmount = r2(oldLoans.reduce((s, l) => {
+      const balance = l.total_balance != null
+        ? parseFloat(l.total_balance)
+        : (parseFloat(l.principal_balance) || 0) + (parseFloat(l.interest_balance) || 0) + (parseFloat(l.mora_balance) || 0);
+      return s + balance;
+    }, 0));
+    if (totalAmount <= 0) return res.status(400).json({ error: 'El saldo total pendiente de los préstamos seleccionados debe ser mayor a cero' });
+
+    const product = db.prepare('SELECT * FROM loan_products WHERE id=?').get(d.product_id) as any;
+    if (!product) return res.status(404).json({ error: 'Producto de préstamo no encontrado' });
+
+    const newId = uuid();
+    const loan_number = nextDocNumber(db, 'loans', 'loan_number', req.tenant.id, `PRE-${new Date().getFullYear()}-`, 5);
+    const disbDate = new Date();
+    const firstPayDate = d.first_payment_date ? new Date(d.first_payment_date) : new Date(new Date(disbDate).setMonth(disbDate.getMonth() + 1));
+    const rate = parseFloat(d.rate);
+    const term = parseInt(d.term);
+    const rateType = d.rate_type || product?.rate_type || 'monthly';
+    const termUnit = d.term_unit || 'months';
+    const paymentFrequency = d.payment_frequency || product?.payment_frequency || 'monthly';
+    const amortizationType = d.amortization_type || product?.amortization_type || 'fixed_installment';
+
+    const schedule = generateSchedule({ amount: totalAmount, rate, rateType, term, termUnit, freq: paymentFrequency, type: amortizationType, firstDate: firstPayDate });
+    const totalInterest = r2(schedule.reduce((s: number, i: any) => s + i.interest_amount, 0));
+    const maturityDate = schedule.length > 0 ? schedule[schedule.length - 1].due_date : null;
+
+    db.prepare(`INSERT INTO loans (id,tenant_id,branch_id,client_id,product_id,loan_number,status,requested_amount,approved_amount,disbursed_amount,
+      rate,rate_type,term,term_unit,payment_frequency,amortization_type,purpose,notes,
+      mora_rate_daily,mora_grace_days,collector_id,currency,exchange_rate_to_dop,
+      disbursement_date,first_payment_date,maturity_date,approval_date,
+      principal_balance,interest_balance,total_balance,total_interest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      newId, req.tenant.id, oldLoans[0].branch_id || null, clientId, d.product_id, loan_number, 'active',
+      totalAmount, totalAmount, totalAmount,
+      rate, rateType, term, termUnit, paymentFrequency, amortizationType,
+      'Consolidación de préstamos',
+      d.notes || `Consolidación de los préstamos ${oldLoans.map(l => l.loan_number).join(', ')}`,
+      product?.mora_rate_daily || 0.001, product?.mora_grace_days || 3,
+      d.collector_id || oldLoans[0].collector_id || null,
+      oldLoans[0].currency || 'DOP', oldLoans[0].exchange_rate_to_dop || 1.0,
+      disbDate.toISOString(), firstPayDate.toISOString(), maturityDate, now(),
+      totalAmount, totalInterest, r2(totalAmount + totalInterest), totalInterest
+    );
+
+    const insertInst = db.prepare('INSERT INTO installments (id,loan_id,installment_number,due_date,principal_amount,interest_amount,total_amount,status) VALUES (?,?,?,?,?,?,?,?)');
+    for (const s of schedule) {
+      insertInst.run(uuid(), newId, s.installment_number, s.due_date, s.principal_amount, s.interest_amount, s.total_amount, s.status);
+    }
+
+    db.prepare(`UPDATE loans SET status='restructured', consolidated_into_loan_id=?, updated_at=? WHERE id IN (${placeholders}) AND tenant_id=?`)
+      .run(newId, now(), ...loanIds, req.tenant.id);
+
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
+      uuid(), req.tenant.id, req.user.id, req.user.full_name, 'consolidated', 'loan', newId,
+      `Consolidó los préstamos ${oldLoans.map(l => l.loan_number).join(', ')} en el nuevo préstamo ${loan_number} para ${client.full_name}`
+    );
+
+    const newLoan = db.prepare(`SELECT l.*,c.full_name as client_name,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.id=?`).get(newId);
+    res.status(201).json(newLoan);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Failed to consolidate loans' }); }
+});
+
 router.get('/:id', authenticate, requireTenant, requirePermission('loans.view'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
@@ -205,6 +328,28 @@ router.post('/:id/approve', authenticate, requireTenant, requirePermission('loan
         return res.status(400).json({ error: 'Este producto requiere garantía. Registra un garante o bien como garantía antes de aprobar.' });
       }
     }
+    const approvedAmount = parseFloat(req.body.approved_amount) || loanForApproval.requested_amount;
+
+    // Aprobacion en dos niveles (opt-in por tenant via tenant_settings.approval_threshold_amount):
+    // si el monto supera el umbral configurado y quien aprueba NO tiene el
+    // permiso gerencial, el prestamo pasa a 'pending_manager_approval' en vez
+    // de 'approved', y queda a la espera de una segunda aprobacion.
+    const tenantSettings = db.prepare('SELECT approval_threshold_amount FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id) as any;
+    const threshold = tenantSettings?.approval_threshold_amount;
+    const needsManagerApproval = threshold != null && threshold > 0 && approvedAmount > threshold;
+    const hasHighValuePerm = requesterHasPermission(req, db, 'loans.approve_high_value');
+
+    if (needsManagerApproval && !hasHighValuePerm && loanForApproval.status !== 'pending_manager_approval') {
+      db.prepare('UPDATE loans SET status=?,approved_amount=COALESCE(?,requested_amount),updated_at=? WHERE id=? AND tenant_id=?')
+        .run('pending_manager_approval', req.body.approved_amount||null, now(), req.params.id, req.tenant.id);
+      const pendingLoan = db.prepare('SELECT loan_number FROM loans WHERE id=?').get(req.params.id) as any;
+      db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'first_approval','loan',req.params.id,`Dio la primera aprobación al préstamo ${pendingLoan?.loan_number||req.params.id}; requiere aprobación gerencial por superar el umbral de RD$${threshold}`);
+      return res.json(db.prepare('SELECT * FROM loans WHERE id=?').get(req.params.id));
+    }
+    if (needsManagerApproval && !hasHighValuePerm && loanForApproval.status === 'pending_manager_approval') {
+      return res.status(403).json({ error: 'Este préstamo supera el umbral configurado y requiere aprobación gerencial.' });
+    }
+
     db.prepare('UPDATE loans SET status=?,approval_date=?,approved_amount=COALESCE(?,requested_amount),updated_at=? WHERE id=? AND tenant_id=?')
       .run('approved',now(),req.body.approved_amount||null,now(),req.params.id,req.tenant.id);
     const approvedLoan = db.prepare('SELECT loan_number FROM loans WHERE id=?').get(req.params.id) as any;
