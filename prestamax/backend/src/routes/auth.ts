@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { getDb, uuid, now } from '../db/database';
+import { getDb, uuid, now, seedDefaultLoanProducts } from '../db/database';
 import { authenticate, AuthRequest, isPlatformStaff } from '../middleware/auth';
 import { computePermissions } from '../lib/permissions';
 import { getClientIp, geolocateIp } from '../services/geoService';
@@ -220,6 +220,11 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
 
     // 2. Tenant settings
     db.prepare('INSERT OR IGNORE INTO tenant_settings (id,tenant_id) VALUES (?,?)').run(uuid(), tenantId);
+
+    // 2b. Productos de prestamo de ejemplo (General + con Garantia), para que
+    // el tenant los tenga desde el primer login sin depender del backfill de
+    // arranque del servidor (ver seedDefaultLoanProducts en database.ts).
+    seedDefaultLoanProducts(db, tenantId);
 
     // 3. Plantillas por defecto: las maneja database.ts (Contrato General de
     //    Prestamo o Pagare + Pagare Notarial). Aqui ya no insertamos las viejas.

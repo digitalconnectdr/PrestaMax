@@ -1223,33 +1223,24 @@ export function initializeDatabase(): void {
   // ── Producto de préstamo por defecto ──────────────────────────────────────
   // Friccion de onboarding detectada: el usuario se registra y no entiende
   // como crear un producto de prestamo (tasa, plazo, tipo de amortizacion) --
-  // eso lo bloquea antes de poder crear su primer prestamo real. Se le da un
-  // producto de ejemplo ya configurado y editable, asi solo debe preocuparse
-  // por cuenta bancaria + cliente + prestamo. Corre en cada boot (como los
-  // templates de contrato arriba) para que tambien alcance a tenants ya
-  // existentes que quedaron sin ningun producto.
+  // eso lo bloquea antes de poder crear su primer prestamo real. Se le dan
+  // productos de ejemplo ya configurados y editables (uno normal y otro con
+  // bien en garantia, ver seedDefaultLoanProducts mas abajo), asi solo debe
+  // preocuparse por cuenta bancaria + cliente + prestamo. Ademas de correr
+  // aqui en cada boot (para alcanzar tenants ya existentes), tambien se
+  // llama directo desde /auth/register-tenant para que un tenant nuevo los
+  // tenga DESDE EL PRIMER SEGUNDO, sin depender de que el servidor reinicie.
   try {
-    const tenantsWithoutProducts = db.prepare(`
-      SELECT t.id FROM tenants t
+    const tenantsNeedingProductSeed = db.prepare(`
+      SELECT DISTINCT t.id FROM tenants t
       WHERE NOT EXISTS (SELECT 1 FROM loan_products p WHERE p.tenant_id = t.id)
+         OR NOT EXISTS (SELECT 1 FROM loan_products p WHERE p.tenant_id = t.id AND p.requires_guarantee = 1)
     `).all() as any[];
-    if (tenantsWithoutProducts.length > 0) {
-      const insertDefaultProduct = db.prepare(`
-        INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
-          min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,mora_rate_daily,mora_grace_days,
-          requires_guarantee,requires_approval,allows_prepayment,rebate_policy,is_san_type,is_reditos)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0.001,3,0,0,1,'proportional',0,0)
-      `);
-      for (const t of tenantsWithoutProducts) {
-        insertDefaultProduct.run(
-          crypto.randomUUID(), t.id, 'Préstamo General', 'GENERAL', 'personal',
-          'Producto de ejemplo creado automáticamente. Personalízalo o crea más productos desde Configuración → Productos.',
-          1000, 50000, 10, 'monthly', 1, 12, 'months', 'monthly', 'fixed_installment'
-        );
-      }
-      console.log(`✅ Producto "Préstamo General" creado para ${tenantsWithoutProducts.length} empresa(s) sin productos`);
+    for (const t of tenantsNeedingProductSeed) seedDefaultLoanProducts(db, t.id);
+    if (tenantsNeedingProductSeed.length > 0) {
+      console.log(`✅ Productos de ejemplo (General / con Garantía) verificados para ${tenantsNeedingProductSeed.length} empresa(s)`);
     }
-  } catch(e: any) { console.error('Error seeding default loan product:', e?.message); }
+  } catch(e: any) { console.error('Error seeding default loan products:', e?.message); }
 
   // Always ensure the 4 default subscription plans exist (INSERT OR IGNORE = safe to run every boot)
   // FIX P2 (Jun 2026): Starter incluía collections.tasks (ver agenda) pero NO
@@ -1307,6 +1298,39 @@ export function initializeDatabase(): void {
   console.log(`✅ Plans table: ${planCount} plans available`);
 
   console.log('✅ Database schema initialized');
+}
+
+// Crea los productos de prestamo de ejemplo de un tenant (uno normal, uno
+// con bien en garantia) si todavia no los tiene. Idempotente: se puede
+// llamar tantas veces como se quiera para el mismo tenant sin duplicar.
+// Se usa desde initDatabase() (backfill en cada boot) y desde
+// POST /auth/register-tenant (para que un tenant nuevo los tenga de
+// inmediato, sin depender de que el servidor reinicie).
+export function seedDefaultLoanProducts(db: any, tenantId: string): void {
+  try {
+    const hasAnyProduct = db.prepare('SELECT 1 FROM loan_products WHERE tenant_id=? LIMIT 1').get(tenantId);
+    if (!hasAnyProduct) {
+      db.prepare(`INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
+        min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,mora_rate_daily,mora_grace_days,
+        requires_guarantee,requires_approval,allows_prepayment,rebate_policy,is_san_type,is_reditos)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0.001,3,0,0,1,'proportional',0,0)`).run(
+        crypto.randomUUID(), tenantId, 'Préstamo General', 'GENERAL', 'personal',
+        'Producto de ejemplo creado automáticamente. Personalízalo o crea más productos desde Configuración → Productos.',
+        1000, 50000, 10, 'monthly', 1, 12, 'months', 'monthly', 'fixed_installment'
+      );
+    }
+    const hasGuaranteeProduct = db.prepare('SELECT 1 FROM loan_products WHERE tenant_id=? AND requires_guarantee=1 LIMIT 1').get(tenantId);
+    if (!hasGuaranteeProduct) {
+      db.prepare(`INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
+        min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,mora_rate_daily,mora_grace_days,
+        requires_guarantee,requires_approval,allows_prepayment,rebate_policy,is_san_type,is_reditos)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0.001,3,1,1,1,'proportional',0,0)`).run(
+        crypto.randomUUID(), tenantId, 'Préstamo con Garantía', 'GARANTIA', 'personal',
+        'Producto de ejemplo que exige registrar un bien en garantía (prenda) antes de aprobar el préstamo. Ideal para financiar vehículos, motocicletas, electrodomésticos u otros bienes de valor. Personalízalo o crea más productos desde Configuración → Productos.',
+        5000, 150000, 10, 'monthly', 3, 24, 'months', 'monthly', 'fixed_installment'
+      );
+    }
+  } catch(e: any) { console.error('Error seeding default loan products for tenant', tenantId, ':', e?.message); }
 }
 
 export function r2(n: number): number {

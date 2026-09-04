@@ -9,7 +9,7 @@ import {
   HelpCircle, ChevronDown, ChevronUp, Users, Building2, FileText,
   DollarSign, UserPlus, MessageCircle, Settings, Lightbulb, ArrowRight,
   Package, Truck, Inbox, FileCheck, TrendingUp, Calculator, BarChart3,
-  FileSpreadsheet, ClipboardList, Briefcase, Calendar
+  FileSpreadsheet, ClipboardList, Briefcase, Calendar, ShieldCheck
 } from 'lucide-react'
 import { usePermission } from '@/hooks/usePermission'
 import type { PermKey } from '@/lib/permissions'
@@ -63,6 +63,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
           { title: 'Pon un nombre y código identificable', description: 'Ej: "Personal 3 Meses" (código P3M), "Comercial 12 Meses" (código C12). El código aparece luego en el número de préstamo.' },
           { title: 'Define tasa y plazo sugeridos', description: 'Tasa de interés (%), tipo (mensual/anual), plazo en cantidad y unidad (días/semanas/meses), frecuencia de pago.', tip: 'Estos son valores SUGERIDOS. Al crear un préstamo individual los puedes ajustar para ese caso específico.' },
           { title: 'Selecciona tipo de amortización', description: 'Interés (la más simple), Cuota Fija (método bancario) o Solo Interés (bullet). Si no estás seguro hay un botón "¿Qué significa?" con ejemplos.' },
+          { title: 'Activa "Requiere bien en garantía" si aplica', description: 'Para préstamos donde el cliente deja un bien de respaldo (vehículo, motocicleta, electrodoméstico, joya, etc). Con esta opción activa, el sistema no deja aprobar el préstamo hasta que se registre al menos un bien.', tip: 'Ya tienes creado por defecto el producto "Préstamo con Garantía" con esta opción activada — solo ajusta su tasa, plazo y montos según tu negocio. Ver la guía "Bienes en garantía" más abajo para el detalle completo.' },
           { title: 'Configura mora y cargos opcionales', description: 'Tasa de mora si una cuota se vence, tasa de prórroga si renegocian, cargo de desembolso (comisión inicial).' },
           { title: 'Guarda', description: 'El producto aparece en el dropdown "Producto" al crear un préstamo. Puedes crear tantos productos como necesites.' },
         ],
@@ -96,6 +97,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
           { title: 'Selecciona el cliente', description: 'En "Préstamos" → botón "+ Nuevo Préstamo". Busca por nombre o cédula. Si no existe, crea el cliente primero.' },
           { title: 'Elige el producto', description: 'Selecciona uno de los productos que creaste antes. El sistema autocompleta tasa, plazo y tipo. Puedes ajustarlos si quieres.' },
           { title: 'Define las condiciones', description: 'Monto, tasa de interés (%), plazo, unidad y frecuencia de pago.', tip: 'Si no estás seguro qué tipo de amortización usar, haz clic en "¿Qué significa?" al lado del selector — verás la explicación con ejemplo concreto.' },
+          { title: 'Si el producto exige garantía, registra el bien', description: 'Cuando el producto tiene activado "Requiere bien en garantía", en la confirmación aparece una sección para describir el bien (marca, modelo, valor estimado). No puedes avanzar sin agregar al menos uno.' },
           { title: 'Selecciona cuenta de desembolso', description: 'De qué cuenta bancaria sale el dinero. Si el monto excede el saldo, el sistema te bloqueará para que no quedes en negativo.' },
           { title: 'Revisa el resumen y desembolsa', description: 'El sistema muestra el plan de pagos con todas las cuotas, fechas e intereses. Confirma para desembolsar. El dinero se descuenta del banco y el préstamo queda "Activo".', tip: 'Si tienes WhatsApp transaccional activado, se genera automáticamente un draft de bienvenida en la Bandeja.' },
         ],
@@ -219,6 +221,22 @@ const GUIDES: { section: string; items: Guide[] }[] = [
   {
     section: 'HERRAMIENTAS COMPLEMENTARIAS',
     items: [
+      {
+        id: 'bienes-garantia',
+        icon: <ShieldCheck className="w-5 h-5" />,
+        title: 'Préstamos con bien en garantía',
+        subtitle: 'Respalda un préstamo con un bien físico (vehículo, electrodoméstico, joya, etc.)',
+        shortcutPath: '/settings/products',
+        shortcutLabel: 'Ir a Productos',
+        requiredPermission: 'loans.edit',
+        steps: [
+          { title: 'Actívalo en el producto de préstamo', description: 'En Configuración → Productos, edita (o crea) un producto y activa "Requiere bien en garantía". Ya tienes uno de ejemplo llamado "Préstamo con Garantía" — solo ajusta tasa, plazo y montos.', tip: 'Puedes tener productos con y sin garantía al mismo tiempo. Úsalos según el tipo de préstamo: uno para personales sin respaldo, otro para financiamiento de vehículos/motos/equipos.' },
+          { title: 'Regístralo al crear el préstamo', description: 'Cuando el cliente elige un producto que exige garantía, en el paso de confirmación aparece una sección "Bien en garantía". Describe el bien (marca, modelo, número de chasis/serie) y su valor estimado.' },
+          { title: 'El sistema bloquea la aprobación sin garantía', description: 'Si intentas aprobar un préstamo de este tipo sin ningún bien registrado, el sistema lo rechaza con un mensaje claro. Así tu cartera queda siempre respaldada.' },
+          { title: 'Da seguimiento desde el detalle del préstamo', description: 'En la ficha del préstamo verás la tarjeta "Garantías" con cada bien: estado (en custodia, liberado, ejecutado/vendido), y botones para agregar más, liberar (cuando el cliente termina de pagar) o ejecutar (si hay que recuperar y vender el bien por impago).' },
+          { title: 'Ejecutar una garantía (venta o remate)', description: 'Si el préstamo entra en mora grave y decides recuperar el bien, usa "Ejecutar" en la garantía: registra si fue vendida o rematada y el monto obtenido.', tip: 'El monto de la venta queda registrado como referencia en la garantía, pero no se aplica automáticamente al balance del préstamo — regístralo como pago aparte si corresponde, para mantener el historial de pagos consistente.' },
+        ],
+      },
       {
         id: 'contratos',
         icon: <FileCheck className="w-5 h-5" />,
