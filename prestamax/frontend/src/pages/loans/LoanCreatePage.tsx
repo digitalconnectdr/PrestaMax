@@ -536,8 +536,8 @@ const LoanCreatePage: React.FC = () => {
                   <p>{t('lc.p_amount')} <strong>{formatCurrency(product.minAmount)} – {formatCurrency(product.maxAmount)}</strong></p>
                   <p>{t('lc.p_term')} <strong>{product.minTerm} – {product.maxTerm} {unitLabel(product.termUnit)}</strong></p>
                   <p>{t('lc.p_freq')} <strong>{freqLabel(product.paymentFrequency)}</strong></p>
-                  {product.isReditos && <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{t('lc.reditos')}</span>}
-                  {product.isSanType && <span className="inline-block text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full ml-1">{t('lc.san')}</span>}
+                  {!!product.isReditos && <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{t('lc.reditos')}</span>}
+                  {!!product.isSanType && <span className="inline-block text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full ml-1">{t('lc.san')}</span>}
                 </div>
               </div>
             ))}
@@ -1015,14 +1015,14 @@ const LoanCreatePage: React.FC = () => {
               ) : null
             })()}
 
-            {selectedProduct.requiresApproval && (
+            {!!selectedProduct.requiresApproval && (
               <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
                 {t('lc.requires_approval')}
               </div>
             )}
           </Card>
 
-          {selectedProduct.requiresGuarantee && (
+          {!!selectedProduct.requiresGuarantee && (
             <Card>
               <h3 className="font-semibold text-slate-700 mb-1">{t('lc.guarantee.title')}</h3>
               <p className="text-xs text-slate-500 mb-4">{t('lc.guarantee.subtitle')}</p>
