@@ -71,6 +71,18 @@ export default defineConfig(({ mode }) => {
         },
       },
 
+      // FIX (PageSpeed, Sep 2026): Vite inyecta <link rel="modulepreload"> en
+      // index.html para TODOS los manualChunks del entry, sin importar si la
+      // ruta actual los necesita. vendor-charts (recharts, ~380KB decoded)
+      // solo lo usan Dashboard/Reportes (rutas lazy), pero se precargaba y
+      // ejecutaba en CADA visita, incluida la landing pública -- costaba
+      // ~1.4s de Total Blocking Time en el análisis mobile de PageSpeed.
+      // Se excluye del preload de cada entry; las rutas que sí lo necesitan
+      // lo siguen cargando normalmente vía su import() dinámico.
+      modulePreload: {
+        resolveDependencies: (_filename, deps) => deps.filter(dep => !dep.includes('vendor-charts')),
+      },
+
       chunkSizeWarningLimit: 800,
     },
   }

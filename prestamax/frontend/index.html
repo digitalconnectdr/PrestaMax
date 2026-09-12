@@ -10,22 +10,42 @@
     <!-- Google Fonts: preconnect + <link> en vez de @import en CSS. @import
          serializa 3 round-trips (CSS -> fonts.googleapis.com -> fonts.gstatic.com)
          antes de poder pintar texto, lo que golpea el LCP. Con preconnect el
-         navegador abre la conexión en paralelo a la descarga del HTML/JS. -->
+         navegador abre la conexión en paralelo a la descarga del HTML/JS.
+         FIX (PageSpeed, Sep 2026): el <link rel="stylesheet"> normal seguía
+         siendo render-blocking (~830ms en el análisis mobile) porque el
+         navegador debe descargar y parsear ese CSS antes de poder pintar
+         texto. Se carga con el truco "loadCSS" (media="print" hasta que
+         termina de cargar, luego se activa) para que no bloquee el render;
+         <noscript> mantiene el <link> normal para clientes sin JS. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+          media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" /></noscript>
 
-    <!-- Google tag (gtag.js) — GA4. Estático en el <head> para que la
-         recolección de datos y la verificación de Search Console (método
-         Google Analytics) funcionen de forma confiable. El Measurement ID
-         no es secreto. send_page_view:false → las vistas las envía el SPA
-         en cada cambio de ruta (src/lib/analytics.ts). -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W9245V6FR6"></script>
+    <!-- Google tag (gtag.js) — GA4. El shim de dataLayer/gtag() va inline y
+         síncrono (para que cualquier gtag() temprano de src/lib/analytics.ts
+         quede encolado sin errores), pero el script real (~166KB, ~70KB sin
+         usar según PageSpeed) se difiere hasta después del evento load para
+         que no compita por CPU/red con el render inicial. GA4 está diseñado
+         para esto: los eventos encolados en dataLayer antes de que cargue
+         el script real no se pierden. send_page_view:false → las vistas las
+         envía el SPA en cada cambio de ruta (src/lib/analytics.ts). -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-W9245V6FR6', { send_page_view: false });
+      (function () {
+        function loadGtagScript() {
+          var s = document.createElement('script');
+          s.async = true;
+          s.src = 'https://www.googletagmanager.com/gtag/js?id=G-W9245V6FR6';
+          document.head.appendChild(s);
+        }
+        if (document.readyState === 'complete') setTimeout(loadGtagScript, 0);
+        else window.addEventListener('load', loadGtagScript);
+      })();
     </script>
 
     <!-- ── SEO (landing público). Las rutas privadas de la app fijan noindex
