@@ -63,9 +63,18 @@ export default defineConfig(({ mode }) => {
           entryFileNames:   'assets/[name]-[hash].js',
           chunkFileNames:   'assets/[name]-[hash].js',
           assetFileNames:   'assets/[name]-[hash][extname]',
+          // FIX (PageSpeed, Sep 2026): clsx/tailwind-merge son la dependencia
+          // de cn() en lib/utils.ts, usada por CASI TODO componente de la app
+          // (incluida la landing). Al no estar asignadas a ningun chunk, el
+          // splitting automático de Rollup las deduplicaba dentro de
+          // vendor-charts (porque recharts también las usa internamente) --
+          // eso forzaba un import ESTÁTICO de vendor-charts.js completo
+          // (~380KB) desde el chunk de entrada en TODA página, incluida la
+          // landing pública que jamás usa gráficos. Fijarlas en vendor-ui
+          // (ya precargado de por sí) rompe esa dependencia cruzada.
           manualChunks: {
             'vendor-react':  ['react', 'react-dom', 'react-router-dom'],
-            'vendor-ui':     ['lucide-react'],
+            'vendor-ui':     ['lucide-react', 'clsx', 'tailwind-merge'],
             'vendor-charts': ['recharts'],
           },
         },
