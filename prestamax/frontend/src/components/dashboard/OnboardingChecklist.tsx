@@ -59,7 +59,14 @@ const OnboardingChecklist: React.FC = () => {
   }
 
   useEffect(() => {
-    if (!status || status.client) return
+    // FIX (onboarding audit, Sep 2026): antes este tour se disparaba SIEMPRE
+    // apuntando a "client", sin importar que el checklist de abajo mostrara
+    // "Crea tu cuenta bancaria" como primer paso pendiente -- dos guías
+    // visibles al mismo tiempo, dando indicaciones distintas de por dónde
+    // empezar. Ahora sigue el MISMO orden que el checklist: apunta siempre
+    // al primer paso pendiente real, cualquiera que sea.
+    if (!status || pendingSteps.length === 0) return
+    const firstPending = pendingSteps[0]
     let cancelled = false
     // El flag se marca AL DISPARAR el tour (no al programar el timer): en
     // desarrollo StrictMode monta/limpia/remonta este efecto una vez, y si
@@ -71,7 +78,7 @@ const OnboardingChecklist: React.FC = () => {
         if (localStorage.getItem(AUTO_TOUR_KEY) === '1') return
         localStorage.setItem(AUTO_TOUR_KEY, '1')
       } catch { return }
-      startTour('client')
+      startTour(firstPending.tourId)
     }, 700)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [status])

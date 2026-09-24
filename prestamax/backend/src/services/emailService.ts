@@ -182,6 +182,76 @@ export async function sendInquiryNotification(p: InquiryPayload): Promise<boolea
   return sendViaResend(recipients, subject, buildHtml(p), buildText(p), `lead ${p.id}`);
 }
 
+// ─── Bienvenida al registrarse (al tenant nuevo) ────────────────────────────
+// FIX (onboarding audit, Sep 2026): un tenant que se registraba y no
+// terminaba el primer recorrido en esa misma sesion no recibia NINGUN correo
+// hasta el aviso de trial por vencer (3 dias antes) -- cero forma de traerlo
+// de vuelta si se distrajo. Este correo sale una sola vez, al momento del
+// registro, con los mismos 3 pasos del checklist "Primeros pasos".
+interface WelcomePayload {
+  tenantId: string;
+  tenantName: string;
+  adminName: string;
+  toEmail: string;
+  trialDays: number;
+}
+
+function buildWelcomeHtml(p: WelcomePayload): string {
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const firstName = (p.adminName || '').trim().split(/\s+/)[0] || p.adminName;
+  const intro = p.trialDays > 0
+    ? `Tu cuenta de <strong>${p.tenantName}</strong> ya está activa, con ${p.trialDays} días de prueba gratis y sin tarjeta de crédito.`
+    : `Tu cuenta de <strong>${p.tenantName}</strong> ya está activa.`;
+  return `
+<!DOCTYPE html>
+<html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
+  <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;font-size:20px;">¡Bienvenido a CredyTek, ${firstName}!</h1>
+  </div>
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+    <p>${intro}</p>
+    <p>En menos de 5 minutos puedes tener tu primer préstamo funcionando:</p>
+    <ol style="padding-left:20px;line-height:1.8;">
+      <li><strong>Agrega tu cuenta bancaria</strong> — de ahí sale el dinero que prestas y ahí entran los pagos.</li>
+      <li><strong>Registra tu primer cliente</strong> — nombre, cédula y teléfono bastan para empezar.</li>
+      <li><strong>Crea tu primer préstamo</strong> — ya tienes un producto de ejemplo listo, solo elige monto y plazo.</li>
+    </ol>
+    <div style="margin-top:20px;">
+      <a href="${frontUrl}/dashboard" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Entrar a CredyTek</a>
+    </div>
+    <p style="margin-top:20px;color:#6b7280;font-size:13px;">¿Alguna duda para empezar? Responde este correo o escríbenos a credytek@digitalconnectdr.com — con gusto te ayudamos directamente.</p>
+    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">CredyTek · Notificación automática de tu cuenta</p>
+  </div>
+</body></html>`.trim();
+}
+
+function buildWelcomeText(p: WelcomePayload): string {
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const firstName = (p.adminName || '').trim().split(/\s+/)[0] || p.adminName;
+  const intro = p.trialDays > 0
+    ? `Tu cuenta de ${p.tenantName} ya esta activa, con ${p.trialDays} dias de prueba gratis y sin tarjeta de credito.`
+    : `Tu cuenta de ${p.tenantName} ya esta activa.`;
+  return [
+    `¡BIENVENIDO A CREDYTEK, ${firstName.toUpperCase()}!`,
+    '',
+    intro,
+    'En menos de 5 minutos puedes tener tu primer prestamo funcionando:',
+    '',
+    '1) Agrega tu cuenta bancaria - de ahi sale el dinero que prestas y ahi entran los pagos.',
+    '2) Registra tu primer cliente - nombre, cedula y telefono bastan para empezar.',
+    '3) Crea tu primer prestamo - ya tienes un producto de ejemplo listo, solo elige monto y plazo.',
+    '',
+    `Entrar a CredyTek: ${frontUrl}/dashboard`,
+    '',
+    'Dudas: credytek@digitalconnectdr.com',
+  ].join('\n');
+}
+
+export async function sendWelcomeEmail(p: WelcomePayload): Promise<boolean> {
+  if (!p.toEmail) return false;
+  return sendViaResend([p.toEmail], `Bienvenido a CredyTek — así empiezas`, buildWelcomeHtml(p), buildWelcomeText(p), `welcome ${p.tenantId}`);
+}
+
 // ─── Recordatorio de trial por vencer (al tenant, no al admin) ──────────────
 // Antes NINGUN email salia hacia el tenant -- se enteraba de que su prueba
 // terminaba solo al chocar con el bloqueo de pago. Se dispara a los 3, 1 y 0
