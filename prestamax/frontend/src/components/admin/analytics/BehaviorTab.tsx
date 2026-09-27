@@ -18,8 +18,11 @@ interface BehaviorData {
 }
 
 const SECTION_LABELS: Record<string, string> = {
-  hero: 'Hero', benefits: 'Beneficios', 'how-it-works': 'Cómo funciona',
-  features: 'Funcionalidades', pricing: 'Precios', faq: 'FAQ', 'cta-final': 'CTA final',
+  hero: 'Hero', 'problem-result': 'Problema → Resultado', 'how-it-works': 'Cómo funciona',
+  capabilities: 'Capacidades', differentiator: 'Diferenciador', migration: 'Migración',
+  security: 'Seguridad', pricing: 'Precios', faq: 'FAQ', 'cta-final': 'CTA final',
+  // Nombres de V1 (baseline) — se conservan para leer datos históricos previos a Fase 2.
+  benefits: 'Beneficios (V1)', features: 'Funcionalidades (V1)',
 }
 const CTA_LABELS: Record<string, string> = {
   hero: 'Hero', benefits: 'Beneficios', features: 'Funcionalidades', pricing: 'Precios',

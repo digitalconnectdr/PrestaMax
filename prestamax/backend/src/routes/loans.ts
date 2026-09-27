@@ -950,13 +950,14 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
 
   // Find or create a generic migration product for this tenant
   const ensureProduct = (type: string, rate: number, rateType: string, freq: string, amorType: string): string => {
-    const slug = `migration_${type}_${rateType}`;
-    let prod = db.prepare(`SELECT id FROM loan_products WHERE tenant_id=? AND slug=?`).get(req.tenant.id, slug) as any;
+    const productName = `Migración ${type}`;
+    let prod = db.prepare(`SELECT id FROM loan_products WHERE tenant_id=? AND name=? AND rate=? AND rate_type=? AND payment_frequency=? AND amortization_type=?`)
+      .get(req.tenant.id, productName, rate, rateType, freq, amorType) as any;
     if (!prod) {
       const pid = uuid();
-      db.prepare(`INSERT INTO loan_products (id,tenant_id,name,slug,type,rate,rate_type,payment_frequency,amortization_type,mora_rate_daily,mora_grace_days,is_active)
-        VALUES (?,?,?,?,?,?,?,?,?,0.001,3,1)`)
-        .run(pid, req.tenant.id, `Migración ${type}`, slug, type, rate, rateType, freq, amorType);
+      db.prepare(`INSERT INTO loan_products (id,tenant_id,name,type,min_amount,max_amount,rate,rate_type,min_term,max_term,term_unit,payment_frequency,amortization_type,mora_rate_daily,mora_grace_days,is_active)
+        VALUES (?,?,?,?,?,?,?,?,?,?,'months',?,?,0.001,3,1)`)
+        .run(pid, req.tenant.id, productName, type, 0, 100000000, rate, rateType, 1, 999, freq, amorType);
       return pid;
     }
     return prod.id;
@@ -964,10 +965,12 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+    const clientName = (row.client_name || '').trim();
+    if (!clientName) { results.push({ row: i+1, status:'error', error:'Nombre de cliente requerido' }); continue; }
+    if (!row.loan_amount || isNaN(parseFloat(row.loan_amount))) { results.push({ row: i+1, status:'error', clientName, error:'Monto de préstamo inválido' }); continue; }
+
+    db.exec('BEGIN');
     try {
-      const clientName = (row.client_name || '').trim();
-      if (!clientName) { results.push({ row: i+1, status:'error', error:'Nombre de cliente requerido' }); continue; }
-      if (!row.loan_amount || isNaN(parseFloat(row.loan_amount))) { results.push({ row: i+1, status:'error', clientName, error:'Monto de préstamo inválido' }); continue; }
 
       const loanAmount = parseFloat(row.loan_amount);
       const rate = parseFloat(row.interest_rate || '0');
@@ -993,11 +996,13 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
         .get(req.tenant.id, row.client_phone || '', row.client_id_number || '') as any;
       if (!client) {
         const cid = uuid();
-        db.prepare(`INSERT INTO clients (id,tenant_id,first_name,last_name,full_name,phone_personal,email,id_number,id_type,address,score,is_active)
-          VALUES (?,?,?,?,?,?,?,?,'cedula',?,3,1)`)
-          .run(cid, req.tenant.id, firstName, lastName, clientName,
+        const { count: clientCount } = db.prepare(`SELECT COUNT(*) as count FROM clients WHERE tenant_id=?`).get(req.tenant.id) as any;
+        const clientNumber = `CLI-${String(clientCount + 1).padStart(5, '0')}`;
+        db.prepare(`INSERT INTO clients (id,tenant_id,client_number,first_name,last_name,full_name,phone_personal,email,id_number,id_type,address,score,is_active)
+          VALUES (?,?,?,?,?,?,?,?,?,'cedula',?,3,1)`)
+          .run(cid, req.tenant.id, clientNumber, firstName, lastName, clientName,
                row.client_phone || null, row.client_email || null,
-               row.client_id_number || null, row.client_address || null);
+               row.client_id_number || `SIN-CEDULA-${clientNumber}`, row.client_address || null);
         client = { id: cid };
       }
 
@@ -1051,9 +1056,10 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
       // If there were prior payments, create a migration payment record
       if (amountPaid > 0) {
         const payId = uuid();
-        db.prepare(`INSERT INTO payments (id,loan_id,tenant_id,amount,payment_date,payment_method,reference,notes,is_voided)
-          VALUES (?,?,?,?,?,?,?,?,0)`)
-          .run(payId, loanId, req.tenant.id, amountPaid, startDate.toISOString(), 'migration', 'MIGRACIÓN', 'Pago previo — migración al sistema');
+        const paymentNumber = nextDocNumber(db, 'payments', 'payment_number', req.tenant.id, `PAG-${startDate.getFullYear()}-`, 6);
+        db.prepare(`INSERT INTO payments (id,loan_id,tenant_id,registered_by,payment_number,amount,payment_date,payment_method,reference,notes,is_voided)
+          VALUES (?,?,?,?,?,?,?,?,?,?,0)`)
+          .run(payId, loanId, req.tenant.id, req.user.id, paymentNumber, amountPaid, startDate.toISOString(), 'migration', 'MIGRACIÓN', 'Pago previo — migración al sistema');
         // Create receipt for the migration payment
         const rcptNum = nextDocNumber(db, 'receipts', 'receipt_number', req.tenant.id, 'MIG-', 5);
         db.prepare(`INSERT INTO receipts (id,tenant_id,payment_id,loan_id,issued_by,receipt_number,amount,client_name,loan_number,concept_detail,notes,issued_at)
@@ -1068,9 +1074,11 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
         JSON.stringify({ loan_number: loanNumber, client: clientName })
       );
 
+      db.exec('COMMIT');
       results.push({ row: i+1, status:'created', loanNumber, clientName });
     } catch (err: any) {
-      results.push({ row: i+1, status:'error', error: err.message || 'Error desconocido' });
+      try { db.exec('ROLLBACK'); } catch (_) { /* noop */ }
+      results.push({ row: i+1, status:'error', clientName, error: err.message || 'Error desconocido' });
     }
   }
 

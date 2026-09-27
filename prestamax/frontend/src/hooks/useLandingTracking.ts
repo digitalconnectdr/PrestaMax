@@ -1,8 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // useLandingTracking — instrumentación de comportamiento del landing:
 // profundidad de scroll (25/50/75/90/100%) y visibilidad de las secciones
-// principales (Hero, Beneficios, Cómo funciona, Funcionalidades, Precios,
-// FAQ, CTA final). Un solo hook, montado una vez en LandingPage.
+// principales. Un solo hook, montado una vez en LandingPage.
+//
+// V2 (Fase 2, landing conversion): la lista de secciones se actualizó para
+// reflejar la nueva estructura (problema→resultado, capacidades, diferenciador,
+// migración, seguridad). Los nombres son estables hacia adelante — ver reporte
+// de Fase 2 para el mapeo contra los nombres de V1 usados como baseline.
 //
 // La sección "pricing" además dispara el evento nombrado pricing_view (ya que
 // Precios es un ancla dentro de la misma página, no una ruta aparte — "verla"
@@ -13,7 +17,10 @@ import { track, trackScrollDepth, trackSectionView } from '@/lib/analytics'
 
 const SCROLL_THRESHOLDS = [25, 50, 75, 90, 100] as const
 
-export const LANDING_SECTION_IDS = ['hero', 'benefits', 'how-it-works', 'features', 'pricing', 'faq', 'cta-final']
+export const LANDING_SECTION_IDS = [
+  'hero', 'problem-result', 'how-it-works', 'capabilities', 'differentiator',
+  'migration', 'security', 'pricing', 'faq', 'cta-final',
+]
 
 export function useLandingTracking(): void {
   // Scroll depth

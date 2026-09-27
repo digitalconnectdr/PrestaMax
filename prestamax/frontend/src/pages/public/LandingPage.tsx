@@ -1,4 +1,4 @@
-// LandingPage — pagina publica de marketing de CredyTek
+// LandingPage — pagina publica de marketing de CredyTek (V2 — Fase 2, foco en conversion)
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -8,10 +8,7 @@ import {
   FileText,
   ClipboardList,
   BarChart3,
-  Calculator,
   MessageCircle,
-  Inbox,
-  ShieldCheck,
   Check,
   ChevronDown,
   ChevronUp,
@@ -22,19 +19,22 @@ import {
   Lock,
   Cloud,
   Zap,
-  LayoutDashboard,
   TrendingUp,
-  AlertCircle,
-  Calendar,
+  Settings,
+  KeyRound,
+  Building2,
+  FileSpreadsheet,
+  Upload,
 } from 'lucide-react'
 
 import PlanInquiryModal from '@/components/public/PlanInquiryModal'
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 import ShareButton from '@/components/shared/ShareButton'
 import { useT } from '@/lib/i18n'
-import { Reveal, AnimatedCounter } from '@/components/shared/Reveal'
+import { Reveal } from '@/components/shared/Reveal'
 import { trackEvent, trackLandingVisit, track, trackTrialCtaClick, trackPlanSelected } from '@/lib/analytics'
 import { useLandingTracking } from '@/hooks/useLandingTracking'
+import dashboardScreenshot from '@/assets/landing/dashboard-screenshot.png'
 
 type TFn = (key: string) => string
 interface Plan {
@@ -77,7 +77,7 @@ const buildPlans = (t: TFn): Plan[] => [
     collectors: t('lp.lim.col10'), clients: t('lp.lim.cli2000'), users: t('lp.lim.usr20'),
     features: [
       t('lp.pf.all_basico'), t('lp.pf.branches'), t('lp.pf.public_req'),
-      t('lp.pf.projections'), t('lp.pf.income_mgmt'), t('lp.pf.roles'), t('lp.pf.priority'),
+      t('lp.pf.projections'), t('lp.pf.income_mgmt'), t('lp.pf.csv_import'), t('lp.pf.roles'), t('lp.pf.priority'),
     ],
   },
   {
@@ -91,16 +91,27 @@ const buildPlans = (t: TFn): Plan[] => [
   },
 ]
 
-const buildFeatures = (t: TFn) => [
-  { icon: Users,         title: t('lp.f.clients.t'),     description: t('lp.f.clients.d') },
-  { icon: DollarSign,    title: t('lp.f.loans.t'),       description: t('lp.f.loans.d') },
-  { icon: CreditCard,    title: t('lp.f.payments.t'),    description: t('lp.f.payments.d') },
-  { icon: ClipboardList, title: t('lp.f.collections.t'), description: t('lp.f.collections.d') },
-  { icon: FileText,      title: t('lp.f.contracts.t'),   description: t('lp.f.contracts.d') },
-  { icon: BarChart3,     title: t('lp.f.reports.t'),     description: t('lp.f.reports.d') },
-  { icon: Calculator,    title: t('lp.f.calc.t'),        description: t('lp.f.calc.d') },
-  { icon: MessageCircle, title: t('lp.f.whatsapp.t'),    description: t('lp.f.whatsapp.d') },
-  { icon: Inbox,         title: t('lp.f.requests.t'),    description: t('lp.f.requests.d') },
+const buildCapabilities = (t: TFn) => [
+  { icon: Users,      title: t('lp.cap.clients.t'),     description: t('lp.cap.clients.d') },
+  { icon: DollarSign, title: t('lp.cap.loans.t'),        description: t('lp.cap.loans.d') },
+  { icon: CreditCard, title: t('lp.cap.payments.t'),     description: t('lp.cap.payments.d') },
+  { icon: ClipboardList, title: t('lp.cap.collections.t'), description: t('lp.cap.collections.d') },
+  { icon: BarChart3,  title: t('lp.cap.reports.t'),      description: t('lp.cap.reports.d') },
+  { icon: Settings,   title: t('lp.cap.ops.t'),          description: t('lp.cap.ops.d') },
+]
+
+const buildHowSteps = (t: TFn) => [
+  { icon: Users,      title: t('lp.how.s1') },
+  { icon: DollarSign, title: t('lp.how.s2') },
+  { icon: CreditCard, title: t('lp.how.s3') },
+  { icon: TrendingUp, title: t('lp.how.s4') },
+]
+
+const buildSecurityItems = (t: TFn) => [
+  { icon: KeyRound,   title: t('lp.sec.auth.t'),      description: t('lp.sec.auth.d') },
+  { icon: Building2,  title: t('lp.sec.isolation.t'), description: t('lp.sec.isolation.d') },
+  { icon: Lock,       title: t('lp.sec.https.t'),     description: t('lp.sec.https.d') },
+  { icon: Cloud,      title: t('lp.sec.backup.t'),    description: t('lp.sec.backup.d') },
 ]
 
 const buildFaqs = (t: TFn) => [
@@ -110,67 +121,15 @@ const buildFaqs = (t: TFn) => [
   { q: t('lp.faq.q4'), a: t('lp.faq.a4') },
   { q: t('lp.faq.q5'), a: t('lp.faq.a5') },
   { q: t('lp.faq.q6'), a: t('lp.faq.a6') },
-  { q: t('lp.faq.q7'), a: t('lp.faq.a7') },
-  { q: t('lp.faq.q8'), a: t('lp.faq.a8') },
-  { q: t('lp.faq.q9'), a: t('lp.faq.a9') },
-  { q: t('lp.faq.q10'), a: t('lp.faq.a10') },
-  { q: t('lp.faq.q11'), a: t('lp.faq.a11') },
-  { q: t('lp.faq.q12'), a: t('lp.faq.a12') },
 ]
-
-// Monedas soportadas (presencia regional — todas por igual).
-const CURRENCIES: { code: string; flag: string; key: string }[] = [
-  { code: 'DOP', flag: '🇩🇴', key: 'lp.cur.dop' },
-  { code: 'USD', flag: '🇺🇸', key: 'lp.cur.usd' },
-  { code: 'EUR', flag: '🇪🇺', key: 'lp.cur.eur' },
-  { code: 'HTG', flag: '🇭🇹', key: 'lp.cur.htg' },
-  { code: 'MXN', flag: '🇲🇽', key: 'lp.cur.mxn' },
-  { code: 'COP', flag: '🇨🇴', key: 'lp.cur.cop' },
-  { code: 'PEN', flag: '🇵🇪', key: 'lp.cur.pen' },
-  { code: 'CLP', flag: '🇨🇱', key: 'lp.cur.clp' },
-  { code: 'BOB', flag: '🇧🇴', key: 'lp.cur.bob' },
-  { code: 'UYU', flag: '🇺🇾', key: 'lp.cur.uyu' },
-  { code: 'BRL', flag: '🇧🇷', key: 'lp.cur.brl' },
-  { code: 'GTQ', flag: '🇬🇹', key: 'lp.cur.gtq' },
-]
-
-// Gráfico de barras animado para el mockup del hero: crecen al aparecer y
-// luego varían sutilmente (sensación de datos en vivo). Respeta reduce-motion.
-const MOCK_BARS = [40, 65, 50, 75, 60, 85, 70, 90, 75, 95, 80, 100]
-
-const AnimatedBars: React.FC = () => {
-  const [heights, setHeights] = useState<number[]>(() => MOCK_BARS.map(() => 6))
-
-  useEffect(() => {
-    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    // Entrada: de ~0 a los valores base.
-    const start = setTimeout(() => setHeights(MOCK_BARS.slice()), 150)
-    if (reduce) return () => clearTimeout(start)
-    // Dinámico: cada 2.4s varía manteniendo la forma general.
-    const id = setInterval(() => {
-      setHeights(MOCK_BARS.map(h => Math.max(22, Math.min(100, Math.round(h + (Math.random() * 26 - 13))))))
-    }, 2400)
-    return () => { clearTimeout(start); clearInterval(id) }
-  }, [])
-
-  return (
-    <div className="h-24 flex items-end gap-1.5">
-      {heights.map((h, i) => (
-        <div
-          key={i}
-          className="flex-1 bg-gradient-to-t from-[#1e3a5f] to-[#3b82f6] rounded-t transition-[height] duration-700 ease-out"
-          style={{ height: `${h}%` }}
-        />
-      ))}
-    </div>
-  )
-}
 
 const LandingPage: React.FC = () => {
   const t = useT()
   const navigate = useNavigate()
   const plans = buildPlans(t)
-  const features = buildFeatures(t)
+  const capabilities = buildCapabilities(t)
+  const howSteps = buildHowSteps(t)
+  const securityItems = buildSecurityItems(t)
   const faqs = buildFaqs(t)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [inquiryOpen, setInquiryOpen]       = useState(false)
@@ -191,8 +150,14 @@ const LandingPage: React.FC = () => {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  const goTry = (location: 'hero' | 'nav' | 'nav_mobile' | 'final') => {
+    trackEvent('cta_register', { location })
+    trackTrialCtaClick(location)
+    navigate('/register')
+  }
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden">
       {/* Navbar */}
       <header className={`sticky top-0 z-50 bg-white/95 backdrop-blur border-b transition-shadow duration-300 ${scrolled ? 'border-slate-200 shadow-md' : 'border-transparent'}`}>
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
@@ -205,8 +170,9 @@ const LandingPage: React.FC = () => {
             </div>
 
             {/* Desktop nav */}
-            <nav className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.features')}</a>
+            <nav className="hidden lg:flex items-center gap-6 xl:gap-8">
+              <a href="#capabilities" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.product')}</a>
+              <a href="#how-it-works" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.how')}</a>
               <a href="#pricing" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.pricing')}</a>
               <a href="#faq" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.faq')}</a>
               <Link to="/login" className="text-sm text-slate-600 hover:text-slate-900">{t('lp.nav.login')}</Link>
@@ -214,15 +180,15 @@ const LandingPage: React.FC = () => {
               <LanguageSwitcher />
               <button
                 type="button"
-                onClick={() => { trackTrialCtaClick('nav'); navigate('/register') }}
+                onClick={() => goTry('nav')}
                 className="px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#152a45] transition"
               >
-                {t('lp.cta.register')}
+                {t('lp.cta.try')}
               </button>
             </nav>
 
             {/* Mobile: compartir + selector de idioma + botón menú */}
-            <div className="md:hidden flex items-center gap-1">
+            <div className="lg:hidden flex items-center gap-1">
               <ShareButton />
               <LanguageSwitcher />
               <button
@@ -237,58 +203,57 @@ const LandingPage: React.FC = () => {
 
           {/* Mobile nav */}
           {mobileMenuOpen && (
-            <div className="md:hidden py-4 border-t border-slate-200 space-y-2">
-              <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.features')}</a>
+            <div className="lg:hidden py-4 border-t border-slate-200 space-y-2">
+              <a href="#capabilities" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.product')}</a>
+              <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.how')}</a>
               <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.pricing')}</a>
               <a href="#faq" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.faq')}</a>
               <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.login')}</Link>
               <button
                 type="button"
-                onClick={() => { trackTrialCtaClick('nav_mobile'); setMobileMenuOpen(false); navigate('/register') }}
+                onClick={() => { goTry('nav_mobile'); setMobileMenuOpen(false) }}
                 className="block w-full px-3 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded text-center"
               >
-                {t('lp.cta.register')}
+                {t('lp.cta.try')}
               </button>
             </div>
           )}
         </div>
       </header>
 
-      {/* Hero */}
+      {/* 1. Hero */}
       <section id="hero" className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white">
-        {/* Blobs decorativos del fondo */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="lp-blob absolute -top-32 -right-24 w-[28rem] h-[28rem] bg-[#f59e0b]/10 rounded-full blur-3xl" />
-          <div className="lp-blob absolute top-32 -left-32 w-[26rem] h-[26rem] bg-blue-400/10 rounded-full blur-3xl" style={{ animationDelay: '-6s' }} />
-          <div className="lp-blob absolute bottom-0 right-1/3 w-80 h-80 bg-[#1e3a5f]/5 rounded-full blur-3xl" style={{ animationDelay: '-11s' }} />
+          <div className="absolute -top-32 -right-24 w-[24rem] h-[24rem] bg-[#f59e0b]/8 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-1/4 w-72 h-72 bg-[#1e3a5f]/5 rounded-full blur-3xl" />
         </div>
         <div className="relative z-10 max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-16 md:py-24">
           <div className="text-center max-w-4xl mx-auto">
-            <div className="lp-hero-item lp-delay-1 inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700 mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700 mb-6">
               <Zap className="w-3.5 h-3.5" />
               {t('lp.hero.badge')}
             </div>
-            <h1 className="lp-hero-item lp-delay-2 text-4xl md:text-6xl font-bold text-slate-900 leading-tight">
+            <h1 className="text-4xl md:text-6xl font-bold text-slate-900 leading-tight">
               {t('lp.hero.title1')}
               <span className="block text-[#f59e0b]">{t('lp.hero.title2')}</span>
             </h1>
-            <p className="lp-hero-item lp-delay-3 mt-6 text-lg md:text-xl text-slate-600 max-w-2xl mx-auto">
+            <p className="mt-6 text-lg md:text-xl text-slate-600 max-w-2xl mx-auto">
               {t('lp.hero.subtitle')}
             </p>
-            <div className="lp-hero-item lp-delay-4 mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 type="button"
-                onClick={() => { trackEvent('cta_register', { location: 'hero' }); trackTrialCtaClick('hero'); navigate('/register') }}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/30 hover:scale-[1.02]"
+                onClick={() => goTry('hero')}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/30"
               >
-                {t('lp.cta.register')}
+                {t('lp.cta.try')}
                 <ArrowRight className="w-4 h-4" />
               </button>
               <a
-                href="#pricing"
+                href="#how-it-works"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-slate-700 font-medium rounded-lg border border-slate-300 hover:bg-slate-50 transition"
               >
-                {t('lp.cta.see_plans')}
+                {t('lp.cta.how')}
               </a>
             </div>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-slate-500">
@@ -311,226 +276,76 @@ const LandingPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Hero mockup illustration — réplica del dashboard real */}
-          <div className="lp-float mt-16 relative max-w-6xl mx-auto">
-            <div className="bg-gradient-to-br from-[#1e3a5f]/10 via-[#f59e0b]/10 to-blue-500/10 rounded-2xl p-2 md:p-4 shadow-2xl">
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                {/* Barra del navegador */}
-                <div className="flex items-center gap-1.5 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                  <div className="w-3 h-3 rounded-full bg-red-400" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                  <div className="w-3 h-3 rounded-full bg-green-400" />
-                  <div className="flex-1 text-center text-xs text-slate-500 font-mono">credytek.com/dashboard</div>
-                </div>
-
-                {/* Cuerpo: sidebar + área principal */}
-                <div className="flex">
-                  {/* Sidebar */}
-                  <aside className="hidden sm:flex flex-col w-44 flex-shrink-0 bg-[#1e3a5f] py-4 px-3 gap-0.5">
-                    <div className="flex items-center gap-2 px-2 mb-4">
-                      <div className="w-7 h-7 bg-gradient-to-br from-[#f59e0b] to-amber-600 rounded-md flex items-center justify-center">
-                        <DollarSign className="w-4 h-4 text-white" />
-                      </div>
-                      <span className="text-sm font-bold text-white">Credy<span className="text-[#f59e0b]">Tek</span></span>
-                    </div>
-                    {[
-                      { icon: LayoutDashboard, label: t('lp.mock.dashboard'), active: true },
-                      { icon: Users,           label: t('lp.mock.clients') },
-                      { icon: DollarSign,      label: t('lp.mock.loans') },
-                      { icon: CreditCard,      label: t('lp.mock.payments') },
-                      { icon: ClipboardList,   label: t('lp.mock.collections') },
-                      { icon: BarChart3,       label: t('lp.mock.reports') },
-                    ].map((it, i) => {
-                      const ItIcon = it.icon
-                      return (
-                        <div key={i} className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs ${it.active ? 'bg-white/10 text-white font-medium' : 'text-blue-100/70'}`}>
-                          <ItIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                          <span className="truncate">{it.label}</span>
-                        </div>
-                      )
-                    })}
-                  </aside>
-
-                  {/* Main */}
-                  <div className="flex-1 min-w-0 p-4 md:p-5 bg-slate-50/60">
-                    <div className="mb-4">
-                      <div className="text-base md:text-lg font-bold text-slate-900">{t('lp.mock.dashboard')}</div>
-                      <div className="text-xs text-slate-500">{t('lp.mock.overview')}</div>
-                    </div>
-
-                    {/* KPIs */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      {[
-                        { label: t('lp.mock.total'),  node: <AnimatedCounter value={2.4} format={(n) => `$${n.toFixed(1)}M`} />, sub: t('lp.mock.sub_loans'),  icon: DollarSign, color: 'text-[#1e3a5f]',   box: 'bg-blue-50 text-[#1e3a5f]' },
-                        { label: t('lp.mock.active'), node: <AnimatedCounter value={1.8} format={(n) => `$${n.toFixed(1)}M`} />, sub: t('lp.mock.sub_active'), icon: TrendingUp, color: 'text-emerald-600', box: 'bg-emerald-50 text-emerald-600' },
-                        { label: t('lp.mock.mora'),   node: <AnimatedCounter value={297} format={(n) => `$${Math.round(n)}K`} />, sub: t('lp.mock.sub_mora'),  icon: AlertCircle, color: 'text-red-600',  box: 'bg-red-50 text-red-600' },
-                        { label: t('lp.mock.today'),  node: <AnimatedCounter value={42} format={(n) => `$${Math.round(n)}K`} />,  sub: t('lp.mock.sub_today'), icon: Calendar,   color: 'text-[#f59e0b]',  box: 'bg-amber-50 text-[#f59e0b]' },
-                      ].map((stat, i) => {
-                        const StatIcon = stat.icon
-                        return (
-                          <div key={i} className="p-3 bg-white rounded-lg border border-slate-200">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="text-[10px] uppercase tracking-wide text-slate-500 truncate">{stat.label}</div>
-                                <div className={`mt-1 text-lg md:text-xl font-bold ${stat.color}`}>{stat.node}</div>
-                                <div className="text-[10px] text-slate-400 mt-0.5">{stat.sub}</div>
-                              </div>
-                              <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${stat.box}`}>
-                                <StatIcon className="w-4 h-4" />
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    {/* Gráfico */}
-                    <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
-                      <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-2">{t('lp.mock.chart')}</div>
-                      <AnimatedBars />
-                    </div>
-                  </div>
-                </div>
-              </div>
+          {/* Captura real del producto */}
+          <div className="mt-14 relative max-w-5xl mx-auto">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-2xl shadow-slate-900/10 overflow-hidden">
+              <img
+                src={dashboardScreenshot}
+                alt={t('lp.hero.shot_alt')}
+                width={1440}
+                height={900}
+                loading="eager"
+                fetchPriority="high"
+                className="w-full h-auto block"
+              />
             </div>
           </div>
         </div>
       </section>
 
-      {/* Problema / Solución */}
-      <section id="benefits" className="py-16 md:py-24 bg-white">
+      {/* 2. Problema → Resultado */}
+      <section id="problem-result" className="py-14 md:py-20 bg-white">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
-          <Reveal className="text-center max-w-3xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.prob.title')}</h2>
-            <p className="mt-4 text-lg text-slate-600">{t('lp.prob.subtitle')}</p>
+          <Reveal className="text-center max-w-2xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.pr.title')}</h2>
+            <p className="mt-4 text-lg text-slate-600">{t('lp.pr.subtitle')}</p>
           </Reveal>
 
-          <div className="mt-12 grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-            {/* Antes */}
-            <Reveal className="rounded-2xl border border-red-200 bg-red-50/40 p-6 md:p-8">
-              <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
-                <span className="w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0"><X className="w-4 h-4" /></span>
-                {t('lp.prob.before_t')}
-              </h3>
-              <ul className="mt-5 space-y-3">
-                {['lp.prob.b1','lp.prob.b2','lp.prob.b3','lp.prob.b4','lp.prob.b5','lp.prob.b6'].map(k => (
-                  <li key={k} className="flex items-start gap-2.5 text-sm text-slate-600">
+          <div className="mt-10 grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <Reveal className="rounded-2xl border border-red-200 bg-red-50/40 p-6 md:p-7">
+              <ul className="space-y-3">
+                {[t('lp.pr.p1'), t('lp.pr.p2'), t('lp.pr.p3')].map((item, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-sm text-slate-700">
                     <X className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                    <span>{t(k)}</span>
+                    <span>{item}</span>
                   </li>
                 ))}
               </ul>
             </Reveal>
-
-            {/* Después */}
-            <Reveal delay={120} className="rounded-2xl border-2 border-[#1e3a5f]/20 bg-white p-6 md:p-8 shadow-lg shadow-[#1e3a5f]/5">
-              <h3 className="flex items-center gap-2 text-lg font-bold text-[#1e3a5f]">
-                <span className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0"><Check className="w-4 h-4" /></span>
-                {t('lp.prob.after_t')}
-              </h3>
-              <ul className="mt-5 space-y-3">
-                {['lp.prob.g1','lp.prob.g2','lp.prob.g3','lp.prob.g4','lp.prob.g5','lp.prob.g6'].map(k => (
-                  <li key={k} className="flex items-start gap-2.5 text-sm text-slate-700">
+            <Reveal delay={100} className="rounded-2xl border-2 border-[#1e3a5f]/20 bg-white p-6 md:p-7 shadow-lg shadow-[#1e3a5f]/5">
+              <ul className="space-y-3">
+                {[t('lp.pr.r1'), t('lp.pr.r2'), t('lp.pr.r3')].map((item, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-sm text-slate-800 font-medium">
                     <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    <span>{t(k)}</span>
+                    <span>{item}</span>
                   </li>
                 ))}
               </ul>
             </Reveal>
           </div>
-
-          <Reveal>
-            <p className="mt-10 text-center text-base md:text-lg font-medium text-slate-900 max-w-2xl mx-auto">{t('lp.prob.close')}</p>
-          </Reveal>
         </div>
       </section>
 
-      {/* Trust strip */}
-      <section className="border-y border-slate-200 bg-slate-50">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-            <div className="flex flex-col items-center gap-1">
-              <Smartphone className="w-6 h-6 text-[#1e3a5f]" />
-              <div className="text-sm font-medium text-slate-900">{t('lp.trust.web')}</div>
-              <div className="text-xs text-slate-500">{t('lp.trust.web_d')}</div>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <Lock className="w-6 h-6 text-[#1e3a5f]" />
-              <div className="text-sm font-medium text-slate-900">{t('lp.trust.enc')}</div>
-              <div className="text-xs text-slate-500">{t('lp.trust.enc_d')}</div>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <Cloud className="w-6 h-6 text-[#1e3a5f]" />
-              <div className="text-sm font-medium text-slate-900">{t('lp.trust.backup')}</div>
-              <div className="text-xs text-slate-500">{t('lp.trust.backup_d')}</div>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <ShieldCheck className="w-6 h-6 text-[#f59e0b]" />
-              <div className="text-sm font-medium text-slate-900">{t('lp.trust.multi')}</div>
-              <div className="text-xs text-slate-500">{t('lp.trust.multi_d')}</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section id="features" className="py-16 md:py-24 scroll-mt-20">
+      {/* 3. Cómo funciona */}
+      <section id="how-it-works" className="py-16 md:py-24 bg-slate-50 scroll-mt-20">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
-          <Reveal className="text-center max-w-3xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
-              {t('lp.features.title')}
-            </h2>
-            <p className="mt-4 text-lg text-slate-600">
-              {t('lp.features.subtitle')}
-            </p>
-          </Reveal>
-
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, i) => {
-              const Icon = feature.icon
-              return (
-                <Reveal
-                  key={i}
-                  delay={(i % 3) * 80}
-                  className="lp-card-hover p-6 bg-white rounded-xl border border-slate-200 hover:border-[#1e3a5f]/40"
-                >
-                  <div className="w-11 h-11 bg-amber-50 rounded-lg flex items-center justify-center">
-                    <Icon className="w-5 h-5 text-[#f59e0b]" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-semibold text-slate-900">{feature.title}</h3>
-                  <p className="mt-2 text-sm text-slate-600 leading-relaxed">{feature.description}</p>
-                </Reveal>
-              )
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Cómo funciona */}
-      <section id="how-it-works" className="py-16 md:py-24 bg-gradient-to-b from-white to-slate-50 scroll-mt-20">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
-          <Reveal className="text-center max-w-3xl mx-auto">
+          <Reveal className="text-center max-w-2xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.how.title')}</h2>
             <p className="mt-4 text-lg text-slate-600">{t('lp.how.subtitle')}</p>
           </Reveal>
 
-          <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-8">
-            {[
-              { icon: ClipboardList, title: t('lp.how.s1.t'), desc: t('lp.how.s1.d') },
-              { icon: Users,         title: t('lp.how.s2.t'), desc: t('lp.how.s2.d') },
-              { icon: TrendingUp,    title: t('lp.how.s3.t'), desc: t('lp.how.s3.d') },
-            ].map((step, i) => {
+          <div className="mt-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {howSteps.map((step, i) => {
               const StepIcon = step.icon
               return (
-                <Reveal key={i} delay={i * 100} className="text-center">
+                <Reveal key={i} delay={i * 80} className="text-center">
                   <div className="relative inline-flex">
                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#1e3a5f] to-[#152a45] flex items-center justify-center shadow-lg shadow-[#1e3a5f]/20">
                       <StepIcon className="w-7 h-7 text-white" />
                     </div>
                     <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-[#f59e0b] text-white text-xs font-bold flex items-center justify-center shadow">{i + 1}</span>
                   </div>
-                  <h3 className="mt-5 text-lg font-semibold text-slate-900">{step.title}</h3>
-                  <p className="mt-2 text-sm text-slate-600 leading-relaxed max-w-xs mx-auto">{step.desc}</p>
+                  <h3 className="mt-5 text-base font-semibold text-slate-900 max-w-[14rem] mx-auto">{step.title}</h3>
                 </Reveal>
               )
             })}
@@ -538,37 +353,131 @@ const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Países y monedas */}
-      <section className="py-16 md:py-24 bg-gradient-to-b from-slate-50 to-white">
+      {/* 4. Capacidades principales */}
+      <section id="capabilities" className="py-16 md:py-24 scroll-mt-20">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
-          <Reveal className="text-center max-w-3xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.cur.title')}</h2>
-            <p className="mt-4 text-lg text-slate-600">{t('lp.cur.subtitle')}</p>
+          <Reveal className="text-center max-w-2xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.cap.title')}</h2>
+            <p className="mt-4 text-lg text-slate-600">{t('lp.cap.subtitle')}</p>
           </Reveal>
 
-          {/* Grid uniforme de monedas — todas por igual (presencia regional) */}
-          <div className="mt-12 max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {CURRENCIES.map((c, i) => (
-              <Reveal key={c.code} delay={(i % 4) * 60}>
-                <div className="lp-card-hover flex items-center gap-3 p-3.5 bg-white rounded-xl border border-slate-200 hover:border-[#1e3a5f]/40">
-                  <span className="text-2xl leading-none flex-shrink-0">{c.flag}</span>
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-900 text-sm">{c.code}</div>
-                    <div className="text-xs text-slate-500 truncate">{t(c.key)}</div>
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {capabilities.map((cap, i) => {
+              const Icon = cap.icon
+              return (
+                <Reveal
+                  key={i}
+                  delay={(i % 3) * 80}
+                  className="p-6 bg-white rounded-xl border border-slate-200 hover:border-[#1e3a5f]/40 transition-colors"
+                >
+                  <div className="w-11 h-11 bg-amber-50 rounded-lg flex items-center justify-center">
+                    <Icon className="w-5 h-5 text-[#f59e0b]" />
                   </div>
-                </div>
-              </Reveal>
-            ))}
+                  <h3 className="mt-4 text-lg font-semibold text-slate-900">{cap.title}</h3>
+                  <p className="mt-2 text-sm text-slate-600 leading-relaxed">{cap.description}</p>
+                </Reveal>
+              )
+            })}
           </div>
-
-          <p className="mt-8 text-center text-xs text-slate-400">{t('lp.cur.based')}</p>
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="py-16 md:py-24 bg-slate-50 scroll-mt-20">
+      {/* 5. Diferenciadora */}
+      <section id="differentiator" className="py-16 md:py-24 bg-slate-50">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
-          <Reveal className="text-center max-w-3xl mx-auto">
+          <Reveal className="text-center max-w-2xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.diff.title')}</h2>
+            <p className="mt-4 text-lg text-slate-600">{t('lp.diff.subtitle')}</p>
+          </Reveal>
+
+          <div className="mt-12 grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <Reveal className="rounded-2xl border border-slate-200 bg-white p-6 md:p-8">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{t('lp.diff.before_t')}</h3>
+              <ul className="mt-5 space-y-3">
+                {[t('lp.diff.b1'), t('lp.diff.b2'), t('lp.diff.b3'), t('lp.diff.b4'), t('lp.diff.b5')].map((item, i) => (
+                  <li key={i} className="flex items-center gap-2.5 text-sm text-slate-500">
+                    <X className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+            <Reveal delay={100} className="rounded-2xl border-2 border-[#1e3a5f]/20 bg-white p-6 md:p-8 shadow-lg shadow-[#1e3a5f]/5">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-[#1e3a5f]">{t('lp.diff.after_t')}</h3>
+              <ul className="mt-5 space-y-3">
+                {[t('lp.diff.g1'), t('lp.diff.g2'), t('lp.diff.g3'), t('lp.diff.g4'), t('lp.diff.g5'), t('lp.diff.g6')].map((item, i) => (
+                  <li key={i} className="flex items-center gap-2.5 text-sm text-slate-800 font-medium">
+                    <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. Migración / barrera de cambio */}
+      <section id="migration" className="py-16 md:py-24">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
+          <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-10 items-center">
+            <Reveal>
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.mig.title')}</h2>
+              <p className="mt-4 text-slate-600 leading-relaxed">{t('lp.mig.desc')}</p>
+              <p className="mt-4 text-sm text-slate-500">{t('lp.mig.note')}</p>
+            </Reveal>
+            <Reveal delay={100} className="rounded-2xl border border-slate-200 bg-slate-50 p-6 md:p-8">
+              <ol className="space-y-5">
+                {[
+                  { icon: FileSpreadsheet, label: t('lp.mig.s1') },
+                  { icon: Upload,          label: t('lp.mig.s2') },
+                  { icon: Check,           label: t('lp.mig.s3') },
+                ].map((step, i) => {
+                  const StepIcon = step.icon
+                  return (
+                    <li key={i} className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center flex-shrink-0">
+                        <StepIcon className="w-4 h-4 text-[#1e3a5f]" />
+                      </div>
+                      <span className="text-sm font-medium text-slate-800">{step.label}</span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. Seguridad y confianza */}
+      <section id="security" className="py-16 md:py-24 bg-slate-50">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
+          <Reveal className="text-center max-w-2xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.sec.title')}</h2>
+            <p className="mt-4 text-lg text-slate-600">{t('lp.sec.subtitle')}</p>
+          </Reveal>
+
+          <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 max-w-5xl mx-auto">
+            {securityItems.map((item, i) => {
+              const Icon = item.icon
+              return (
+                <Reveal key={i} delay={i * 80} className="p-5 bg-white rounded-xl border border-slate-200 text-center">
+                  <div className="mx-auto w-11 h-11 bg-blue-50 rounded-lg flex items-center justify-center">
+                    <Icon className="w-5 h-5 text-[#1e3a5f]" />
+                  </div>
+                  <h3 className="mt-3 text-sm font-semibold text-slate-900">{item.title}</h3>
+                  <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">{item.description}</p>
+                </Reveal>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* 8. Pricing */}
+      <section id="pricing" className="py-16 md:py-24 scroll-mt-20">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
+          <Reveal className="text-center max-w-2xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
               {t('lp.pricing.title')}
             </h2>
@@ -582,7 +491,7 @@ const LandingPage: React.FC = () => {
               <Reveal
                 key={plan.name}
                 delay={pi * 80}
-                className={`lp-card-hover relative flex flex-col p-6 bg-white rounded-2xl border-2 ${
+                className={`relative flex flex-col p-6 bg-white rounded-2xl border-2 ${
                   plan.highlighted
                     ? 'border-[#f59e0b] shadow-xl shadow-[#f59e0b]/20 scale-100 md:scale-105'
                     : 'border-slate-200 hover:border-slate-300'
@@ -649,49 +558,7 @@ const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Stats animados */}
-      <section className="py-14 md:py-16 bg-white border-y border-slate-200">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
-          <p className="text-center text-xs font-semibold uppercase tracking-widest text-slate-400 mb-8">{t('lp.stats.title')}</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            {[
-              { value: 12,  label: t('lp.stats.currencies') },
-              { value: 3,   label: t('lp.stats.langs') },
-              { value: 14,  label: t('lp.stats.trial') },
-              { value: 100, label: t('lp.stats.web') },
-            ].map((s, i) => (
-              <Reveal key={i} delay={i * 80}>
-                <div className="text-4xl md:text-5xl font-bold text-[#1e3a5f]">
-                  <AnimatedCounter value={s.value} />
-                </div>
-                <div className="mt-1 text-sm text-slate-600">{s.label}</div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA banner */}
-      <section id="cta-final" className="py-16 md:py-20 bg-gradient-to-br from-[#1e3a5f] to-[#152a45]">
-        <Reveal className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white">
-            {t('lp.ctab.title')}
-          </h2>
-          <p className="mt-4 text-lg text-blue-100">
-            {t('lp.ctab.subtitle')}
-          </p>
-          <button
-            type="button"
-            onClick={() => { trackEvent('cta_register', { location: 'cta_banner' }); trackTrialCtaClick('final'); navigate('/register') }}
-            className="mt-8 inline-flex items-center gap-2 px-8 py-3 bg-white text-[#1e3a5f] font-semibold rounded-lg hover:bg-slate-50 transition shadow-lg hover:scale-[1.02]"
-          >
-            {t('lp.cta.register')}
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </Reveal>
-      </section>
-
-      {/* FAQ */}
+      {/* 9. FAQ */}
       <section id="faq" className="py-16 md:py-24 scroll-mt-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <Reveal className="text-center">
@@ -716,28 +583,43 @@ const LandingPage: React.FC = () => {
                   )}
                 </button>
                 {openFaq === i && (
-                  <div id={`faq-panel-${i}`} role="region" className="px-5 pb-4 text-sm text-slate-600 leading-relaxed" style={{ animation: 'lp-fade-in 0.3s ease' }}>
+                  <div id={`faq-panel-${i}`} role="region" className="px-5 pb-4 text-sm text-slate-600 leading-relaxed">
                     {faq.a}
                   </div>
                 )}
               </div>
             ))}
           </div>
+
+          <p className="mt-6 text-center text-sm">
+            <button
+              type="button"
+              onClick={() => { trackEvent('cta_advice', { location: 'faq' }); openInquiry('') }}
+              className="inline-flex items-center gap-1.5 text-[#1e3a5f] hover:text-[#152a45] font-medium"
+            >
+              <MessageCircle className="w-4 h-4" />
+              {t('lp.advice.link')}
+            </button>
+          </p>
         </div>
       </section>
 
-      {/* Asesoría — formulario para quienes prefieren que los contactemos */}
-      <section className="py-14 md:py-16 bg-slate-50 border-t border-slate-200">
-        <Reveal className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-900">{t('lp.advice.title')}</h2>
-          <p className="mt-3 text-slate-600">{t('lp.advice.subtitle')}</p>
+      {/* 10. CTA final */}
+      <section id="cta-final" className="py-16 md:py-20 bg-gradient-to-br from-[#1e3a5f] to-[#152a45]">
+        <Reveal className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-white">
+            {t('lp.ctab.title')}
+          </h2>
+          <p className="mt-4 text-lg text-blue-100">
+            {t('lp.ctab.subtitle')}
+          </p>
           <button
             type="button"
-            onClick={() => { trackEvent('cta_advice', { location: 'advice_section' }); openInquiry('') }}
-            className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/20"
+            onClick={() => goTry('final')}
+            className="mt-8 inline-flex items-center gap-2 px-8 py-3 bg-white text-[#1e3a5f] font-semibold rounded-lg hover:bg-slate-50 transition shadow-lg"
           >
-            <MessageCircle className="w-4 h-4" />
-            {t('lp.advice.cta')}
+            {t('lp.cta.try')}
+            <ArrowRight className="w-4 h-4" />
           </button>
         </Reveal>
       </section>
@@ -779,7 +661,7 @@ const LandingPage: React.FC = () => {
             <div>
               <h4 className="text-sm font-semibold text-white">{t('lp.footer.product')}</h4>
               <ul className="mt-3 space-y-2 text-sm">
-                <li><a href="#features" className="hover:text-white">{t('lp.nav.features')}</a></li>
+                <li><a href="#how-it-works" className="hover:text-white">{t('lp.nav.how')}</a></li>
                 <li><a href="#pricing" className="hover:text-white">{t('lp.nav.pricing')}</a></li>
                 <li><a href="#faq" className="hover:text-white">{t('lp.nav.faq')}</a></li>
               </ul>
@@ -807,11 +689,11 @@ const LandingPage: React.FC = () => {
                 <li><Link to="/contact" className="hover:text-white">{t('lp.footer.contact_us')}</Link></li>
                 <li>
                   <span className="block text-xs text-slate-500">{t('lp.footer.sales')}</span>
-                  <a href="mailto:credytek@digitalconnectdr.com" className="hover:text-white text-xs">credytek@digitalconnectdr.com</a>
+                  <a href="mailto:credytek@digitalconnectdr.com" className="hover:text-white text-xs break-all">credytek@digitalconnectdr.com</a>
                 </li>
                 <li>
                   <span className="block text-xs text-slate-500">{t('lp.footer.support')}</span>
-                  <a href="mailto:credyteksupport@digitalconnectdr.com" className="hover:text-white text-xs">credyteksupport@digitalconnectdr.com</a>
+                  <a href="mailto:credyteksupport@digitalconnectdr.com" className="hover:text-white text-xs break-all">credyteksupport@digitalconnectdr.com</a>
                 </li>
               </ul>
             </div>
