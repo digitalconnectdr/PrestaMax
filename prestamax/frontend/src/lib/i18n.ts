@@ -240,6 +240,14 @@ const TR: Record<string, Tri> = {
   'cli.load_error':     { es: 'Error al cargar clientes', en: 'Failed to load clients', pt: 'Erro ao carregar clientes' },
   'cli.view_detail':    { es: 'Ver detalle', en: 'View details', pt: 'Ver detalhes' },
   'cli.edit_title':     { es: 'Editar cliente', en: 'Edit client', pt: 'Editar cliente' },
+
+  // ── Exportación genérica (CSV/Excel/PDF real, server-side) ──────────────────
+  'export.button':      { es: 'Exportar', en: 'Export', pt: 'Exportar' },
+  'export.excel':       { es: 'Excel', en: 'Excel', pt: 'Excel' },
+  'export.pdf':         { es: 'PDF', en: 'PDF', pt: 'PDF' },
+  'export.csv':         { es: 'CSV', en: 'CSV', pt: 'CSV' },
+  'export.success':     { es: 'Archivo descargado', en: 'File downloaded', pt: 'Arquivo baixado' },
+  'export.error':       { es: 'No se pudo generar el archivo', en: 'Could not generate the file', pt: 'Não foi possível gerar o arquivo' },
   'common.active':      { es: 'Activo', en: 'Active', pt: 'Ativo' },
   'common.inactive':    { es: 'Inactivo', en: 'Inactive', pt: 'Inativo' },
   'common.all':         { es: 'Todos', en: 'All', pt: 'Todos' },

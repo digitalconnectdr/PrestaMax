@@ -10,6 +10,7 @@ import LoanStatusBadge from '@/components/shared/LoanStatusBadge'
 import { DollarSign, Plus, Eye, AlertCircle, Upload, Download, X, CheckCircle, XCircle, FileSpreadsheet, Globe } from 'lucide-react'
 import { formatCurrency, formatDate, getCurrencySymbol } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
+import { downloadServerExport } from '@/lib/exportUtils'
 import toast from 'react-hot-toast'
 import { useT } from '@/lib/i18n'
 
@@ -345,6 +346,19 @@ const LoansPage: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('loanNumber')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [showImport, setShowImport] = useState(false)
+  const [exporting, setExporting] = useState<'xlsx' | 'pdf' | null>(null)
+
+  const handleExport = async (format: 'xlsx' | 'pdf') => {
+    setExporting(format)
+    try {
+      await downloadServerExport('/loans/export', { search: searchTerm, status: statusFilter }, format, 'prestamos')
+      toast.success(t('export.success'))
+    } catch {
+      toast.error(t('export.error'))
+    } finally {
+      setExporting(null)
+    }
+  }
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -397,7 +411,15 @@ const LoansPage: React.FC = () => {
           <h1 className="page-title">{t('nav.loans')}</h1>
           <p className="text-slate-600 text-sm mt-1">{t('loan.subtitle')}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => handleExport('xlsx')} isLoading={exporting === 'xlsx'} className="flex items-center gap-1.5">
+            <Download className="w-3.5 h-3.5" />
+            {t('export.excel')}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} isLoading={exporting === 'pdf'} className="flex items-center gap-1.5">
+            <Download className="w-3.5 h-3.5" />
+            {t('export.pdf')}
+          </Button>
           {can('loans.import') && (
             <button onClick={() => setShowImport(true)}
               className="flex items-center gap-2 px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors">

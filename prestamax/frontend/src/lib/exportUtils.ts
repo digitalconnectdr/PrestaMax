@@ -6,6 +6,7 @@
  * y títulos las traduce cada página al construir headers/title.
  */
 import { t, getLocale } from '@/lib/i18n'
+import api from '@/lib/api'
 
 // Mapea el locale de la app al locale de Intl para fechas/montos.
 const INTL_LOCALE: Record<string, string> = { es: 'es-DO', en: 'en-US', pt: 'pt-BR' }
@@ -132,6 +133,38 @@ export function printToPDF(options: PrintTableOptions): void {
   }
   win.document.write(html)
   win.document.close()
+}
+
+// ── Exportación real server-side (CSV/Excel/PDF vía backend/lib/exportHelpers) ─
+// A diferencia de downloadCSV/printToPDF (generan el archivo en el navegador a
+// partir de datos ya cargados en la página), esto pide al backend el archivo
+// ya armado (xlsx real con ExcelJS, PDF real con PDFKit) para un endpoint de
+// listado/reporte que soporte ?format=csv|xlsx|pdf.
+const EXPORT_MIME: Record<'csv' | 'xlsx' | 'pdf', string> = {
+  csv: 'text/csv;charset=utf-8',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pdf: 'application/pdf',
+}
+
+export async function downloadServerExport(
+  endpoint: string,
+  params: Record<string, string | number | undefined>,
+  format: 'csv' | 'xlsx' | 'pdf',
+  filename: string
+): Promise<void> {
+  const query = new URLSearchParams()
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') query.set(k, String(v)) })
+  query.set('format', format)
+  const res = await api.get(`${endpoint}?${query.toString()}`, { responseType: 'blob' })
+  const blob = new Blob([res.data], { type: EXPORT_MIME[format] })
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${filename}.${format}`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(url)
 }
 
 // ── Convenience formatters ────────────────────────────────────────────────────

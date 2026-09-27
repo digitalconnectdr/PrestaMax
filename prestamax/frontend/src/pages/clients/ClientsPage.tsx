@@ -7,10 +7,11 @@ import Input from '@/components/ui/Input'
 import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
 import ScoreBadge from '@/components/shared/ScoreBadge'
-import { Users, Search, Plus, Eye, Edit, Trash2 } from 'lucide-react'
+import { Users, Search, Plus, Eye, Edit, Trash2, Download } from 'lucide-react'
 import { Client } from '@/types'
 import { formatDate } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
+import { downloadServerExport } from '@/lib/exportUtils'
 import toast from 'react-hot-toast'
 import { useT } from '@/lib/i18n'
 
@@ -20,9 +21,23 @@ const ClientsPage: React.FC = () => {
   const [scoreFilter, setScoreFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const [exporting, setExporting] = useState<'xlsx' | 'pdf' | null>(null)
   const navigate = useNavigate()
   const { can } = usePermission()
   const t = useT()
+
+  const handleExport = async (format: 'xlsx' | 'pdf') => {
+    setExporting(format)
+    try {
+      const is_active = statusFilter === 'active' ? 'true' : statusFilter === 'inactive' ? 'false' : undefined
+      await downloadServerExport('/clients/export', { search: searchTerm, is_active }, format, 'clientes')
+      toast.success(t('export.success'))
+    } catch {
+      toast.error(t('export.error'))
+    } finally {
+      setExporting(null)
+    }
+  }
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -70,12 +85,22 @@ const ClientsPage: React.FC = () => {
           <h1 className="page-title">{t('nav.clients')}</h1>
           <p className="text-slate-600 text-sm mt-1">{t('cli.subtitle')}</p>
         </div>
-        {can('clients.create') && (
-          <Button data-tour="new-client-btn" onClick={() => navigate('/clients/new')} className="flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            {t('dash.quick.new_client')}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => handleExport('xlsx')} isLoading={exporting === 'xlsx'} className="flex items-center gap-1.5">
+            <Download className="w-3.5 h-3.5" />
+            {t('export.excel')}
           </Button>
-        )}
+          <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} isLoading={exporting === 'pdf'} className="flex items-center gap-1.5">
+            <Download className="w-3.5 h-3.5" />
+            {t('export.pdf')}
+          </Button>
+          {can('clients.create') && (
+            <Button data-tour="new-client-btn" onClick={() => navigate('/clients/new')} className="flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              {t('dash.quick.new_client')}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Search and Filters */}
