@@ -527,12 +527,203 @@ router.get('/geography', authenticate, requirePlatformAdmin, (req: AuthRequest, 
       GROUP BY t.geo_country
       ORDER BY monthlyRevenue DESC
     `).all() as any[];
+    // FIX (Fase 1 Analytics, sep 2026): se agregan estos 2 campos SIN tocar
+    // ninguno de los existentes arriba — el tab "Geografía" sigue leyendo
+    // exactamente lo mismo que antes. visitorsByCountryClean/totalVisitsClean
+    // son la misma agregacion mas el filtro is_bot=0, para quien quiera
+    // comparar el numero crudo contra el numero sin trafico automatizado
+        // conocido (ver auditoria del reporte de Fase 1).
+    const totalVisitsClean = (db.prepare('SELECT COUNT(*) as c FROM page_views WHERE is_bot=0 OR is_bot IS NULL').get() as any).c;
+    const visitorsByCountryClean = db.prepare(`
+      SELECT country, COUNT(*) as count
+      FROM page_views
+      WHERE country IS NOT NULL AND (is_bot=0 OR is_bot IS NULL)
+      GROUP BY country
+      ORDER BY count DESC
+    `).all() as any[];
     res.json({
       visitorsByCity, visitorsByCountry, tenantsByCity, tenantsByCountry,
       totalVisits, totalTenantsWithGeo, totalTenants,
       visitsToday, visitsLast7Days, visitsLast30Days, revenueByCountry,
+      totalVisitsClean, visitorsByCountryClean,
     });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
+// ── Fase 1 Analytics: Resumen / Conversion / Comportamiento ──────────────────
+// Comparten un mismo resolvedor de rango de fechas (filtro Hoy/7d/30d/90d/
+// Personalizado del Admin Panel). "Limpio" = is_bot=0 (o NULL, filas viejas
+// anteriores a esta migracion que no tienen la columna poblada).
+function resolveAnalyticsRange(req: Request): { from: string; to: string } {
+  const q = req.query as any;
+  const nowD = new Date();
+  let from: string;
+  let to: string = typeof q.to === 'string' && q.to ? new Date(`${q.to}T23:59:59.999Z`).toISOString() : nowD.toISOString();
+  if (typeof q.from === 'string' && q.from) {
+    from = new Date(`${q.from}T00:00:00.000Z`).toISOString();
+  } else {
+    const range = typeof q.range === 'string' ? q.range : '30d';
+    const days = range === 'today' ? 0 : range === '7d' ? 7 : range === '90d' ? 90 : 30;
+    const d = new Date(nowD);
+    d.setUTCDate(d.getUTCDate() - days);
+    if (range === 'today') d.setUTCHours(0, 0, 0, 0);
+    from = d.toISOString();
+  }
+  return { from, to };
+}
+
+// GET resumen del funnel de adquisicion: visitas/visitantes/sesiones limpios,
+// dispositivo, fuentes principales, trials iniciados y tasa de conversion.
+router.get('/analytics/summary', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const { from, to } = resolveAnalyticsRange(req);
+    const CLEAN = `(is_bot=0 OR is_bot IS NULL)`;
+    const totalVisits = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at BETWEEN ? AND ?`).get(from, to) as any).c;
+    const totalVisitsClean = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at BETWEEN ? AND ? AND ${CLEAN}`).get(from, to) as any).c;
+    const uniqueVisitors = (db.prepare(`SELECT COUNT(DISTINCT visitor_id) as c FROM page_views WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND visitor_id IS NOT NULL`).get(from, to) as any).c;
+    const sessions = (db.prepare(`SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND session_id IS NOT NULL`).get(from, to) as any).c;
+    const visitsToday = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE date(created_at) = date('now') AND ${CLEAN}`).get() as any).c;
+    const visitsLast7Days = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now','-7 days') AND ${CLEAN}`).get() as any).c;
+    const visitsLast30Days = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now','-30 days') AND ${CLEAN}`).get() as any).c;
+    const byCountry = db.prepare(`
+      SELECT country, COUNT(*) as count FROM page_views
+      WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND country IS NOT NULL
+      GROUP BY country ORDER BY count DESC LIMIT 15
+    `).all(from, to) as any[];
+    const byDevice = db.prepare(`
+      SELECT COALESCE(device_type,'unknown') as device, COUNT(*) as count FROM page_views
+      WHERE created_at BETWEEN ? AND ? AND ${CLEAN}
+      GROUP BY device ORDER BY count DESC
+    `).all(from, to) as any[];
+    const bySource = db.prepare(`
+      SELECT COALESCE(traffic_source,'unknown') as source, COUNT(*) as count FROM page_views
+      WHERE created_at BETWEEN ? AND ? AND ${CLEAN}
+      GROUP BY source ORDER BY count DESC
+    `).all(from, to) as any[];
+    const topReferrers = db.prepare(`
+      SELECT referrer, COUNT(*) as count FROM page_views
+      WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND referrer IS NOT NULL AND referrer != ''
+      GROUP BY referrer ORDER BY count DESC LIMIT 10
+    `).all(from, to) as any[];
+    const trialsStarted = (db.prepare(`
+      SELECT COUNT(*) as c FROM analytics_events
+      WHERE event_name='trial_activated' AND created_at BETWEEN ? AND ? AND ${CLEAN}
+    `).get(from, to) as any).c;
+    const conversionRateToTrial = uniqueVisitors > 0 ? Math.round((trialsStarted / uniqueVisitors) * 1000) / 10 : 0;
+    res.json({
+      range: { from, to },
+      totalVisits, totalVisitsClean, uniqueVisitors, sessions,
+      visitsToday, visitsLast7Days, visitsLast30Days,
+      byCountry, byDevice, bySource, topReferrers,
+      trialsStarted, conversionRateToTrial,
+    });
+  } catch (e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
+// GET funnel de conversion: Landing -> Pricing -> CTA -> Signup iniciado ->
+// Signup completado -> Trial activado. Segmentable por pais/dispositivo/
+// fuente/utm_source cuando hay dato disponible (no inventa segmentacion que
+// aun no se puede relacionar).
+const FUNNEL_STEPS: { key: string; event: string }[] = [
+  { key: 'landing', event: 'landing_view' },
+  { key: 'pricing', event: 'pricing_view' },
+  { key: 'cta', event: 'trial_cta_click' },
+  { key: 'signup_started', event: 'signup_started' },
+  { key: 'signup_completed', event: 'signup_completed' },
+  { key: 'trial_activated', event: 'trial_activated' },
+];
+router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const { from, to } = resolveAnalyticsRange(req);
+    const q = req.query as any;
+    let extra = '';
+    const params: any[] = [from, to];
+    if (q.country) { extra += ' AND country = ?'; params.push(q.country); }
+    if (q.device) { extra += ' AND device_type = ?'; params.push(q.device); }
+    if (q.source) { extra += ' AND traffic_source = ?'; params.push(q.source); }
+    if (q.utm_source) { extra += ' AND utm_source = ?'; params.push(q.utm_source); }
+
+    const steps = FUNNEL_STEPS.map(s => {
+      const count = (db.prepare(`
+        SELECT COUNT(DISTINCT session_id) as c FROM analytics_events
+        WHERE event_name=? AND created_at BETWEEN ? AND ? AND (is_bot=0 OR is_bot IS NULL) AND session_id IS NOT NULL ${extra}
+      `).get(s.event, ...params) as any).c;
+      return { key: s.key, event: s.event, count };
+    });
+    const first = steps[0]?.count || 0;
+    const stepsWithRates = steps.map((s, i) => {
+      const prev = i === 0 ? null : steps[i - 1].count;
+      const pctOfPrevious = prev && prev > 0 ? Math.round((s.count / prev) * 1000) / 10 : (i === 0 ? 100 : 0);
+      const pctOfTotal = first > 0 ? Math.round((s.count / first) * 1000) / 10 : 0;
+      const dropOff = prev != null ? Math.max(0, prev - s.count) : 0;
+      return { ...s, pctOfPrevious, pctOfTotal, dropOff };
+    });
+    const overallConversion = first > 0 ? Math.round((steps[steps.length - 1].count / first) * 1000) / 10 : 0;
+
+    // Opciones disponibles para los selectores de segmentacion (solo valores
+    // que realmente existen en el rango, para no ofrecer filtros vacios).
+    const availableCountries = db.prepare(`SELECT DISTINCT country FROM analytics_events WHERE country IS NOT NULL AND created_at BETWEEN ? AND ? LIMIT 50`).all(from, to).map((r: any) => r.country);
+    const availableDevices = db.prepare(`SELECT DISTINCT device_type FROM analytics_events WHERE device_type IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.device_type);
+    const availableSources = db.prepare(`SELECT DISTINCT traffic_source FROM analytics_events WHERE traffic_source IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.traffic_source);
+
+    res.json({
+      range: { from, to },
+      steps: stepsWithRates,
+      overallConversion,
+      filters: { country: q.country || null, device: q.device || null, source: q.source || null, utm_source: q.utm_source || null },
+      availableCountries, availableDevices, availableSources,
+    });
+  } catch (e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
+// GET comportamiento: profundidad de scroll y visibilidad de secciones del
+// landing, mas clics de CTA por ubicacion (para comparar rendimiento).
+const LANDING_SECTIONS = ['hero', 'benefits', 'how-it-works', 'features', 'pricing', 'faq', 'cta-final'];
+router.get('/analytics/behavior', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const { from, to } = resolveAnalyticsRange(req);
+    const CLEAN = `(is_bot=0 OR is_bot IS NULL)`;
+    const totalSessions = (db.prepare(`
+      SELECT COUNT(DISTINCT session_id) as c FROM page_views
+      WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND session_id IS NOT NULL
+    `).get(from, to) as any).c;
+
+    const scrollDepths = [25, 50, 75, 90, 100].map(depth => {
+      const count = (db.prepare(`
+        SELECT COUNT(DISTINCT session_id) as c FROM analytics_events
+        WHERE event_name=? AND created_at BETWEEN ? AND ? AND ${CLEAN} AND session_id IS NOT NULL
+      `).get(`scroll_${depth}`, from, to) as any).c;
+      const pct = totalSessions > 0 ? Math.round((count / totalSessions) * 1000) / 10 : 0;
+      return { depth, count, pctOfSessions: pct };
+    });
+
+    const sections = LANDING_SECTIONS.map(section => {
+      const visitors = (db.prepare(`
+        SELECT COUNT(DISTINCT session_id) as c FROM analytics_events
+        WHERE event_name='section_view' AND section_name=? AND created_at BETWEEN ? AND ? AND ${CLEAN} AND session_id IS NOT NULL
+      `).get(section, from, to) as any).c;
+      const ctaClicks = (db.prepare(`
+        SELECT COUNT(*) as c FROM analytics_events
+        WHERE event_name='trial_cta_click' AND cta_location=? AND created_at BETWEEN ? AND ? AND ${CLEAN}
+      `).get(section, from, to) as any).c;
+      const pct = totalSessions > 0 ? Math.round((visitors / totalSessions) * 1000) / 10 : 0;
+      return { section, visitors, pctOfSessions: pct, ctaClicks };
+    });
+
+    // Clics de CTA por ubicacion, incluyendo ubicaciones fuera de las 7
+    // secciones tipicas (ej. "nav", "nav_mobile") para no perder datos reales.
+    const ctaByLocation = db.prepare(`
+      SELECT COALESCE(cta_location,'unknown') as location, COUNT(*) as count
+      FROM analytics_events
+      WHERE event_name='trial_cta_click' AND created_at BETWEEN ? AND ? AND ${CLEAN}
+      GROUP BY location ORDER BY count DESC
+    `).all(from, to) as any[];
+
+    res.json({ range: { from, to }, totalSessions, scrollDepths, sections, ctaByLocation });
+  } catch (e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
 // ── Backups: VACUUM INTO atomico + gzip + retencion automatica ───────────────

@@ -9,6 +9,7 @@ import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { SUPPORTED_CURRENCIES } from '@/lib/utils'
 import { useT } from '@/lib/i18n'
+import { trackSignupStarted, trackSignupCompleted, trackTrialActivated } from '@/lib/analytics'
 
 interface Plan {
   id: string
@@ -50,6 +51,11 @@ const RegisterPage: React.FC = () => {
     api.get('/public/plans').then(res => setPlans(res.data || [])).catch(() => {})
   }, [])
 
+  // FIX (Fase 1 Analytics, sep 2026): signup_started marca "llego al
+  // formulario de registro" — un paso propio del funnel, en vez de inferirlo
+  // de un pageview generico de /register.
+  useEffect(() => { trackSignupStarted() }, [])
+
   const set = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }))
@@ -89,6 +95,17 @@ const RegisterPage: React.FC = () => {
       if (tenants.length > 0) {
         selectTenant(tenants[0])
       }
+
+      // FIX (Fase 1 Analytics, sep 2026): un plan_id vacio significa que el
+      // backend activa el trial de inmediato al crear el tenant (ver
+      // isStartingWithPaidPlan en auth.ts) — no existe un paso de "activar
+      // trial" separado en la arquitectura actual, asi que ambos eventos se
+      // disparan juntos aqui cuando corresponde. Nunca se envia nombre/correo/
+      // telefono: solo el slug del plan (o 'trial').
+      const selectedPlan = plans.find(p => p.id === form.planId)
+      const planSlug = form.planId ? (selectedPlan?.slug || 'unknown_paid') : 'trial'
+      trackSignupCompleted(planSlug)
+      if (!form.planId) trackTrialActivated(planSlug)
 
       setStep('success')
       setTimeout(() => {
@@ -212,6 +229,7 @@ const RegisterPage: React.FC = () => {
                   placeholder={t('reg.company_name_ph')}
                   value={form.companyName}
                   onChange={e => set('companyName', e.target.value)}
+                  className="clarity-mask"
                 />
                 {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
               </div>
@@ -222,6 +240,7 @@ const RegisterPage: React.FC = () => {
                     placeholder="809-000-0000"
                     value={form.phone}
                     onChange={e => set('phone', e.target.value)}
+                    className="clarity-mask"
                   />
                 </div>
                 <div>
@@ -251,6 +270,7 @@ const RegisterPage: React.FC = () => {
                   placeholder={t('reg.your_name_ph')}
                   value={form.adminName}
                   onChange={e => set('adminName', e.target.value)}
+                  className="clarity-mask"
                 />
                 {errors.adminName && <p className="text-red-500 text-xs mt-1">{errors.adminName}</p>}
               </div>
@@ -261,6 +281,7 @@ const RegisterPage: React.FC = () => {
                   placeholder={t('reg.email_ph')}
                   value={form.adminEmail}
                   onChange={e => set('adminEmail', e.target.value)}
+                  className="clarity-mask"
                 />
                 {errors.adminEmail && <p className="text-red-500 text-xs mt-1">{errors.adminEmail}</p>}
               </div>
@@ -272,7 +293,7 @@ const RegisterPage: React.FC = () => {
                     placeholder={t('reg.password_ph')}
                     value={form.adminPassword}
                     onChange={e => set('adminPassword', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] pr-10"
+                    className="clarity-mask w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] pr-10"
                   />
                   <button
                     type="button"
@@ -304,7 +325,7 @@ const RegisterPage: React.FC = () => {
                     placeholder={t('reg.confirm_password_ph')}
                     value={form.confirmPassword}
                     onChange={e => set('confirmPassword', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] pr-10 ${errors.confirmPassword ? 'border-red-400' : 'border-slate-300'}`}
+                    className={`clarity-mask w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] pr-10 ${errors.confirmPassword ? 'border-red-400' : 'border-slate-300'}`}
                   />
                   <button
                     type="button"

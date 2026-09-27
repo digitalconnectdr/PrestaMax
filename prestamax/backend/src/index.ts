@@ -148,6 +148,18 @@ const bulkLimiter = rateLimit({
   message: { error: 'Limite de exportacion alcanzado. Intenta en 15 minutos.' },
 });
 
+// analyticsLimiter — para /track-visit y /analytics-event. Mas generoso que
+// publicFormsLimiter porque una sola sesion real puede disparar varios eventos
+// legitimos (landing_view, scrolls, visibilidad de secciones, CTAs); igual
+// pone un techo razonable contra loops/spam automatizado.
+const analyticsLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message: { error: 'Demasiadas solicitudes de analytics.' },
+});
+
 app.use('/api/auth/login',           authLimiter);
 app.use('/api/auth/register-tenant', registerLimiter);
 app.use('/api/auth/change-password', authLimiter);
@@ -157,6 +169,8 @@ app.use('/api/admin',                adminLimiter);
 app.use('/api/loans/import',         bulkLimiter);
 app.use('/api/public/plan-inquiry',  publicFormsLimiter);
 app.use('/api/public/apply',         publicFormsLimiter);
+app.use('/api/public/track-visit',   analyticsLimiter);
+app.use('/api/public/analytics-event', analyticsLimiter);
 app.use('/api/',                     globalLimiter);
 
 // IMPORTANTE: webhooks ANTES de express.json para preservar raw body

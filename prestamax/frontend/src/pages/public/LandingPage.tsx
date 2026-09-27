@@ -33,7 +33,8 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 import ShareButton from '@/components/shared/ShareButton'
 import { useT } from '@/lib/i18n'
 import { Reveal, AnimatedCounter } from '@/components/shared/Reveal'
-import { trackEvent, trackLandingVisit } from '@/lib/analytics'
+import { trackEvent, trackLandingVisit, track, trackTrialCtaClick, trackPlanSelected } from '@/lib/analytics'
+import { useLandingTracking } from '@/hooks/useLandingTracking'
 
 type TFn = (key: string) => string
 interface Plan {
@@ -181,7 +182,8 @@ const LandingPage: React.FC = () => {
   }
   const [openFaq, setOpenFaq] = useState<number | null>(0)
   const [scrolled, setScrolled] = useState(false)
-  useEffect(() => { trackLandingVisit('/') }, [])
+  useEffect(() => { trackLandingVisit('/'); track('landing_view') }, [])
+  useLandingTracking()
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
     onScroll()
@@ -212,7 +214,7 @@ const LandingPage: React.FC = () => {
               <LanguageSwitcher />
               <button
                 type="button"
-                onClick={() => navigate('/register')}
+                onClick={() => { trackTrialCtaClick('nav'); navigate('/register') }}
                 className="px-4 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded-lg hover:bg-[#152a45] transition"
               >
                 {t('lp.cta.register')}
@@ -242,7 +244,7 @@ const LandingPage: React.FC = () => {
               <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded">{t('lp.nav.login')}</Link>
               <button
                 type="button"
-                onClick={() => { setMobileMenuOpen(false); navigate('/register') }}
+                onClick={() => { trackTrialCtaClick('nav_mobile'); setMobileMenuOpen(false); navigate('/register') }}
                 className="block w-full px-3 py-2 bg-[#1e3a5f] text-white text-sm font-medium rounded text-center"
               >
                 {t('lp.cta.register')}
@@ -253,7 +255,7 @@ const LandingPage: React.FC = () => {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white">
+      <section id="hero" className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white">
         {/* Blobs decorativos del fondo */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="lp-blob absolute -top-32 -right-24 w-[28rem] h-[28rem] bg-[#f59e0b]/10 rounded-full blur-3xl" />
@@ -276,7 +278,7 @@ const LandingPage: React.FC = () => {
             <div className="lp-hero-item lp-delay-4 mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 type="button"
-                onClick={() => { trackEvent('cta_register', { location: 'hero' }); navigate('/register') }}
+                onClick={() => { trackEvent('cta_register', { location: 'hero' }); trackTrialCtaClick('hero'); navigate('/register') }}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1e3a5f] text-white font-medium rounded-lg hover:bg-[#152a45] transition shadow-lg shadow-[#1e3a5f]/30 hover:scale-[1.02]"
               >
                 {t('lp.cta.register')}
@@ -396,7 +398,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Problema / Solución */}
-      <section className="py-16 md:py-24 bg-white">
+      <section id="benefits" className="py-16 md:py-24 bg-white">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
           <Reveal className="text-center max-w-3xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.prob.title')}</h2>
@@ -505,7 +507,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Cómo funciona */}
-      <section className="py-16 md:py-24 bg-gradient-to-b from-white to-slate-50 scroll-mt-20">
+      <section id="how-it-works" className="py-16 md:py-24 bg-gradient-to-b from-white to-slate-50 scroll-mt-20">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16">
           <Reveal className="text-center max-w-3xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900">{t('lp.how.title')}</h2>
@@ -628,7 +630,7 @@ const LandingPage: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => { trackEvent('cta_start', { location: 'pricing', plan: plan.slug }); navigate('/register') }}
+                  onClick={() => { trackEvent('cta_start', { location: 'pricing', plan: plan.slug }); trackTrialCtaClick('pricing', { plan: plan.slug || 'unknown' }); trackPlanSelected(plan.slug || 'unknown'); navigate('/register') }}
                   className={`mt-6 block w-full text-center px-4 py-2.5 rounded-lg font-medium transition ${
                     plan.highlighted
                       ? 'bg-[#1e3a5f] text-white hover:bg-[#152a45]'
@@ -670,7 +672,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* CTA banner */}
-      <section className="py-16 md:py-20 bg-gradient-to-br from-[#1e3a5f] to-[#152a45]">
+      <section id="cta-final" className="py-16 md:py-20 bg-gradient-to-br from-[#1e3a5f] to-[#152a45]">
         <Reveal className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-white">
             {t('lp.ctab.title')}
@@ -680,7 +682,7 @@ const LandingPage: React.FC = () => {
           </p>
           <button
             type="button"
-            onClick={() => { trackEvent('cta_register', { location: 'cta_banner' }); navigate('/register') }}
+            onClick={() => { trackEvent('cta_register', { location: 'cta_banner' }); trackTrialCtaClick('final'); navigate('/register') }}
             className="mt-8 inline-flex items-center gap-2 px-8 py-3 bg-white text-[#1e3a5f] font-semibold rounded-lg hover:bg-slate-50 transition shadow-lg hover:scale-[1.02]"
           >
             {t('lp.cta.register')}

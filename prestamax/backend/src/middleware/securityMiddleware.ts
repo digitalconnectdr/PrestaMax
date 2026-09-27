@@ -70,7 +70,7 @@ export const sanitizeInputs = (req: Request, res: Response, next: NextFunction):
  * Known bot/scraper user-agent patterns.
  * We allow legitimate browsers and REST clients used by the app itself.
  */
-const BOT_UA_PATTERNS = [
+export const BOT_UA_PATTERNS = [
   /python-requests/i,
   /python-urllib/i,
   /go-http-client/i,

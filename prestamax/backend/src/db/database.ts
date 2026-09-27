@@ -1064,6 +1064,63 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_page_views_created ON page_views(created_at);
   `);
 
+  // ── Fase 1 Analytics (sep 2026): visitante/sesion/UTM/referrer/bot en
+  // page_views (ALTER idempotentes para bases ya existentes), y nueva tabla
+  // analytics_events para el resto del funnel (landing_view..trial_activated,
+  // scroll, visibilidad de secciones, CTAs). No se toca page_views como
+  // concepto (sigue siendo 1 fila = 1 pageview real del landing) ni se elimina
+  // ninguna columna existente — el tab "Geografía" del Admin sigue funcionando
+  // igual, solo con mas columnas disponibles para filtrar/segmentar.
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN visitor_id TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN session_id TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN referrer TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN utm_source TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN utm_medium TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN utm_campaign TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN utm_term TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN utm_content TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN device_type TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN traffic_source TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN user_agent TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE page_views ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_page_views_visitor ON page_views(visitor_id)`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_page_views_session ON page_views(session_id)`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_page_views_bot ON page_views(is_bot)`); } catch(_) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS analytics_events (
+      id TEXT PRIMARY KEY,
+      event_name TEXT NOT NULL,
+      visitor_id TEXT,
+      session_id TEXT,
+      path TEXT,
+      cta_location TEXT,
+      plan TEXT,
+      billing_period TEXT,
+      scroll_depth INTEGER,
+      section_name TEXT,
+      country TEXT,
+      city TEXT,
+      device_type TEXT,
+      traffic_source TEXT,
+      referrer TEXT,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      utm_term TEXT,
+      utm_content TEXT,
+      user_agent TEXT,
+      is_bot INTEGER NOT NULL DEFAULT 0,
+      properties TEXT DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_name ON analytics_events(event_name);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_session ON analytics_events(session_id);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_visitor ON analytics_events(visitor_id);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_bot ON analytics_events(is_bot);
+  `);
+
   // Audit log enrichment columns (for existing databases without them)
   try { db.exec(`ALTER TABLE audit_logs ADD COLUMN user_name TEXT NOT NULL DEFAULT 'Sistema'`); } catch(_) {}
   try { db.exec(`ALTER TABLE audit_logs ADD COLUMN user_email TEXT`); } catch(_) {}

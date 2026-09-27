@@ -14,6 +14,9 @@ import Button from '@/components/ui/Button'
 // conexiones a dominios propios/whitelisted, así que un fetch a un CDN quedaría
 // bloqueado silenciosamente y el mapa se vería en blanco.
 import worldCountriesUrl from 'world-atlas/countries-110m.json?url'
+import AnalyticsSummaryTab from './analytics/AnalyticsSummaryTab'
+import ConversionFunnelTab from './analytics/ConversionFunnelTab'
+import BehaviorTab from './analytics/BehaviorTab'
 
 interface CityRow { country: string; city: string | null; lat: number | null; lng: number | null; count: number }
 interface CountryRow { country: string; count: number }
@@ -42,8 +45,17 @@ const COUNTRY_NAMES: Record<string, string> = {
 const countryLabel = (code: string) => COUNTRY_NAMES[code] || code
 
 type Dataset = 'visitors' | 'tenants'
+type MainTab = 'summary' | 'geography' | 'conversion' | 'behavior'
+
+const MAIN_TABS: { key: MainTab; label: string }[] = [
+  { key: 'summary', label: 'Resumen' },
+  { key: 'geography', label: 'Geografía' },
+  { key: 'conversion', label: 'Conversión' },
+  { key: 'behavior', label: 'Comportamiento' },
+]
 
 const GeographyPanel: React.FC = () => {
+  const [mainTab, setMainTab] = useState<MainTab>('summary')
   const [data, setData] = useState<GeographyData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [dataset, setDataset] = useState<Dataset>('visitors')
@@ -62,23 +74,23 @@ const GeographyPanel: React.FC = () => {
   }
   useEffect(() => { load() }, [])
 
-  if (isLoading && !data) {
-    return <div className="flex justify-center py-16"><RefreshCw className="w-6 h-6 animate-spin text-slate-400" /></div>
-  }
-  if (!data) return null
+  const renderGeographyTab = () => {
+    if (isLoading && !data) {
+      return <div className="flex justify-center py-16"><RefreshCw className="w-6 h-6 animate-spin text-slate-400" /></div>
+    }
+    if (!data) return null
 
-  const byCity = dataset === 'visitors' ? data.visitorsByCity : data.tenantsByCity
-  const byCountry = dataset === 'visitors' ? data.visitorsByCountry : data.tenantsByCountry
-  const cities = byCity.filter(c => c.lat != null && c.lng != null)
-  const maxCount = Math.max(1, ...cities.map(c => c.count))
-  const color = dataset === 'visitors' ? '#3b82f6' : '#f59e0b'
-  const radiusFor = (count: number) => 4 + (Math.sqrt(count / maxCount) * 14)
+    const byCity = dataset === 'visitors' ? data.visitorsByCity : data.tenantsByCity
+    const byCountry = dataset === 'visitors' ? data.visitorsByCountry : data.tenantsByCountry
+    const cities = byCity.filter(c => c.lat != null && c.lng != null)
+    const maxCount = Math.max(1, ...cities.map(c => c.count))
+    const color = dataset === 'visitors' ? '#3b82f6' : '#f59e0b'
+    const radiusFor = (count: number) => 4 + (Math.sqrt(count / maxCount) * 14)
 
-  return (
+    return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Geografía</h2>
           <p className="text-sm text-slate-500">De dónde vienen tus visitantes y tus empresas registradas — útil para enfocar publicidad.</p>
         </div>
         <Button onClick={load} size="sm" variant="outline" className="flex items-center gap-1">
@@ -211,6 +223,35 @@ const GeographyPanel: React.FC = () => {
           </div>
         </Card>
       )}
+    </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-bold text-slate-800">Geografía y Analytics</h2>
+        <p className="text-sm text-slate-500">Adquisición, conversión y comportamiento del landing de CredyTek.</p>
+      </div>
+
+      <div className="flex gap-1 border-b border-slate-200 overflow-x-auto">
+        {MAIN_TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setMainTab(t.key)}
+            className={`pb-2.5 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              mainTab === t.key ? 'border-[#1e3a5f] text-[#1e3a5f]' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {mainTab === 'summary' && <AnalyticsSummaryTab />}
+      {mainTab === 'conversion' && <ConversionFunnelTab />}
+      {mainTab === 'behavior' && <BehaviorTab />}
+      {mainTab === 'geography' && renderGeographyTab()}
     </div>
   )
 }

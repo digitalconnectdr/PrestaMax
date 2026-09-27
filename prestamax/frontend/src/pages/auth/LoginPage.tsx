@@ -150,6 +150,7 @@ const LoginPage: React.FC = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className="clarity-mask"
                 />
               </div>
 
@@ -161,6 +162,7 @@ const LoginPage: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  className="clarity-mask"
                 />
                 <div className="text-right mt-1.5">
                   <Link to="/forgot-password" className="text-xs text-slate-500 hover:text-[#1e3a5f] hover:underline">

@@ -3,22 +3,106 @@ import { getDb, uuid, now } from '../db/database';
 import { sendInquiryNotification } from '../services/emailService';
 import { getClientIp, geolocateIp } from '../services/geoService';
 import { notifyTenantAdmins } from '../lib/notify';
+import {
+  classifyBot, detectDeviceType, categorizeTrafficSource, stripPotentialPii, ALLOWED_EVENT_NAMES,
+} from '../lib/analyticsHelpers';
 
 const router = Router();
 
+// Campos comunes de contexto que tanto /track-visit como /analytics-event
+// aceptan del cliente (documento.referrer y UTM se capturan en el navegador
+// porque el servidor NUNCA ve el referrer original de una llamada fetch — solo
+// vería el origen de nuestra propia pagina). Todo opcional y de solo texto.
+function readTrackingContext(body: any, req: Request) {
+  const str = (v: any, max = 300) => (typeof v === 'string' ? v.slice(0, max) : null);
+  const userAgent = (req.headers['user-agent'] as string) || '';
+  const webdriverFlag = body?.webdriver === true;
+  const bot = classifyBot(userAgent, webdriverFlag);
+  const referrer = str(body?.referrer, 500);
+  const utmSource = str(body?.utm_source);
+  const utmMedium = str(body?.utm_medium);
+  let currentHost: string | null = null;
+  try { currentHost = body?.page_url ? new URL(body.page_url).hostname : null; } catch { currentHost = null; }
+  return {
+    visitorId: str(body?.visitor_id, 100),
+    sessionId: str(body?.session_id, 100),
+    referrer,
+    utmSource,
+    utmMedium,
+    utmCampaign: str(body?.utm_campaign),
+    utmTerm: str(body?.utm_term),
+    utmContent: str(body?.utm_content),
+    deviceType: detectDeviceType(userAgent),
+    trafficSource: categorizeTrafficSource({ referrer, utmSource, utmMedium, currentHost }),
+    userAgent: userAgent.slice(0, 300),
+    isBot: bot.isBot ? 1 : 0,
+  };
+}
+
 // Trackea una visita al landing page (para el mapa de "visitantes" en Admin Panel).
 // Publico, sin auth. Geolocaliza por IP; no guarda ningun dato personal aparte de eso.
+// FIX (Fase 1 Analytics, sep 2026): antes insertaba sin visitante/sesion/UTM/
+// bot — cada pageview (incluyendo refrescos y trafico automatizado) contaba
+// como una visita nueva sin forma de distinguirlas. Ver auditoria del reporte
+// de Fase 1 para el analisis del trafico anomalo de EE.UU. que esto explica.
 router.post('/track-visit', (req: Request, res: Response) => {
   try {
     const path = typeof req.body?.path === 'string' ? req.body.path.slice(0, 200) : '/';
     const geo = geolocateIp(getClientIp(req));
+    const ctx = readTrackingContext(req.body, req);
     const db = getDb();
-    db.prepare(`INSERT INTO page_views (id, path, country, city, lat, lng, ip_address, created_at)
-      VALUES (?,?,?,?,?,?,?,datetime('now'))`)
-      .run(uuid(), path, geo?.country || null, geo?.city || null, geo?.lat ?? null, geo?.lng ?? null, getClientIp(req));
+    db.prepare(`INSERT INTO page_views (
+        id, path, country, city, lat, lng, ip_address, created_at,
+        visitor_id, session_id, referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+        device_type, traffic_source, user_agent, is_bot
+      ) VALUES (?,?,?,?,?,?,?,datetime('now'), ?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(
+        uuid(), path, geo?.country || null, geo?.city || null, geo?.lat ?? null, geo?.lng ?? null, getClientIp(req),
+        ctx.visitorId, ctx.sessionId, ctx.referrer, ctx.utmSource, ctx.utmMedium, ctx.utmCampaign, ctx.utmTerm, ctx.utmContent,
+        ctx.deviceType, ctx.trafficSource, ctx.userAgent, ctx.isBot,
+      );
     res.status(204).end();
   } catch (_e) {
     // Nunca debe romper la experiencia del visitante por un fallo de tracking.
+    res.status(204).end();
+  }
+});
+
+// Ingesta generica de eventos del funnel de adquisicion (landing_view,
+// trial_cta_click, signup_started, scroll_25, etc.) para las vistas nuevas del
+// Admin Panel (Resumen/Conversion/Comportamiento). Publico, sin auth, fire-
+// and-forget desde el cliente (ver frontend/src/lib/analytics.ts). Es
+// independiente de PostHog: aunque un adblocker bloquee PostHog, este
+// endpoint (mismo dominio que la API) sigue registrando el evento para nuestro
+// propio dashboard de primera parte.
+router.post('/analytics-event', (req: Request, res: Response) => {
+  try {
+    const eventName = typeof req.body?.event === 'string' ? req.body.event : '';
+    if (!ALLOWED_EVENT_NAMES.has(eventName)) { res.status(204).end(); return; }
+    const path = typeof req.body?.path === 'string' ? req.body.path.slice(0, 200) : null;
+    const geo = geolocateIp(getClientIp(req));
+    const ctx = readTrackingContext(req.body, req);
+    const cleanProps = stripPotentialPii(req.body?.properties);
+    const db = getDb();
+    db.prepare(`INSERT INTO analytics_events (
+        id, event_name, visitor_id, session_id, path, cta_location, plan, billing_period,
+        scroll_depth, section_name, country, city, device_type, traffic_source,
+        referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+        user_agent, is_bot, properties, created_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`)
+      .run(
+        uuid(), eventName, ctx.visitorId, ctx.sessionId, path,
+        typeof cleanProps.cta_location === 'string' ? cleanProps.cta_location.slice(0, 50) : null,
+        typeof cleanProps.plan === 'string' ? cleanProps.plan.slice(0, 50) : null,
+        typeof cleanProps.billing_period === 'string' ? cleanProps.billing_period.slice(0, 20) : null,
+        typeof cleanProps.scroll_depth === 'number' ? cleanProps.scroll_depth : null,
+        typeof cleanProps.section === 'string' ? cleanProps.section.slice(0, 50) : null,
+        geo?.country || null, geo?.city || null, ctx.deviceType, ctx.trafficSource,
+        ctx.referrer, ctx.utmSource, ctx.utmMedium, ctx.utmCampaign, ctx.utmTerm, ctx.utmContent,
+        ctx.userAgent, ctx.isBot, JSON.stringify(cleanProps),
+      );
+    res.status(204).end();
+  } catch (_e) {
     res.status(204).end();
   }
 });

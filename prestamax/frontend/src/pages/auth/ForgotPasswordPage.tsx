@@ -62,6 +62,7 @@ const ForgotPasswordPage: React.FC = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className="clarity-mask"
                 />
                 <Button type="submit" isLoading={isLoading} size="lg" className="w-full mt-2 bg-gradient-to-r from-[#1e3a5f] to-[#2c5a8f] hover:from-[#16304e] hover:to-[#1e3a5f]">
                   {t('fp.submit')}

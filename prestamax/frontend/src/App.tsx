@@ -6,18 +6,38 @@ import { TenantProvider } from '@/contexts/TenantContext'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
 import type { PermKey } from '@/lib/permissions'
-import { initAnalytics, trackPageView } from '@/lib/analytics'
+import { initAnalytics, trackPageView, registerAnalyticsContext } from '@/lib/analytics'
 import { applyRouteSeo } from '@/lib/seo'
 import { setLocale, type Locale } from '@/lib/i18n'
 import { PageLoadingState } from '@/components/ui/Loading'
+import { initPostHog, phPause, phResume } from '@/lib/posthog'
+import { initClarity, clarityPause, clarityResume } from '@/lib/clarity'
+import { isAcquisitionRoute } from '@/lib/routeSensitivity'
 
-// ── Efectos por ruta: SEO (index/noindex) + Google Analytics pageview ─────────
+// ── Efectos por ruta: SEO (index/noindex) + Google Analytics pageview +
+// activación/pausa de PostHog y Clarity según si la ruta es de adquisición
+// (pública, no autenticada, no sensible) o no. Ambas herramientas se
+// inicializan UNA sola vez (la primera vez que se visita una ruta de
+// adquisición) y luego solo se pausan/reanudan — nunca se cargan en absoluto
+// si el usuario nunca pasa por una ruta pública (ej. entra directo a /login
+// ya autenticado por un token guardado y va a /dashboard).
 const RouteEffects: React.FC = () => {
   const location = useLocation()
+  const { state } = useAuth()
   useEffect(() => {
     applyRouteSeo(location.pathname)
     trackPageView(location.pathname + location.search)
-  }, [location.pathname, location.search])
+
+    if (isAcquisitionRoute(location.pathname, state.isAuthenticated)) {
+      initPostHog()
+      initClarity()
+      phResume()
+      clarityResume()
+    } else {
+      phPause()
+      clarityPause()
+    }
+  }, [location.pathname, location.search, state.isAuthenticated])
   return null
 }
 
@@ -169,6 +189,7 @@ const App: React.FC = () => {
       if (p && ['es', 'en', 'pt'].includes(p)) setLocale(p as Locale)
     } catch (_) { /* noop */ }
     initAnalytics()
+    registerAnalyticsContext()
   }, [])
   return (
     <BrowserRouter>

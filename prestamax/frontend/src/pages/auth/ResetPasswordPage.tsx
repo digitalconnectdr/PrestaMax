@@ -82,6 +82,7 @@ const ResetPasswordPage: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  className="clarity-mask"
                 />
                 <Input
                   type="password"
@@ -89,6 +90,7 @@ const ResetPasswordPage: React.FC = () => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
+                  className="clarity-mask"
                 />
                 {error && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">{error}</div>
