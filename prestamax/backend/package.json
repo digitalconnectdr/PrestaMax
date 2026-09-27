@@ -30,6 +30,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "pdfkit": "^0.20.2",
     "stripe": "^17.7.0",
     "uuid": "^9.0.1",
     "zod": "^3.22.4"
@@ -42,6 +43,7 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.19.17",
+    "@types/pdfkit": "^0.17.6",
     "@types/uuid": "^9.0.8",
     "prisma": "^5.10.0",
     "ts-node": "^10.9.2",

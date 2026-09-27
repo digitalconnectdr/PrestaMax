@@ -9,6 +9,7 @@ import { generateDraft } from '../services/whatsappService';
 // la misma logica.
 import { generateSchedule as libGenerateSchedule, getInstallmentCount, getNextDate, calcMoraDetails } from '../lib/calculations';
 import { computePermissions, PermKey } from '../lib/permissions';
+import { sendReport, ExportColumn } from '../lib/exportHelpers';
 
 const router = Router();
 
@@ -87,6 +88,49 @@ router.get('/', authenticate, requireTenant, requirePermission('loans.view'), (r
       ${where} ORDER BY l.created_at DESC LIMIT ? OFFSET ?`).all(...params, parseInt(limit), skip);
     res.json({ data, total, page:parseInt(page), limit:parseInt(limit) });
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
+});
+
+const LOAN_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'loan_number', header: 'Préstamo', width: 16 },
+  { key: 'client_name', header: 'Cliente', width: 26 },
+  { key: 'client_id_number', header: 'Cédula', width: 16 },
+  { key: 'product_name', header: 'Producto', width: 20 },
+  { key: 'status', header: 'Estado', width: 14 },
+  { key: 'disbursed_amount', header: 'Desembolsado', width: 16, align: 'right', format: (v) => Math.round((Number(v)||0)*100)/100 },
+  { key: 'total_balance', header: 'Balance', width: 16, align: 'right', format: (v) => Math.round((Number(v)||0)*100)/100 },
+  { key: 'mora_balance', header: 'Mora', width: 14, align: 'right', format: (v) => Math.round((Number(v)||0)*100)/100 },
+  { key: 'disbursement_date', header: 'Desembolso', width: 14, format: (v) => v ? String(v).slice(0, 10) : '' },
+  { key: 'maturity_date', header: 'Vencimiento', width: 14, format: (v) => v ? String(v).slice(0, 10) : '' },
+];
+
+// FIX (auditoria "Exportación real a Excel/PDF", Sep 2026): antes no existía
+// NINGUNA forma de exportar el listado de préstamos (ni CSV, ni Excel, ni
+// PDF). Declarado ANTES de GET /:id para que "/export" no sea interpretado
+// como un id de préstamo. Reutiliza los mismos filtros que el listado normal.
+router.get('/export', authenticate, requireTenant, requirePermission('loans.view'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { status, client_id, collector_id, search, format } = req.query as any;
+    const db = getDb();
+    let where = 'WHERE l.tenant_id=?'; const params: any[] = [req.tenant.id];
+    if (status === 'all') {
+      // sin filtro
+    } else if (status) {
+      const statuses = String(status).split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (statuses.length === 1) { where += ' AND l.status=?'; params.push(statuses[0]); }
+      else if (statuses.length > 1) { where += ` AND l.status IN (${statuses.map(() => '?').join(',')})`; params.push(...statuses); }
+    } else {
+      where += " AND l.status NOT IN ('voided','cancelled')";
+    }
+    if (client_id) { where += ' AND l.client_id=?'; params.push(client_id); }
+    if (collector_id) { where += ' AND l.collector_id=?'; params.push(collector_id); }
+    if (search) { where += ' AND (l.loan_number LIKE ? OR c.full_name LIKE ?)'; const s = `%${search}%`; params.push(s, s); }
+    const rows = db.prepare(`
+      SELECT l.*, c.full_name as client_name, c.id_number as client_id_number, p.name as product_name
+      FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id
+      ${where} ORDER BY l.created_at DESC
+    `).all(...params);
+    await sendReport(res, format, { filename: 'prestamos', title: 'Listado de Préstamos', columns: LOAN_EXPORT_COLUMNS, rows: rows as any[] });
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to export loans' }); }
 });
 
 router.post('/', authenticate, requireTenant, requirePermission('loans.create'), (req: AuthRequest, res: Response) => {

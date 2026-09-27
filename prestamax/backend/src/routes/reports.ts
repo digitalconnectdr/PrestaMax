@@ -3,7 +3,10 @@ import { getDb, uuid, now } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 // Importamos calcMora unificado para evitar drift entre copias.
 import { calcMora as libCalcMora } from '../lib/calculations';
+import { sendReport, ExportColumn } from '../lib/exportHelpers';
 const router = Router();
+
+const money = (v: any): number => Math.round((Number(v) || 0) * 100) / 100;
 
 // ── Resumen de dashboard programado por email (diario/semanal/mensual) ──────
 // Antes ningun reporte se enviaba automaticamente; el dueño tenia que entrar
@@ -123,13 +126,28 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
 });
 
-router.get('/portfolio', authenticate, requireTenant, requirePermission('reports.portfolio'), (req: AuthRequest, res: Response) => {
+const PORTFOLIO_COLUMNS: ExportColumn[] = [
+  { key: 'loan_number', header: 'Préstamo', width: 16 },
+  { key: 'client_name', header: 'Cliente', width: 26 },
+  { key: 'product_name', header: 'Producto', width: 20 },
+  { key: 'status', header: 'Estado', width: 14 },
+  { key: 'disbursed_amount', header: 'Desembolsado', width: 16, align: 'right', format: money },
+  { key: 'total_balance', header: 'Balance', width: 16, align: 'right', format: money },
+  { key: 'mora_balance', header: 'Mora', width: 14, align: 'right', format: money },
+  { key: 'days_overdue', header: 'Días Atraso', width: 12, align: 'right' },
+];
+
+router.get('/portfolio', authenticate, requireTenant, requirePermission('reports.portfolio'), async (req: AuthRequest, res: Response) => {
   try {
     const db = getDb(); const tid = req.tenant.id;
-    const { branch_id } = req.query as any;
+    const { branch_id, format } = req.query as any;
     const branchFilter = branch_id ? ' AND l.branch_id=?' : '';
     const params = branch_id ? [tid, branch_id] : [tid];
     const loans = db.prepare(`SELECT l.*,c.full_name as client_name,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.status IN ('active','current','overdue','in_mora')${branchFilter}`).all(...params);
+    if (format) {
+      await sendReport(res, format, { filename: 'cartera', title: 'Reporte de Cartera', columns: PORTFOLIO_COLUMNS, rows: loans as any[] });
+      return;
+    }
     const aging = { current:0, d1_7:0, d8_15:0, d16_30:0, over30:0, amounts: {current:0,d1_7:0,d8_15:0,d16_30:0,over30:0} };
     (loans as any[]).forEach((l:any) => {
       const d = l.days_overdue||0;
@@ -140,29 +158,54 @@ router.get('/portfolio', authenticate, requireTenant, requirePermission('reports
       else { aging.over30++; (aging.amounts as any).over30+=l.mora_balance||0; }
     });
     res.json({ loans, aging, total:(loans as any[]).length });
-  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
 });
 
-router.get('/mora', authenticate, requireTenant, requirePermission('reports.mora'), (req: AuthRequest, res: Response) => {
+const MORA_COLUMNS: ExportColumn[] = [
+  { key: 'loan_number', header: 'Préstamo', width: 16 },
+  { key: 'client_name', header: 'Cliente', width: 26 },
+  { key: 'phone_personal', header: 'Teléfono', width: 16 },
+  { key: 'product_name', header: 'Producto', width: 20 },
+  { key: 'total_balance', header: 'Balance', width: 16, align: 'right', format: money },
+  { key: 'mora_balance', header: 'Mora', width: 14, align: 'right', format: money },
+  { key: 'days_overdue', header: 'Días Atraso', width: 12, align: 'right' },
+];
+
+router.get('/mora', authenticate, requireTenant, requirePermission('reports.mora'), async (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    const { branch_id } = req.query as any;
+    const { branch_id, format } = req.query as any;
     const branchFilter = branch_id ? ' AND l.branch_id=?' : '';
     const params = branch_id ? [req.tenant.id, branch_id] : [req.tenant.id];
-    res.json(db.prepare(`SELECT l.*,c.full_name as client_name,c.phone_personal,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.is_voided=0 AND l.status IN ('overdue','in_mora')${branchFilter} ORDER BY l.mora_balance DESC`).all(...params));
-  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+    const rows = db.prepare(`SELECT l.*,c.full_name as client_name,c.phone_personal,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.tenant_id=? AND l.is_voided=0 AND l.status IN ('overdue','in_mora')${branchFilter} ORDER BY l.mora_balance DESC`).all(...params);
+    if (format) {
+      await sendReport(res, format, { filename: 'mora', title: 'Reporte de Mora', columns: MORA_COLUMNS, rows: rows as any[] });
+      return;
+    }
+    res.json(rows);
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
 });
 
-router.get('/collections', authenticate, requireTenant, requirePermission('reports.collections'), (req: AuthRequest, res: Response) => {
+const COLLECTIONS_COLUMNS: ExportColumn[] = [
+  { key: 'collector_name', header: 'Cobrador', width: 26, format: (v) => v || 'Sin asignar' },
+  { key: 'count', header: 'Cantidad de Pagos', width: 16, align: 'right' },
+  { key: 'total', header: 'Total Cobrado', width: 18, align: 'right', format: money },
+];
+
+router.get('/collections', authenticate, requireTenant, requirePermission('reports.collections'), async (req: AuthRequest, res: Response) => {
   try {
-    const db = getDb(); const { from, to, branch_id } = req.query as any;
+    const db = getDb(); const { from, to, branch_id, format } = req.query as any;
     const start = from || new Date(Date.now()-30*86400000).toISOString().slice(0,10);
     const end = to || new Date().toISOString().slice(0,10);
     const branchFilter = branch_id ? ' AND p.branch_id=?' : '';
     const params = branch_id ? [req.tenant.id, start, end, branch_id] : [req.tenant.id, start, end];
     const data = db.prepare(`SELECT p.collector_id, u.full_name as collector_name, SUM(p.amount) as total, COUNT(*) as count FROM payments p LEFT JOIN users u ON u.id=p.collector_id WHERE p.tenant_id=? AND p.is_voided=0 AND date(p.payment_date) BETWEEN ? AND ?${branchFilter} GROUP BY p.collector_id`).all(...params);
+    if (format) {
+      await sendReport(res, format, { filename: 'cobranzas', title: 'Reporte de Cobranzas', subtitle: `${start} — ${end}`, columns: COLLECTIONS_COLUMNS, rows: data as any[] });
+      return;
+    }
     res.json(data);
-  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
 });
 
 // Comision de cobradores/oficiales sobre lo cobrado en el periodo. Antes no

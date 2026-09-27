@@ -1,8 +1,41 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { sendReport, ExportColumn } from '../lib/exportHelpers';
 
 const router = Router();
+
+const CLIENT_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'client_number', header: 'Código', width: 12 },
+  { key: 'full_name', header: 'Nombre', width: 28 },
+  { key: 'id_number', header: 'Cédula/RNC', width: 16 },
+  { key: 'phone_personal', header: 'Teléfono', width: 16 },
+  { key: 'email', header: 'Email', width: 24 },
+  { key: 'city', header: 'Ciudad', width: 16 },
+  { key: 'score', header: 'Score', width: 10, align: 'right' },
+  { key: 'loan_count', header: 'Préstamos', width: 12, align: 'right' },
+  { key: 'is_active', header: 'Estado', width: 12, format: (v) => (v ? 'Activo' : 'Inactivo') },
+];
+
+// FIX (auditoria "Exportación real a Excel/PDF", Sep 2026): antes no existía
+// NINGUNA forma de exportar la lista de clientes (ni CSV, ni Excel, ni PDF).
+// Declarado ANTES de GET /:id para que "/export" no sea interpretado como
+// un id de cliente.
+router.get('/export', authenticate, requireTenant, requirePermission('clients.view'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { search, is_active, format } = req.query as any;
+    const db = getDb();
+    let where = 'WHERE c.tenant_id = ?';
+    const params: any[] = [req.tenant.id];
+    if (is_active !== undefined) { where += ' AND c.is_active = ?'; params.push(is_active === 'true' ? 1 : 0); }
+    if (search) { where += ' AND (c.full_name LIKE ? OR c.id_number LIKE ? OR c.phone_personal LIKE ?)'; const s = `%${search}%`; params.push(s, s, s); }
+    const rows = db.prepare(`
+      SELECT c.*, (SELECT COUNT(*) FROM loans WHERE client_id=c.id AND tenant_id=c.tenant_id) as loan_count
+      FROM clients c ${where} ORDER BY c.created_at DESC
+    `).all(...params);
+    await sendReport(res, format, { filename: 'clientes', title: 'Listado de Clientes', columns: CLIENT_EXPORT_COLUMNS, rows: rows as any[] });
+  } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to export clients' }); }
+});
 
 router.get('/', authenticate, requireTenant, requirePermission('clients.view'), (req: AuthRequest, res: Response) => {
   try {
