@@ -4,6 +4,8 @@ import {
   Upload, CheckCircle, AlertCircle, Camera, Loader2, Building2,
   CreditCard, User, Phone, Mail, MapPin, FileText, DollarSign, Briefcase, Users
 } from 'lucide-react'
+import { useT } from '@/lib/i18n'
+import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
@@ -13,6 +15,7 @@ const inputCls = 'w-full px-4 py-3 border border-slate-200 rounded-xl text-sm fo
 const labelCls = 'block text-sm font-medium text-slate-700 mb-1.5'
 
 const LoanRequestPublicPage: React.FC = () => {
+  const t = useT()
   const { token } = useParams<{ token: string }>()
   const [tenant, setTenant] = useState<TenantInfo | null>(null)
   const [isLoadingTenant, setIsLoadingTenant] = useState(true)
@@ -60,11 +63,11 @@ const LoanRequestPublicPage: React.FC = () => {
   const [imagePreviews, setImagePreviews] = useState<{ front: string | null; back: string | null }>({ front: null, back: null })
 
   useEffect(() => {
-    if (!token) { setError('Enlace no válido'); setIsLoadingTenant(false); return }
+    if (!token) { setError(t('pub.apply.invalid_link')); setIsLoadingTenant(false); return }
     fetch(`${API_BASE}/public/apply/${token}`)
       .then(r => r.json())
       .then(data => { if (data.error) setError(data.error); else setTenant(data); })
-      .catch(() => setError('No se pudo conectar. Verifica tu conexión.'))
+      .catch(() => setError(t('pub.apply.connect_error')))
       .finally(() => setIsLoadingTenant(false))
   }, [token])
 
@@ -74,7 +77,7 @@ const LoanRequestPublicPage: React.FC = () => {
   const handleFileChange = (side: 'front' | 'back') => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) { alert('La imagen no debe superar 5MB'); return }
+    if (file.size > 5 * 1024 * 1024) { alert(t('pub.apply.err_image_too_large')); return }
     const reader = new FileReader()
     reader.onload = (ev) => {
       const base64 = ev.target?.result as string
@@ -87,11 +90,11 @@ const LoanRequestPublicPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (!form.clientName.trim()) return setError('El nombre completo es obligatorio')
-    if (!form.clientPhone.trim()) return setError('El teléfono personal es obligatorio')
-    if (!form.idNumber.trim()) return setError('El número de cédula es obligatorio')
-    if (!images.front) return setError('Foto frontal de la cédula es obligatoria')
-    if (!images.back) return setError('Foto del reverso de la cédula es obligatoria')
+    if (!form.clientName.trim()) return setError(t('pub.apply.err_name_required'))
+    if (!form.clientPhone.trim()) return setError(t('pub.apply.err_phone_required'))
+    if (!form.idNumber.trim()) return setError(t('pub.apply.err_id_required'))
+    if (!images.front) return setError(t('pub.apply.err_front_required'))
+    if (!images.back) return setError(t('pub.apply.err_back_required'))
 
     setIsSubmitting(true)
     try {
@@ -128,26 +131,27 @@ const LoanRequestPublicPage: React.FC = () => {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error al enviar la solicitud')
+      if (!res.ok) throw new Error(data.error || t('pub.apply.err_submit'))
       setSubmitted(true)
     } catch (err: any) {
-      setError(err.message || 'Error inesperado. Intenta nuevamente.')
+      setError(err.message || t('pub.apply.err_unexpected'))
     } finally { setIsSubmitting(false) }
   }
 
   // ── Loading
   if (isLoadingTenant) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" /><p className="text-slate-500">Cargando...</p></div>
+      <div className="text-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" /><p className="text-slate-500">{t('pub.apply.loading')}</p></div>
     </div>
   )
 
   // ── Invalid token
   if (error && !tenant) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-8 max-w-md w-full text-center">
+      <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-8 max-w-md w-full text-center relative">
+        <div className="absolute top-3 right-3"><LanguageSwitcher /></div>
         <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-        <h2 className="text-xl font-bold text-slate-800 mb-2">Enlace no válido</h2>
+        <h2 className="text-xl font-bold text-slate-800 mb-2">{t('pub.apply.invalid_link_title')}</h2>
         <p className="text-slate-500">{error}</p>
       </div>
     </div>
@@ -160,13 +164,13 @@ const LoanRequestPublicPage: React.FC = () => {
         <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle className="w-9 h-9 text-emerald-600" />
         </div>
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">¡Solicitud enviada!</h2>
-        <p className="text-slate-500 mb-4">Tu solicitud de préstamo ha sido recibida por <strong>{tenant?.name}</strong>. Te contactaremos pronto.</p>
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">{t('pub.apply.submitted_title')}</h2>
+        <p className="text-slate-500 mb-4">{t('pub.apply.submitted_desc').replace('{name}', tenant?.name || '')}</p>
         <div className="bg-slate-50 rounded-xl p-4 text-left text-sm text-slate-600">
-          <p className="font-medium mb-1">¿Qué sigue?</p>
-          <p>• El prestamista revisará tu solicitud</p>
-          <p>• Te contactarán al número {form.clientPhone}</p>
-          {form.clientEmail && <p>• O por correo a {form.clientEmail}</p>}
+          <p className="font-medium mb-1">{t('pub.apply.whats_next')}</p>
+          <p>• {t('pub.apply.next_review')}</p>
+          <p>• {t('pub.apply.next_contact_phone').replace('{phone}', form.clientPhone)}</p>
+          {form.clientEmail && <p>• {t('pub.apply.next_contact_email').replace('{email}', form.clientEmail)}</p>}
         </div>
       </div>
     </div>
@@ -188,13 +192,13 @@ const LoanRequestPublicPage: React.FC = () => {
           <>
             <img src={imagePreviews[side]!} alt={label} className="absolute inset-0 w-full h-full object-cover rounded-xl" />
             <div className="absolute bottom-2 right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
-              <CheckCircle className="w-3 h-3" />Lista
+              <CheckCircle className="w-3 h-3" />{t('pub.apply.photo_ready')}
             </div>
           </>
         ) : (
           <>
             <Upload className="w-8 h-8 text-slate-300 mb-2" />
-            <p className="text-xs text-slate-400 text-center px-2">Toca para tomar foto<br />o seleccionar archivo</p>
+            <p className="text-xs text-slate-400 text-center px-2">{t('pub.apply.photo_tap_hint')}<br />{t('pub.apply.photo_or_file')}</p>
           </>
         )}
       </div>
@@ -207,55 +211,58 @@ const LoanRequestPublicPage: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="bg-[#1e3a5f] rounded-2xl p-6 mb-6 text-white text-center">
+        <div className="bg-[#1e3a5f] rounded-2xl p-6 mb-6 text-white text-center relative">
+          <div className="absolute top-3 right-3 [&_button]:text-white [&_button:hover]:bg-white/10">
+            <LanguageSwitcher />
+          </div>
           <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mx-auto mb-3">
             <Building2 className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold mb-1">{tenant?.name}</h1>
-          <p className="text-blue-200 text-sm">Formulario de Solicitud de Préstamo</p>
-          <p className="text-white/60 text-xs mt-1">Completa todos los campos para enviar tu solicitud</p>
+          <p className="text-blue-200 text-sm">{t('pub.apply.title')}</p>
+          <p className="text-white/60 text-xs mt-1">{t('pub.apply.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
 
           {/* ── 1. Datos de Identificación ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <SectionHeader icon={User} title="Datos de Identificación" />
+            <SectionHeader icon={User} title={t('pub.apply.section_identity')} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
-                <label className={labelCls}>Nombre completo <span className="text-red-500">*</span></label>
-                <input value={form.clientName} onChange={set('clientName')} placeholder="Juan Pérez García" required className={inputCls} />
+                <label className={labelCls}>{t('pub.apply.full_name')} <span className="text-red-500">*</span></label>
+                <input value={form.clientName} onChange={set('clientName')} placeholder={t('pub.apply.full_name_ph')} required className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}><span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" />Cédula de identidad <span className="text-red-500">*</span></span></label>
+                <label className={labelCls}><span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" />{t('pub.apply.id_number')} <span className="text-red-500">*</span></span></label>
                 <input value={form.idNumber} onChange={set('idNumber')} placeholder="000-0000000-0" required className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Fecha de nacimiento</label>
+                <label className={labelCls}>{t('pub.apply.dob')}</label>
                 <input type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Género</label>
+                <label className={labelCls}>{t('pub.apply.gender')}</label>
                 <select value={form.gender} onChange={set('gender')} className={inputCls}>
-                  <option value="">Seleccionar...</option>
-                  <option value="male">Masculino</option>
-                  <option value="female">Femenino</option>
-                  <option value="other">Otro</option>
+                  <option value="">{t('pub.apply.select_placeholder')}</option>
+                  <option value="male">{t('pub.apply.gender_male')}</option>
+                  <option value="female">{t('pub.apply.gender_female')}</option>
+                  <option value="other">{t('pub.apply.gender_other')}</option>
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Estado civil</label>
+                <label className={labelCls}>{t('pub.apply.marital_status')}</label>
                 <select value={form.maritalStatus} onChange={set('maritalStatus')} className={inputCls}>
-                  <option value="">Seleccionar...</option>
-                  <option value="single">Soltero/a</option>
-                  <option value="married">Casado/a</option>
-                  <option value="divorced">Divorciado/a</option>
-                  <option value="widowed">Viudo/a</option>
-                  <option value="cohabiting">Unión libre</option>
+                  <option value="">{t('pub.apply.select_placeholder')}</option>
+                  <option value="single">{t('pub.apply.marital_single')}</option>
+                  <option value="married">{t('pub.apply.marital_married')}</option>
+                  <option value="divorced">{t('pub.apply.marital_divorced')}</option>
+                  <option value="widowed">{t('pub.apply.marital_widowed')}</option>
+                  <option value="cohabiting">{t('pub.apply.marital_cohabiting')}</option>
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Nacionalidad</label>
+                <label className={labelCls}>{t('pub.apply.nationality')}</label>
                 <input value={form.nationality} onChange={set('nationality')} placeholder="Dominicana" className={inputCls} />
               </div>
             </div>
@@ -263,22 +270,22 @@ const LoanRequestPublicPage: React.FC = () => {
 
           {/* ── 2. Información de Contacto ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <SectionHeader icon={Phone} title="Información de Contacto" />
+            <SectionHeader icon={Phone} title={t('pub.apply.section_contact')} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}><span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />Teléfono personal <span className="text-red-500">*</span></span></label>
+                <label className={labelCls}><span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{t('pub.apply.phone_personal')} <span className="text-red-500">*</span></span></label>
                 <input value={form.clientPhone} onChange={set('clientPhone')} placeholder="809-000-0000" type="tel" required className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}><span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-green-600" />WhatsApp</span></label>
+                <label className={labelCls}><span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-green-600" />{t('pub.apply.whatsapp')}</span></label>
                 <input value={form.whatsapp} onChange={set('whatsapp')} placeholder="809-000-0000" type="tel" className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}><span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />Correo electrónico</span></label>
+                <label className={labelCls}><span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{t('pub.apply.email')}</span></label>
                 <input value={form.clientEmail} onChange={set('clientEmail')} placeholder="correo@ejemplo.com" type="email" className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Teléfono laboral</label>
+                <label className={labelCls}>{t('pub.apply.phone_work')}</label>
                 <input value={form.phoneWork} onChange={set('phoneWork')} placeholder="809-000-0000" type="tel" className={inputCls} />
               </div>
             </div>
@@ -286,20 +293,20 @@ const LoanRequestPublicPage: React.FC = () => {
 
           {/* ── 3. Dirección ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <SectionHeader icon={MapPin} title="Dirección de Residencia" />
+            <SectionHeader icon={MapPin} title={t('pub.apply.section_address')} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
-                <label className={labelCls}><span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />Dirección</span></label>
-                <input value={form.clientAddress} onChange={set('clientAddress')} placeholder="Calle, Sector, No." className={inputCls} />
+                <label className={labelCls}><span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{t('pub.apply.address')}</span></label>
+                <input value={form.clientAddress} onChange={set('clientAddress')} placeholder={t('pub.apply.address_ph')} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Ciudad</label>
+                <label className={labelCls}>{t('pub.apply.city')}</label>
                 <input value={form.city} onChange={set('city')} placeholder="Santo Domingo" className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Provincia</label>
+                <label className={labelCls}>{t('pub.apply.province')}</label>
                 <select value={form.province} onChange={set('province')} className={inputCls}>
-                  <option value="">Seleccionar...</option>
+                  <option value="">{t('pub.apply.select_placeholder')}</option>
                   {['Azua','Bahoruco','Barahona','Dajabón','Distrito Nacional','Duarte','El Seibo','Elías Piña','Espaillat',
                     'Hato Mayor','Hermanas Mirabal','Independencia','La Altagracia','La Romana','La Vega','María Trinidad Sánchez',
                     'Monseñor Nouel','Monte Cristi','Monte Plata','Pedernales','Peravia','Puerto Plata','Samaná','San Cristóbal',
@@ -312,36 +319,36 @@ const LoanRequestPublicPage: React.FC = () => {
 
           {/* ── 4. Información Laboral ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <SectionHeader icon={Briefcase} title="Información Laboral / Económica" />
+            <SectionHeader icon={Briefcase} title={t('pub.apply.section_work')} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Ocupación / Profesión</label>
-                <input value={form.occupation} onChange={set('occupation')} placeholder="Comerciante, Empleado, etc." className={inputCls} />
+                <label className={labelCls}>{t('pub.apply.occupation')}</label>
+                <input value={form.occupation} onChange={set('occupation')} placeholder={t('pub.apply.occupation_ph')} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Empresa / Empleador</label>
-                <input value={form.employer} onChange={set('employer')} placeholder="Nombre de la empresa" className={inputCls} />
+                <label className={labelCls}>{t('pub.apply.employer')}</label>
+                <input value={form.employer} onChange={set('employer')} placeholder={t('pub.apply.employer_ph')} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Dirección de la Empresa</label>
+                <label className={labelCls}>{t('pub.apply.work_address')}</label>
                 <input value={form.workAddress} onChange={set('workAddress')} placeholder="Av. Winston Churchill 123, Piantini" className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Ingresos mensuales (RD$)</label>
+                <label className={labelCls}>{t('pub.apply.monthly_income')}</label>
                 <input value={form.monthlyIncome} onChange={set('monthlyIncome')} placeholder="Ej: 25000" type="number" min="0" className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Actividad económica</label>
+                <label className={labelCls}>{t('pub.apply.economic_activity')}</label>
                 <select value={form.economicActivity} onChange={set('economicActivity')} className={inputCls}>
-                  <option value="">Seleccionar...</option>
-                  <option value="empleado_privado">Empleado sector privado</option>
-                  <option value="empleado_publico">Empleado sector público</option>
-                  <option value="independiente">Trabajador independiente</option>
-                  <option value="comerciante">Comerciante</option>
-                  <option value="empresario">Empresario/a</option>
-                  <option value="pensionado">Pensionado/a</option>
-                  <option value="ama_de_casa">Ama de casa</option>
-                  <option value="otro">Otro</option>
+                  <option value="">{t('pub.apply.select_placeholder')}</option>
+                  <option value="empleado_privado">{t('pub.apply.econ_private')}</option>
+                  <option value="empleado_publico">{t('pub.apply.econ_public')}</option>
+                  <option value="independiente">{t('pub.apply.econ_independent')}</option>
+                  <option value="comerciante">{t('pub.apply.econ_merchant')}</option>
+                  <option value="empresario">{t('pub.apply.econ_entrepreneur')}</option>
+                  <option value="pensionado">{t('pub.apply.econ_retired')}</option>
+                  <option value="ama_de_casa">{t('pub.apply.econ_homemaker')}</option>
+                  <option value="otro">{t('pub.apply.econ_other')}</option>
                 </select>
               </div>
             </div>
@@ -349,28 +356,28 @@ const LoanRequestPublicPage: React.FC = () => {
 
           {/* ── 5. Referencia Familiar ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <SectionHeader icon={Users} title="Referencia Familiar" />
+            <SectionHeader icon={Users} title={t('pub.apply.section_family')} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Nombre del familiar / contacto</label>
-                <input value={form.familyContactName} onChange={set('familyContactName')} placeholder="Nombre completo" className={inputCls} />
+                <label className={labelCls}>{t('pub.apply.family_name')}</label>
+                <input value={form.familyContactName} onChange={set('familyContactName')} placeholder={t('pub.apply.family_name_ph')} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Parentesco</label>
+                <label className={labelCls}>{t('pub.apply.relationship')}</label>
                 <select value={form.familyRelationship} onChange={set('familyRelationship')} className={inputCls}>
-                  <option value="">Seleccionar...</option>
-                  <option value="padre_madre">Padre / Madre</option>
-                  <option value="hijo_hija">Hijo/a</option>
-                  <option value="hermano_hermana">Hermano/a</option>
-                  <option value="conyuge">Cónyuge / Pareja</option>
-                  <option value="tio_tia">Tío/a</option>
-                  <option value="primo_prima">Primo/a</option>
-                  <option value="amigo_amiga">Amigo/a</option>
-                  <option value="otro">Otro</option>
+                  <option value="">{t('pub.apply.select_placeholder')}</option>
+                  <option value="padre_madre">{t('pub.apply.rel_parent')}</option>
+                  <option value="hijo_hija">{t('pub.apply.rel_child')}</option>
+                  <option value="hermano_hermana">{t('pub.apply.rel_sibling')}</option>
+                  <option value="conyuge">{t('pub.apply.rel_spouse')}</option>
+                  <option value="tio_tia">{t('pub.apply.rel_uncle')}</option>
+                  <option value="primo_prima">{t('pub.apply.rel_cousin')}</option>
+                  <option value="amigo_amiga">{t('pub.apply.rel_friend')}</option>
+                  <option value="otro">{t('pub.apply.rel_other')}</option>
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Teléfono del familiar</label>
+                <label className={labelCls}>{t('pub.apply.family_phone')}</label>
                 <input value={form.phoneFamily} onChange={set('phoneFamily')} placeholder="809-000-0000" type="tel" className={inputCls} />
               </div>
             </div>
@@ -378,28 +385,28 @@ const LoanRequestPublicPage: React.FC = () => {
 
           {/* ── 6. Información del Préstamo ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-            <SectionHeader icon={DollarSign} title="Información del Préstamo" />
+            <SectionHeader icon={DollarSign} title={t('pub.apply.section_loan')} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Monto solicitado (RD$)</label>
+                <label className={labelCls}>{t('pub.apply.loan_amount')}</label>
                 <input value={form.loanAmount} onChange={set('loanAmount')} placeholder="Ej: 25000" type="number" min="1" className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Plazo deseado (meses)</label>
+                <label className={labelCls}>{t('pub.apply.loan_term')}</label>
                 <input value={form.loanTerm} onChange={set('loanTerm')} placeholder="Ej: 12" type="number" min="1" className={inputCls} />
               </div>
               <div className="sm:col-span-2">
-                <label className={labelCls}>Propósito del préstamo</label>
+                <label className={labelCls}>{t('pub.apply.loan_purpose')}</label>
                 <select value={form.loanPurpose} onChange={set('loanPurpose')} className={inputCls}>
-                  <option value="">Selecciona un propósito...</option>
-                  <option value="Negocio / Comercio">Negocio / Comercio</option>
-                  <option value="Educación">Educación</option>
-                  <option value="Salud / Médico">Salud / Médico</option>
-                  <option value="Hogar / Remodelación">Hogar / Remodelación</option>
-                  <option value="Vehículo">Vehículo</option>
-                  <option value="Deuda / Refinanciamiento">Deuda / Refinanciamiento</option>
-                  <option value="Emergencia personal">Emergencia personal</option>
-                  <option value="Otro">Otro</option>
+                  <option value="">{t('pub.apply.purpose_select')}</option>
+                  <option value="Negocio / Comercio">{t('pub.apply.purpose_business')}</option>
+                  <option value="Educación">{t('pub.apply.purpose_education')}</option>
+                  <option value="Salud / Médico">{t('pub.apply.purpose_health')}</option>
+                  <option value="Hogar / Remodelación">{t('pub.apply.purpose_home')}</option>
+                  <option value="Vehículo">{t('pub.apply.purpose_vehicle')}</option>
+                  <option value="Deuda / Refinanciamiento">{t('pub.apply.purpose_debt')}</option>
+                  <option value="Emergencia personal">{t('pub.apply.purpose_emergency')}</option>
+                  <option value="Otro">{t('pub.apply.purpose_other')}</option>
                 </select>
               </div>
             </div>
@@ -408,12 +415,12 @@ const LoanRequestPublicPage: React.FC = () => {
           {/* ── 7. Fotos de la Cédula ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
             <h2 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
-              <Camera className="w-5 h-5 text-blue-600" />Fotos de la Cédula <span className="text-red-500">*</span>
+              <Camera className="w-5 h-5 text-blue-600" />{t('pub.apply.section_photos')} <span className="text-red-500">*</span>
             </h2>
-            <p className="text-xs text-slate-400 mb-4">Toma o sube fotos claras de ambos lados de tu cédula de identidad. Máx. 5MB por imagen.</p>
+            <p className="text-xs text-slate-400 mb-4">{t('pub.apply.photos_hint')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {photoSlot('front', 'Parte frontal')}
-              {photoSlot('back', 'Parte trasera')}
+              {photoSlot('front', t('pub.apply.photo_front'))}
+              {photoSlot('back', t('pub.apply.photo_back'))}
             </div>
           </div>
 
@@ -428,11 +435,11 @@ const LoanRequestPublicPage: React.FC = () => {
           {/* Submit */}
           <button type="submit" disabled={isSubmitting}
             className="w-full py-4 bg-[#1e3a5f] hover:bg-[#2a4d7a] text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed text-base shadow-sm">
-            {isSubmitting ? <><Loader2 className="w-5 h-5 animate-spin" />Enviando solicitud...</> : <><CreditCard className="w-5 h-5" />Enviar Solicitud de Préstamo</>}
+            {isSubmitting ? <><Loader2 className="w-5 h-5 animate-spin" />{t('pub.apply.submitting')}</> : <><CreditCard className="w-5 h-5" />{t('pub.apply.submit_button')}</>}
           </button>
 
           <p className="text-center text-xs text-slate-400 pb-4">
-            Al enviar, autorizas a <strong>{tenant?.name}</strong> a revisar tu información para evaluar tu solicitud.
+            {t('pub.apply.consent').replace('{name}', tenant?.name || '')}
           </p>
         </form>
       </div>
