@@ -168,15 +168,15 @@ const DashboardPage: React.FC = () => {
             <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-9 h-9 text-emerald-600" />
             </div>
-            <h3 className="mt-4 text-lg font-bold text-slate-900">¡Gracias, suscripción activada!</h3>
+            <h3 className="mt-4 text-lg font-bold text-slate-900">{t('dash.whop_thanks_title')}</h3>
             <p className="mt-2 text-sm text-slate-600">
-              Tu pago se procesó correctamente. La activación puede tardar unos segundos en reflejarse.
+              {t('dash.whop_thanks_desc')}
             </p>
             <button
               onClick={() => setShowThanks(false)}
               className="mt-5 w-full py-2.5 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition"
             >
-              Entendido
+              {t('dash.whop_thanks_ok')}
             </button>
           </div>
         </div>

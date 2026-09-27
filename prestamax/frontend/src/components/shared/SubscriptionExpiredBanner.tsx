@@ -8,6 +8,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { AlertCircle, CreditCard, Clock } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import api from '@/lib/api'
+import { useT } from '@/lib/i18n'
 
 const DISMISS_KEY = 'credytek_trial_banner_dismissed_until'
 
@@ -18,6 +19,7 @@ const DISMISS_KEY = 'credytek_trial_banner_dismissed_until'
  * sin necesidad de logout.
  */
 const SubscriptionExpiredBanner: React.FC = () => {
+  const t = useT()
   const navigate = useNavigate()
   const location = useLocation()
   const [expired, setExpired] = useState<boolean>(false)
@@ -82,10 +84,10 @@ const SubscriptionExpiredBanner: React.FC = () => {
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <div className="min-w-0 flex-1">
-              <p className="font-bold text-sm sm:text-base">Tu suscripción ha expirado</p>
+              <p className="font-bold text-sm sm:text-base">{t('sub.banner.expired_title')}</p>
               <p className="text-xs sm:text-sm text-white/90 mt-0.5">
-                Las funciones del sistema están bloqueadas. Renueva tu plan para volver a operar.
-                {daysLeft != null && daysLeft < 0 ? ` (vencida hace ${Math.abs(daysLeft)} día(s))` : ''}
+                {t('sub.banner.expired_desc')}
+                {daysLeft != null && daysLeft < 0 ? t('sub.banner.expired_days_ago').replace('{n}', String(Math.abs(daysLeft))) : ''}
               </p>
             </div>
           </div>
@@ -94,7 +96,7 @@ const SubscriptionExpiredBanner: React.FC = () => {
               onClick={goToPlans}
               className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2 bg-white text-orange-700 hover:bg-orange-50 rounded-lg text-sm font-bold transition-colors shadow-sm"
             >
-              <CreditCard className="w-4 h-4" />Renovar suscripción
+              <CreditCard className="w-4 h-4" />{t('sub.banner.renew_button')}
             </button>
           </div>
         </div>
@@ -114,8 +116,8 @@ const SubscriptionExpiredBanner: React.FC = () => {
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <Clock className={`w-4.5 h-4.5 flex-shrink-0 ${urgent ? '' : 'text-amber-600'}`} />
             <p className="text-sm min-w-0">
-              <strong>{daysLeft === 0 ? 'Tu prueba gratis termina hoy' : daysLeft === 1 ? 'Tu prueba gratis termina mañana' : `Tu prueba gratis termina en ${daysLeft} días`}</strong>
-              <span className={urgent ? 'text-white/90' : 'text-amber-700'}> — elige un plan para no perder acceso a tu cartera.</span>
+              <strong>{daysLeft === 0 ? t('sub.banner.trial_ends_today') : daysLeft === 1 ? t('sub.banner.trial_ends_tomorrow') : t('sub.banner.trial_ends_in').replace('{n}', String(daysLeft))}</strong>
+              <span className={urgent ? 'text-white/90' : 'text-amber-700'}>{t('sub.banner.trial_choose_plan')}</span>
             </p>
           </div>
           <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
@@ -123,7 +125,7 @@ const SubscriptionExpiredBanner: React.FC = () => {
               onClick={goToPlans}
               className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ${urgent ? 'bg-white text-orange-700 hover:bg-orange-50' : 'bg-[#1e3a5f] text-white hover:bg-[#152a45]'}`}
             >
-              <CreditCard className="w-3.5 h-3.5" />Ver planes
+              <CreditCard className="w-3.5 h-3.5" />{t('sub.banner.view_plans')}
             </button>
             <button
               onClick={() => {
@@ -132,7 +134,7 @@ const SubscriptionExpiredBanner: React.FC = () => {
               }}
               className={`px-2 text-xs underline flex-shrink-0 ${urgent ? 'text-white/80 hover:text-white' : 'text-amber-600 hover:text-amber-800'}`}
             >
-              Ahora no
+              {t('sub.banner.dismiss')}
             </button>
           </div>
         </div>

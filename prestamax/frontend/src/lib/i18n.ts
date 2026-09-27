@@ -208,6 +208,7 @@ const TR: Record<string, Tri> = {
   'status.restructured':   { es: 'Reestructurado', en: 'Restructured', pt: 'Reestruturado' },
   'status.paid':           { es: 'Pagado',         en: 'Paid',         pt: 'Pago' },
   'status.current':        { es: 'Al día',         en: 'Current',      pt: 'Em dia' },
+  'status.pending_manager_approval': { es: 'Pend. Aprob. Gerencial', en: 'Pending Manager Approval', pt: 'Pendente Aprov. Gerencial' },
 
   // ── Columnas de tabla (reutilizable) ─────────────────────────────────────────
   'col.client':  { es: 'Cliente', en: 'Client',  pt: 'Cliente' },
@@ -3342,6 +3343,23 @@ const TR: Record<string, Tri> = {
   'pub.apply.err_image_too_large':{ es: 'La imagen no debe superar 5MB', en: 'The image must not exceed 5MB', pt: 'A imagem não deve exceder 5MB' },
   'pub.apply.err_submit':        { es: 'Error al enviar la solicitud', en: 'Error submitting the application', pt: 'Erro ao enviar a solicitação' },
   'pub.apply.err_unexpected':    { es: 'Error inesperado. Intenta nuevamente.', en: 'Unexpected error. Please try again.', pt: 'Erro inesperado. Tente novamente.' },
+
+  // ── Banner global de suscripción (SubscriptionExpiredBanner) ─────────────────
+  'sub.banner.expired_title':    { es: 'Tu suscripción ha expirado', en: 'Your subscription has expired', pt: 'Sua assinatura expirou' },
+  'sub.banner.expired_desc':     { es: 'Las funciones del sistema están bloqueadas. Renueva tu plan para volver a operar.', en: 'System features are locked. Renew your plan to keep operating.', pt: 'As funções do sistema estão bloqueadas. Renove seu plano para voltar a operar.' },
+  'sub.banner.expired_days_ago': { es: ' (vencida hace {n} día(s))', en: ' (expired {n} day(s) ago)', pt: ' (venceu há {n} dia(s))' },
+  'sub.banner.renew_button':     { es: 'Renovar suscripción', en: 'Renew subscription', pt: 'Renovar assinatura' },
+  'sub.banner.trial_ends_today': { es: 'Tu prueba gratis termina hoy', en: 'Your free trial ends today', pt: 'Seu teste grátis termina hoje' },
+  'sub.banner.trial_ends_tomorrow':{ es: 'Tu prueba gratis termina mañana', en: 'Your free trial ends tomorrow', pt: 'Seu teste grátis termina amanhã' },
+  'sub.banner.trial_ends_in':    { es: 'Tu prueba gratis termina en {n} días', en: 'Your free trial ends in {n} days', pt: 'Seu teste grátis termina em {n} dias' },
+  'sub.banner.trial_choose_plan':{ es: ' — elige un plan para no perder acceso a tu cartera.', en: " — choose a plan so you don't lose access to your portfolio.", pt: ' — escolha um plano para não perder o acesso à sua carteira.' },
+  'sub.banner.view_plans':       { es: 'Ver planes', en: 'View plans', pt: 'Ver planos' },
+  'sub.banner.dismiss':          { es: 'Ahora no', en: 'Not now', pt: 'Agora não' },
+
+  // ── Popup de confirmación de pago (regreso desde Whop, en Dashboard) ─────────
+  'dash.whop_thanks_title':      { es: '¡Gracias, suscripción activada!', en: 'Thank you, subscription activated!', pt: 'Obrigado, assinatura ativada!' },
+  'dash.whop_thanks_desc':       { es: 'Tu pago se procesó correctamente. La activación puede tardar unos segundos en reflejarse.', en: 'Your payment was processed successfully. Activation may take a few seconds to show up.', pt: 'Seu pagamento foi processado com sucesso. A ativação pode levar alguns segundos para aparecer.' },
+  'dash.whop_thanks_ok':         { es: 'Entendido', en: 'Got it', pt: 'Entendi' },
 }
 
 // Diccionarios derivados por locale (compatibilidad con el lookup existente)
