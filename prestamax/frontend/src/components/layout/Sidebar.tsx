@@ -100,7 +100,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       label: t('navgroup.analysis'),
       items: [
         { icon: BarChart3,     label: t('nav.reports'),     path: '/reports',
-          show: canAny(['reports.portfolio','reports.mora','reports.collections','reports.advanced','reports.income']) },
+          show: canAny(['reports.dashboard','reports.portfolio','reports.mora','reports.collections','reports.advanced','reports.income','reports.datacredito']) },
         { icon: FileSpreadsheet,label: t('nav.accounting'), path: '/reports/accounting',     show: can('reports.dashboard') },
         { icon: CalendarRange, label: t('nav.projection'),  path: '/reports/projection',
           show: can('reports.projection') },

@@ -235,7 +235,7 @@ const ReportsPage: React.FC = () => {
   const TABS = [
     { id: 'dashboard', label: 'Dashboard', show: can('reports.dashboard') },
     { id: 'advanced', label: 'Análisis Avanzado', show: can('reports.advanced') },
-    { id: 'bank_accounts', label: 'Cuentas Bancarias', show: can('reports.portfolio') },
+    { id: 'bank_accounts', label: 'Cuentas Bancarias', show: can('reports.income') },
     { id: 'income_expenses', label: 'Ingresos y Gastos', show: can('reports.income') },
     { id: 'commissions', label: 'Comisiones', show: can('reports.collections') },
     { id: 'datacredito', label: '📋 DataCrédito', show: can('reports.datacredito') },
