@@ -166,7 +166,7 @@ export function registerAnalyticsContext(): void {
 
 // ── Helpers específicos por evento (evita repetir nombres de propiedades) ───
 
-const CTA_LOCATIONS = ['hero', 'benefits', 'features', 'pricing', 'final', 'nav', 'nav_mobile'] as const
+const CTA_LOCATIONS = ['hero', 'benefits', 'features', 'pricing', 'final', 'nav', 'nav_mobile', 'footer'] as const
 export type CtaLocation = typeof CTA_LOCATIONS[number]
 
 /** trial_cta_click — distingue SIEMPRE dónde ocurrió el clic (hero/benefits/features/pricing/final, o nav/nav_mobile para los CTAs del header que también existen hoy). */

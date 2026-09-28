@@ -2920,12 +2920,6 @@ const TR: Record<string, Tri> = {
   'lp.sec.perms.t':     { es: 'Permisos por rol', en: 'Role-based permissions', pt: 'Permissões por função' },
   'lp.sec.perms.d':     { es: 'Decides qué puede ver y hacer cada usuario de tu equipo dentro del sistema.', en: 'You decide what each user on your team can see and do inside the system.', pt: 'Você decide o que cada usuário da sua equipe pode ver e fazer no sistema.' },
 
-  // Respaldo de marca
-  'lp.brand.label': { es: 'Desarrollado por', en: 'Developed by', pt: 'Desenvolvido por' },
-  'lp.brand.title': { es: 'Una solución de JPRS Digital Connect', en: 'A solution by JPRS Digital Connect', pt: 'Uma solução da JPRS Digital Connect' },
-  'lp.brand.desc':  { es: 'CredyTek es desarrollado por JPRS Digital Connect, empresa de desarrollo de software, soluciones digitales, contact center y automatización. Respaldo tecnológico y soporte cercano para tu negocio.', en: 'CredyTek is developed by JPRS Digital Connect, a software development, digital solutions, contact center and automation company. Solid technology and close support for your business.', pt: 'A CredyTek é desenvolvida pela JPRS Digital Connect, empresa de desenvolvimento de software, soluções digitais, contact center e automação. Respaldo tecnológico e suporte próximo para o seu negócio.' },
-  'lp.brand.cta':   { es: 'Conoce JPRS Digital Connect', en: 'Learn about JPRS Digital Connect', pt: 'Conheça a JPRS Digital Connect' },
-
   // 8. Pricing
   'lp.pricing.title':    { es: 'Precios simples y transparentes', en: 'Simple, transparent pricing', pt: 'Preços simples e transparentes' },
   'lp.pricing.subtitle': { es: 'Elige el plan que se ajusta a tu operación. Cambia cuando lo necesites.', en: 'Choose the plan that fits your operation. Change it whenever you need to.', pt: 'Escolha o plano que se ajusta à sua operação. Mude quando precisar.' },
@@ -3008,8 +3002,11 @@ const TR: Record<string, Tri> = {
   'lp.faq.a5': { es: 'Tienes 14 días de acceso completo, sin tarjeta de crédito. Eliges y activas tu plan cuando estés listo.', en: 'You get 14 days of full access, no credit card required. You choose and activate your plan whenever you’re ready.', pt: 'Você tem 14 dias de acesso completo, sem cartão de crédito. Escolha e ative seu plano quando estiver pronto.' },
   'lp.faq.q6': { es: '¿Qué sucede cuando termina la prueba?', en: 'What happens when the trial ends?', pt: 'O que acontece quando o teste termina?' },
   'lp.faq.a6': { es: 'El sistema bloquea el acceso a las funciones hasta que elijas un plan. Tus datos no se eliminan.', en: 'The system locks access to the features until you choose a plan. Your data is not deleted.', pt: 'O sistema bloqueia o acesso às funções até que você escolha um plano. Seus dados não são excluídos.' },
-  'lp.footer.tagline': { es: 'Sistema profesional de gestión de préstamos multi-país y multi-moneda.', en: 'Professional multi-country, multi-currency loan management system.', pt: 'Sistema profissional de gestão de empréstimos multipaís e multimoeda.' },
+  'lp.footer.tagline': { es: 'Administra clientes, préstamos, pagos y cobranza desde un solo lugar.', en: 'Manage clients, loans, payments and collections from one place.', pt: 'Administre clientes, empréstimos, pagamentos e cobranças em um só lugar.' },
   'lp.footer.product': { es: 'Producto', en: 'Product', pt: 'Produto' },
+  'lp.footer.resources': { es: 'Recursos', en: 'Resources', pt: 'Recursos' },
+  'lp.footer.resources_center': { es: 'Centro de recursos', en: 'Resource center', pt: 'Central de recursos' },
+  'lp.footer.calculator': { es: 'Calculadora de préstamos', en: 'Loan calculator', pt: 'Calculadora de empréstimos' },
   'lp.footer.account': { es: 'Cuenta', en: 'Account', pt: 'Conta' },
   'lp.footer.legal':   { es: 'Legal', en: 'Legal', pt: 'Legal' },
   'lp.footer.create':  { es: 'Crear cuenta', en: 'Create account', pt: 'Criar conta' },
@@ -3017,9 +3014,9 @@ const TR: Record<string, Tri> = {
   'lp.footer.privacy': { es: 'Política de privacidad', en: 'Privacy policy', pt: 'Política de privacidade' },
   'lp.footer.rights':  { es: 'Todos los derechos reservados.', en: 'All rights reserved.', pt: 'Todos os direitos reservados.' },
   'lp.footer.contact': { es: 'Contacto', en: 'Contact', pt: 'Contato' },
-  'lp.footer.sales':   { es: 'Ventas e información', en: 'Sales & info', pt: 'Vendas e informações' },
-  'lp.footer.support': { es: 'Soporte', en: 'Support', pt: 'Suporte' },
-  'lp.footer.contact_us': { es: 'Contáctanos', en: 'Contact us', pt: 'Fale conosco' },
+  'lp.footer.sales_cta':   { es: 'Hablar con ventas', en: 'Talk to sales', pt: 'Falar com vendas' },
+  'lp.footer.support_cta': { es: 'Soporte técnico', en: 'Technical support', pt: 'Suporte técnico' },
+  'lp.footer.developed_by': { es: 'Desarrollado por JPRS Digital Connect', en: 'Developed by JPRS Digital Connect', pt: 'Desenvolvido pela JPRS Digital Connect' },
 
   // Compartir
   'share.btn':      { es: 'Compartir', en: 'Share', pt: 'Compartilhar' },

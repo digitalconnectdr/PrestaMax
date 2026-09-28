@@ -668,28 +668,10 @@ const LandingPage: React.FC = () => {
         </Reveal>
       </section>
 
-      {/* Respaldo de marca — JPRS Digital Connect */}
-      <section className="py-14 md:py-16 bg-slate-50 border-t border-slate-200">
-        <Reveal className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{t('lp.brand.label')}</p>
-          <h3 className="mt-3 text-2xl font-bold text-slate-900">{t('lp.brand.title')}</h3>
-          <p className="mt-3 text-sm md:text-base text-slate-600 leading-relaxed">{t('lp.brand.desc')}</p>
-          <a
-            href="https://digitalconnectdr.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-100 hover:border-slate-400 transition"
-          >
-            {t('lp.brand.cta')}
-            <ArrowRight className="w-4 h-4" />
-          </a>
-        </Reveal>
-      </section>
-
       {/* Footer */}
       <footer className="bg-slate-900 text-slate-300">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-12">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-12 xl:px-16 py-10 md:py-12">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-8">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gradient-to-br from-[#1e3a5f] to-[#152a45] rounded-lg flex items-center justify-center">
@@ -708,8 +690,14 @@ const LandingPage: React.FC = () => {
                 <li><a href="#how-it-works" className="hover:text-white">{t('lp.nav.how')}</a></li>
                 <li><a href="#pricing" className="hover:text-white">{t('lp.nav.pricing')}</a></li>
                 <li><a href="#faq" className="hover:text-white">{t('lp.nav.faq')}</a></li>
-                <li><Link to="/recursos" className="hover:text-white">Recursos</Link></li>
-                <li><Link to="/calculadora-prestamos" className="hover:text-white">Calculadora de préstamos</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-white">{t('lp.footer.resources')}</h4>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li><Link to="/recursos" className="hover:text-white">{t('lp.footer.resources_center')}</Link></li>
+                <li><Link to="/calculadora-prestamos" className="hover:text-white">{t('lp.footer.calculator')}</Link></li>
               </ul>
             </div>
 
@@ -718,6 +706,15 @@ const LandingPage: React.FC = () => {
               <ul className="mt-3 space-y-2 text-sm">
                 <li><Link to="/login" className="hover:text-white">{t('lp.nav.login')}</Link></li>
                 <li><Link to="/register" className="hover:text-white">{t('lp.footer.create')}</Link></li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => { trackTrialCtaClick('footer'); navigate('/register') }}
+                    className="hover:text-white text-left"
+                  >
+                    {t('lp.cta.try')}
+                  </button>
+                </li>
               </ul>
             </div>
 
@@ -732,34 +729,18 @@ const LandingPage: React.FC = () => {
             <div>
               <h4 className="text-sm font-semibold text-white">{t('lp.footer.contact')}</h4>
               <ul className="mt-3 space-y-2 text-sm">
-                <li><Link to="/contact" className="hover:text-white">{t('lp.footer.contact_us')}</Link></li>
-                <li>
-                  <span className="block text-xs text-slate-500">{t('lp.footer.sales')}</span>
-                  <a href="mailto:credytek@digitalconnectdr.com" className="hover:text-white text-xs break-all">credytek@digitalconnectdr.com</a>
-                </li>
-                <li>
-                  <span className="block text-xs text-slate-500">{t('lp.footer.support')}</span>
-                  <a href="mailto:credyteksupport@digitalconnectdr.com" className="hover:text-white text-xs break-all">credyteksupport@digitalconnectdr.com</a>
-                </li>
+                <li><a href="mailto:credytek@digitalconnectdr.com" className="hover:text-white">{t('lp.footer.sales_cta')}</a></li>
+                <li><a href="mailto:credyteksupport@digitalconnectdr.com" className="hover:text-white">{t('lp.footer.support_cta')}</a></li>
+                <li><a href="https://wa.me/18498891220" target="_blank" rel="noopener noreferrer" className="hover:text-white">WhatsApp</a></li>
               </ul>
             </div>
           </div>
 
-          <div className="mt-10 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-slate-400">
+          <div className="mt-10 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2 text-center sm:text-left">
+            <p className="text-xs text-slate-500">
               © {new Date().getFullYear()} CredyTek. {t('lp.footer.rights')}
             </p>
-            <p className="text-xs text-slate-400">
-              CredyTek — Powered by{' '}
-              <a
-                href="https://digitalconnectdr.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-slate-300 hover:text-white transition-colors"
-              >
-                JPRS Digital Connect
-              </a>
-            </p>
+            <p className="text-xs text-slate-500">{t('lp.footer.developed_by')}</p>
           </div>
         </div>
       </footer>

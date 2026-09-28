@@ -26,7 +26,7 @@ const SECTION_LABELS: Record<string, string> = {
 }
 const CTA_LABELS: Record<string, string> = {
   hero: 'Hero', benefits: 'Beneficios', features: 'Funcionalidades', pricing: 'Precios',
-  final: 'CTA final', nav: 'Menú (escritorio)', nav_mobile: 'Menú (móvil)', unknown: 'Desconocido',
+  final: 'CTA final', nav: 'Menú (escritorio)', nav_mobile: 'Menú (móvil)', footer: 'Footer', unknown: 'Desconocido',
 }
 
 const BehaviorTab: React.FC = () => {
