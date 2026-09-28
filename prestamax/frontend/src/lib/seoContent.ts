@@ -128,7 +128,7 @@ export const SEO_PAGES: SeoPage[] = [
     ],
     problemHeading: 'Dónde Excel deja de alcanzar para préstamos',
     problemItems: [
-      'No hay una forma nativa de calcular mora o generar un plan de cuotas correcto',
+      'Excel no incluye de forma nativa una lógica de gestión de préstamos que automatice cuotas, mora, recibos y seguimiento',
       'Cada persona del equipo puede tener su propia copia, con datos distintos',
       'No genera recibos ni contratos — hay que hacerlos aparte',
       'Un error de fórmula puede pasar meses sin detectarse',

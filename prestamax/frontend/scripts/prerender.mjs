@@ -103,6 +103,18 @@ function wrapJsonLd(...nodes) {
   return { '@context': 'https://schema.org', '@graph': nodes }
 }
 
+// Contenido ya presente en dist/index.html (fuente: frontend/index.html) —
+// se reutiliza tal cual para la ruta "/" en vez de duplicarlo a mano aquí,
+// así el head/noscript de la home tiene una sola fuente de verdad.
+function extractHomeContent() {
+  const title = baseHtml.match(/<title>([^<]*)<\/title>/)?.[1] ?? ''
+  const description = baseHtml.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? ''
+  const jsonLdRaw = baseHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1]
+  const jsonLd = jsonLdRaw ? JSON.parse(jsonLdRaw) : wrapJsonLd(organizationNode())
+  const main = baseHtml.match(/<noscript>\s*(<main[\s\S]*?<\/main>)\s*<\/noscript>/)?.[1] ?? ''
+  return { title, description, jsonLd, main }
+}
+
 const MAIN_STYLE = 'max-width:900px;margin:0 auto;padding:24px;font-family:system-ui,Arial,sans-serif;line-height:1.6;color:#0f172a'
 
 function renderResourcesIndexMain() {
@@ -162,7 +174,55 @@ function renderSeoPageMain(page) {
 </main>`
 }
 
+const home = extractHomeContent()
+
+const registerMain = `<main style="${MAIN_STYLE}">
+  <h1>Crea tu cuenta en CredyTek</h1>
+  <p>Crea tu cuenta para comenzar tu prueba gratuita de 14 días, sin tarjeta de crédito.</p>
+  <p><a href="${SITE}/">Conoce CredyTek</a></p>
+</main>`
+
+const contactMain = `<main style="${MAIN_STYLE}">
+  <h1>Contacto</h1>
+  <p>¿Tienes preguntas sobre planes, precios o soporte técnico? Escríbenos.</p>
+  <ul>
+    <li><a href="mailto:credytek@digitalconnectdr.com">Hablar con ventas</a></li>
+    <li><a href="mailto:credyteksupport@digitalconnectdr.com">Soporte técnico</a></li>
+  </ul>
+  <p><a href="${SITE}/">Ir a CredyTek</a></p>
+</main>`
+
 const routes = [
+  {
+    // La home ya pasa por este mismo pipeline (no solo vite build) para que
+    // su title/canonical/JSON-LD/noscript queden confirmados y consistentes
+    // con el resto de las rutas indexables, en vez de depender únicamente
+    // del index.html estático sin pasar por esta verificación.
+    outPath: 'index.html',
+    title: home.title,
+    description: home.description,
+    canonicalPath: '/',
+    jsonLd: home.jsonLd,
+    main: home.main,
+    keepHreflang: true, // "/" sí tiene variantes ?lang=; las demás rutas no
+  },
+  {
+    outPath: 'register/index.html',
+    title: 'Crear cuenta | CredyTek',
+    description: 'Crea tu cuenta en CredyTek y comienza tu prueba gratuita de 14 días, sin tarjeta de crédito.',
+    canonicalPath: '/register',
+    robots: 'noindex, follow', // página transaccional: no debe indexarse ni heredar el SEO de la home
+    jsonLd: wrapJsonLd(organizationNode()),
+    main: registerMain,
+  },
+  {
+    outPath: 'contact/index.html',
+    title: 'Contacto | CredyTek',
+    description: 'Escríbenos para hablar con ventas o soporte técnico de CredyTek.',
+    canonicalPath: '/contact',
+    jsonLd: wrapJsonLd(organizationNode()),
+    main: contactMain,
+  },
   {
     outPath: 'recursos/index.html',
     title: 'Centro de recursos para prestamistas | CredyTek',
@@ -197,16 +257,19 @@ const routes = [
   })),
 ]
 
-function buildPageHtml({ title, description, canonicalPath, jsonLd, main }) {
+function buildPageHtml({ title, description, canonicalPath, jsonLd, main, robots = 'index, follow', keepHreflang = false }) {
   let html = baseHtml
   html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(title)}</title>`)
   html = html.replace(/(<meta name="description" content=")[^"]*(")/, `$1${escapeHtml(description)}$2`)
+  html = html.replace(/(<meta name="robots" content=")[^"]*(")/, `$1${escapeHtml(robots)}$2`)
   html = html.replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${SITE}${canonicalPath}$2`)
   // Estas rutas no tienen variantes ?lang= (decisión ya tomada en Fase 4) —
   // los hreflang de la home no aplican aquí y se quitan para no sugerir
-  // canonicalización cruzada incorrecta.
-  html = html.replace(/\s*<!-- hreflang[^>]*-->\n?/, '\n')
-  html = html.replace(/\s*<link rel="alternate"[^>]*>\n?/g, '')
+  // canonicalización cruzada incorrecta. La home sí las conserva.
+  if (!keepHreflang) {
+    html = html.replace(/\s*<!-- hreflang[^>]*-->\n?/, '\n')
+    html = html.replace(/\s*<link rel="alternate"[^>]*>\n?/g, '')
+  }
   html = html.replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${escapeHtml(title)}$2`)
   html = html.replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${escapeHtml(description)}$2`)
   html = html.replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${SITE}${canonicalPath}$2`)
