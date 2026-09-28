@@ -21,6 +21,7 @@ import { usePermission } from '@/hooks/usePermission'
 import { AMORT_LABELS, getAmortLabel } from '@/lib/amortization'
 import { printPaymentReceipt, sendReceiptByWhatsApp } from '@/lib/printReceipt'
 import { useT } from '@/lib/i18n'
+import { trackFirstPaymentCreated, trackActivationCompleted } from '@/lib/analytics'
 
 interface Installment {
   id: string
@@ -502,6 +503,9 @@ const LoanDetailPage: React.FC = () => {
         paymentType: paymentData.paymentType,
         overpaymentAction: confirmedOverpaymentAction || paymentData.overpaymentAction,
       })
+      // NOTA: el interceptor de api.ts convierte la respuesta a camelCase.
+      if (payRes.data?.isFirstPayment) trackFirstPaymentCreated()
+      if (payRes.data?.activationCompleted) trackActivationCompleted()
       toast.success(t('ld.payment_ok'))
       const res = await api.get(`/loans/${id}`)
       setLoan(res.data)

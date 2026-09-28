@@ -10,6 +10,8 @@ export function isStripeConfigured(): boolean {
   return !!STRIPE_KEY;
 }
 
+export type BillingPeriod = 'monthly' | 'annual';
+
 const PRICE_ENV_BY_SLUG: Record<string, string> = {
   starter:      'STRIPE_PRICE_STARTER',
   basico:       'STRIPE_PRICE_BASICO',
@@ -17,15 +19,32 @@ const PRICE_ENV_BY_SLUG: Record<string, string> = {
   enterprise:   'STRIPE_PRICE_ENTERPRISE',
 };
 
-export function getPriceIdForPlanSlug(slug: string): string | null {
-  const envName = PRICE_ENV_BY_SLUG[slug?.toLowerCase()];
+// Anuales (Fase 3): env var propia por plan, sin fallback — si no está
+// configurada, esa anual simplemente no está disponible para checkout.
+const PRICE_ENV_BY_SLUG_ANNUAL: Record<string, string> = {
+  starter:      'STRIPE_PRICE_STARTER_ANNUAL',
+  basico:       'STRIPE_PRICE_BASICO_ANNUAL',
+  profesional:  'STRIPE_PRICE_PROFESIONAL_ANNUAL',
+  enterprise:   'STRIPE_PRICE_ENTERPRISE_ANNUAL',
+};
+
+export function getPriceIdForPlanSlug(slug: string, billingPeriod: BillingPeriod = 'monthly'): string | null {
+  const map = billingPeriod === 'annual' ? PRICE_ENV_BY_SLUG_ANNUAL : PRICE_ENV_BY_SLUG;
+  const envName = map[slug?.toLowerCase()];
   if (!envName) return null;
   return process.env[envName] || null;
 }
 
-export function getSlugForPriceId(priceId: string): string | null {
+export function isStripeAnnualConfigured(slug: string): boolean {
+  return !!getPriceIdForPlanSlug(slug, 'annual');
+}
+
+export function getSlugForPriceId(priceId: string): { slug: string; billingPeriod: BillingPeriod } | null {
   for (const [slug, envName] of Object.entries(PRICE_ENV_BY_SLUG)) {
-    if (process.env[envName] === priceId) return slug;
+    if (process.env[envName] === priceId) return { slug, billingPeriod: 'monthly' };
+  }
+  for (const [slug, envName] of Object.entries(PRICE_ENV_BY_SLUG_ANNUAL)) {
+    if (process.env[envName] === priceId) return { slug, billingPeriod: 'annual' };
   }
   return null;
 }

@@ -3,6 +3,7 @@ import { getDb, uuid, now, r2, nextDocNumber } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { generateDraft } from '../services/whatsappService';
 import { notifyTenantAdmins } from '../lib/notify';
+import { checkAndMarkActivation } from '../lib/activation';
 // FIX P0/P1 (Jun 2026): usar el motor UNIFICADO de calculations.ts.
 // Antes este archivo tenia copias locales de allocatePayment/calcMora con el
 // mismo codigo — riesgo de drift. Ademas la libreria ahora hace la aritmetica
@@ -282,6 +283,11 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       return res.status(400).json({ error: `Este préstamo ya está "${loan.status}" y no acepta más pagos` });
     }
 
+    // Fase 3: activación — se calcula ANTES de insertar el pago (cualquiera de
+    // las dos ramas de abajo, regular o prorroga, cuenta como "un pago").
+    const paymentCountBefore = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE tenant_id=?').get(req.tenant.id) as any).c;
+    const isFirstPayment = paymentCountBefore === 0;
+
     // ── Validacion estricta de moneda (P0 Audit fix) ───────────────────────────
     const loanCurrency = (loan.currency || 'DOP').toUpperCase();
     if (bank_account_id) {
@@ -397,6 +403,8 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
           FROM payments p LEFT JOIN users u ON u.id=p.registered_by WHERE p.id=?`).get(payId2),
         receipt: db.prepare('SELECT * FROM receipts WHERE id=?').get(receiptId2),
         breakdown: { prorroga_fee: prorrogaFee, mora: moraAmount, interest: 0, capital: 0, excessToCapital: 0, remaining: 0 },
+        is_first_payment: isFirstPayment,
+        activation_completed: isFirstPayment ? checkAndMarkActivation(db, req.tenant.id) : false,
       });
     }
     // ----------------------------------------------------------------
@@ -567,6 +575,8 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
         FROM payments p LEFT JOIN users u ON u.id=p.registered_by WHERE p.id=?`).get(payId),
       receipt: db.prepare('SELECT * FROM receipts WHERE id=?').get(receiptId),
       breakdown: { interest: r2(totalInterest), capital: r2(totalPrincipal), mora: r2(totalMora), excessToCapital: r2(excessToCapital), remaining: r2(remaining) },
+      is_first_payment: isFirstPayment,
+      activation_completed: isFirstPayment ? checkAndMarkActivation(db, req.tenant.id) : false,
     });
   } catch (e: any) {
     try { getDb().exec('ROLLBACK'); } catch (_) { /* sin transaccion activa */ }

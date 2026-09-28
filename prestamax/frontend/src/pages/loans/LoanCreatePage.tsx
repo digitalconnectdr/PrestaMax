@@ -14,6 +14,7 @@ import AmortizationHelpModal from '@/components/shared/AmortizationHelpModal'
 import { HelpCircle } from 'lucide-react'
 import { generateSchedule as generateLoanSchedule, getNextDate } from '@/lib/loanMath'
 import { useT } from '@/lib/i18n'
+import { trackFirstLoanCreated, trackActivationCompleted } from '@/lib/analytics'
 
 interface Client {
   id: string
@@ -337,6 +338,9 @@ const LoanCreatePage: React.FC = () => {
       }
       const res = await api.post('/loans', payload)
       const loanId = res.data.id
+      // NOTA: el interceptor de api.ts convierte la respuesta a camelCase.
+      if (res.data?.isFirstLoan) trackFirstLoanCreated()
+      if (res.data?.activationCompleted) trackActivationCompleted()
 
       // Registrar los bienes en garantía agregados en el paso de confirmación.
       // No bloqueante: si uno falla no queremos perder el préstamo ya creado,

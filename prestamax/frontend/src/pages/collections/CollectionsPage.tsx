@@ -14,6 +14,7 @@ import { printPaymentReceipt, sendReceiptByWhatsApp } from '@/lib/printReceipt'
 import { Printer } from 'lucide-react'
 import CollectionTasksTab from './CollectionTasksTab'
 import { useT } from '@/lib/i18n'
+import { trackFirstPaymentCreated, trackActivationCompleted } from '@/lib/analytics'
 
 interface CollectionLoan {
   id: string
@@ -153,6 +154,9 @@ const CollectionsPage: React.FC = () => {
         reference: payForm.reference || null,
         paymentDate: new Date().toISOString(),
       })
+      // NOTA: el interceptor de api.ts convierte la respuesta a camelCase.
+      if (payRes.data?.isFirstPayment) trackFirstPaymentCreated()
+      if (payRes.data?.activationCompleted) trackActivationCompleted()
       toast.success(t('pay.post_title'))
       const loanForReceipt = showPayModal
       setShowPayModal(null)

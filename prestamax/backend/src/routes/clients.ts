@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { sendReport, ExportColumn } from '../lib/exportHelpers';
+import { checkAndMarkActivation } from '../lib/activation';
 
 const router = Router();
 
@@ -89,7 +90,16 @@ router.post('/', authenticate, requireTenant, requirePermission('clients.create'
       d.notes||null,d.consent_data_processing?1:0,d.consent_whatsapp?1:0
     );
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'created','client',id,`Creó el cliente: ${full_name}`);
-    res.status(201).json(db.prepare('SELECT * FROM clients WHERE id=?').get(id));
+
+    // Fase 3: activación — count era 0 antes de este insert => es el primer cliente del tenant.
+    const isFirstClient = count === 0;
+    const activationCompleted = isFirstClient ? checkAndMarkActivation(db, req.tenant.id) : false;
+
+    res.status(201).json({
+      ...(db.prepare('SELECT * FROM clients WHERE id=?').get(id) as any),
+      is_first_client: isFirstClient,
+      activation_completed: activationCompleted,
+    });
   } catch(e:any) {
     if (e.code==='SQLITE_CONSTRAINT_UNIQUE') return res.status(400).json({ error: 'Ya existe un cliente con ese número de documento' });
     console.error(e); res.status(500).json({ error: 'Failed to create client' });

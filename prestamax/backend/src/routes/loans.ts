@@ -10,6 +10,7 @@ import { generateDraft } from '../services/whatsappService';
 import { generateSchedule as libGenerateSchedule, getInstallmentCount, getNextDate, calcMoraDetails } from '../lib/calculations';
 import { computePermissions, PermKey } from '../lib/permissions';
 import { sendReport, ExportColumn } from '../lib/exportHelpers';
+import { checkAndMarkActivation } from '../lib/activation';
 
 const router = Router();
 
@@ -145,6 +146,7 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
     // ─────────────────────────────────────────────────────────────────────────
 
     const db = getDb(); const id = uuid();
+    const loanCountBefore = (db.prepare('SELECT COUNT(*) as c FROM loans WHERE tenant_id=?').get(req.tenant.id) as any).c;
     // Validar que el cliente existe en este tenant Y esté activo (defense + business rule)
     const client = db.prepare('SELECT id, full_name, is_active FROM clients WHERE id=? AND tenant_id=?').get(d.client_id, req.tenant.id) as any;
     if (!client) return res.status(404).json({ error: 'Cliente no encontrado en esta empresa' });
@@ -180,8 +182,13 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
     );
     const clientForLog = db.prepare('SELECT full_name FROM clients WHERE id=?').get(d.client_id) as any;
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'created','loan',id,`Creó el préstamo ${loan_number} para ${clientForLog?.full_name||'cliente'}`);
-    const loan = db.prepare(`SELECT l.*,c.full_name as client_name,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.id=?`).get(id);
-    res.status(201).json(loan);
+    const loan = db.prepare(`SELECT l.*,c.full_name as client_name,p.name as product_name FROM loans l JOIN clients c ON c.id=l.client_id JOIN loan_products p ON p.id=l.product_id WHERE l.id=?`).get(id) as any;
+
+    // Fase 3: activación — primer préstamo del tenant.
+    const isFirstLoan = loanCountBefore === 0;
+    const activationCompleted = isFirstLoan ? checkAndMarkActivation(db, req.tenant.id) : false;
+
+    res.status(201).json({ ...loan, is_first_loan: isFirstLoan, activation_completed: activationCompleted });
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to create loan' }); }
 });
 

@@ -32,8 +32,9 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 import ShareButton from '@/components/shared/ShareButton'
 import { useT } from '@/lib/i18n'
 import { Reveal } from '@/components/shared/Reveal'
-import { trackEvent, trackLandingVisit, track, trackTrialCtaClick, trackPlanSelected } from '@/lib/analytics'
+import { trackEvent, trackLandingVisit, track, trackTrialCtaClick, trackPlanSelected, trackBillingToggleChanged } from '@/lib/analytics'
 import { useLandingTracking } from '@/hooks/useLandingTracking'
+import { computeAnnualPricing, type BillingPeriod } from '@/lib/pricing'
 import dashboardScreenshot from '@/assets/landing/dashboard-screenshot.png'
 
 type TFn = (key: string) => string
@@ -140,6 +141,12 @@ const LandingPage: React.FC = () => {
     setMobileMenuOpen(false)
   }
   const [openFaq, setOpenFaq] = useState<number | null>(0)
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly')
+  const handleBillingPeriodChange = (period: BillingPeriod) => {
+    if (period === billingPeriod) return
+    setBillingPeriod(period)
+    trackBillingToggleChanged(period)
+  }
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => { trackLandingVisit('/'); track('landing_view') }, [])
   useLandingTracking()
@@ -486,8 +493,31 @@ const LandingPage: React.FC = () => {
             </p>
           </Reveal>
 
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {plans.map((plan, pi) => (
+          {/* Toggle mensual/anual */}
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleBillingPeriodChange('monthly')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${billingPeriod === 'monthly' ? 'bg-[#1e3a5f] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              {t('lp.billing.monthly')}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBillingPeriodChange('annual')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${billingPeriod === 'annual' ? 'bg-[#1e3a5f] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            >
+              {t('lp.billing.annual')}
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${billingPeriod === 'annual' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                {t('lp.billing.annual_badge')}
+              </span>
+            </button>
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {plans.map((plan, pi) => {
+              const annualPricing = computeAnnualPricing(plan.price)
+              return (
               <Reveal
                 key={plan.name}
                 delay={pi * 80}
@@ -500,17 +530,31 @@ const LandingPage: React.FC = () => {
                 {plan.highlighted && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <span className="px-3 py-1 bg-[#f59e0b] text-white text-xs font-medium rounded-full">
-                      {plan.ctaLabel}
+                      {billingPeriod === 'annual' ? t('lp.billing.best_value') : plan.ctaLabel}
                     </span>
                   </div>
                 )}
                 <div>
                   <h3 className="text-xl font-bold text-slate-900">{plan.name}</h3>
                   <p className="mt-1 text-sm text-slate-500 min-h-[40px]">{plan.description}</p>
-                  <div className="mt-4 flex items-baseline gap-1">
-                    <span className="text-4xl font-bold text-slate-900">${plan.price}</span>
-                    <span className="text-sm text-slate-500">{t('lp.pricing.per_month')}</span>
-                  </div>
+                  {billingPeriod === 'monthly' ? (
+                    <div className="mt-4 flex items-baseline gap-1">
+                      <span className="text-4xl font-bold text-slate-900">${plan.price}</span>
+                      <span className="text-sm text-slate-500">{t('lp.pricing.per_month')}</span>
+                    </div>
+                  ) : (
+                    <div className="mt-4">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-4xl font-bold text-slate-900">${annualPricing.annual}</span>
+                        <span className="text-sm text-slate-500">{t('lp.billing.per_year')}</span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className="text-slate-400 line-through">{t('lp.billing.was').replace('{price}', annualPricing.normalYearPrice.toString())}</span>
+                        <span className="text-emerald-600 font-medium">{t('lp.billing.save').replace('{price}', annualPricing.savings.toString())}</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-slate-500">{t('lp.billing.equiv').replace('{price}', annualPricing.monthlyEquivalent.toString())}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-6 space-y-2 text-sm text-slate-700 border-y border-slate-100 py-4">
@@ -539,7 +583,7 @@ const LandingPage: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => { trackEvent('cta_start', { location: 'pricing', plan: plan.slug }); trackTrialCtaClick('pricing', { plan: plan.slug || 'unknown' }); trackPlanSelected(plan.slug || 'unknown'); navigate('/register') }}
+                  onClick={() => { trackEvent('cta_start', { location: 'pricing', plan: plan.slug }); trackTrialCtaClick('pricing', { plan: plan.slug || 'unknown' }); trackPlanSelected(plan.slug || 'unknown', billingPeriod); navigate('/register') }}
                   className={`mt-6 block w-full text-center px-4 py-2.5 rounded-lg font-medium transition ${
                     plan.highlighted
                       ? 'bg-[#1e3a5f] text-white hover:bg-[#152a45]'
@@ -549,7 +593,7 @@ const LandingPage: React.FC = () => {
                   {t('lp.cta.start')}
                 </button>
               </Reveal>
-            ))}
+            )})}
           </div>
 
           <p className="mt-8 text-center text-sm text-slate-500">

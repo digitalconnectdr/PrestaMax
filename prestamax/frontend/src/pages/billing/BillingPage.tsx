@@ -4,6 +4,9 @@ import api from '@/lib/api';
 import { Check, Loader2, ExternalLink, AlertCircle, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { TenantContext } from '@/contexts/TenantContext';
+import { computeAnnualPricing, type BillingPeriod } from '@/lib/pricing';
+import { trackBillingToggleChanged, trackPlanSelected, trackCheckoutStarted } from '@/lib/analytics';
+import { getVisitorId, getOrRotateSessionId } from '@/lib/visitor';
 
 interface Plan {
   id: string;
@@ -51,6 +54,8 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [whopEnabled, setWhopEnabled] = useState(false);
+  const [annualAvailable, setAnnualAvailable] = useState<Record<string, boolean>>({});
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
   const [portalLoading, setPortalLoading] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<{ id: string; planInterest: string; status: string; createdAt: string } | null>(null);
   const [requestModal, setRequestModal] = useState<{ planSlug: string; planName: string } | null>(null);
@@ -96,6 +101,7 @@ const BillingPage: React.FC = () => {
       setSubscription(subRes.data || null);
       setPendingRequest(pendingRes.data?.pending || null);
       setWhopEnabled(!!whopRes.data?.enabled);
+      setAnnualAvailable(whopRes.data?.annualAvailable || {});
     } catch (e: any) {
       console.error('billing load error', e);
       toast.error(e?.response?.data?.error || 'No se pudo cargar la informacion de suscripcion');
@@ -128,12 +134,18 @@ const BillingPage: React.FC = () => {
     }
   };
 
-  const handleSubscribe = async (planSlug: string) => {
+  const handleSubscribe = async (planSlug: string, period: BillingPeriod) => {
     setCheckoutLoading(planSlug);
+    trackCheckoutStarted(planSlug, period, 'billing_page');
     try {
       // Whop es la pasarela activa; si no está, cae a Stripe.
       const endpoint = whopEnabled ? '/billing/whop-checkout' : '/billing/checkout';
-      const res = await api.post(endpoint, { plan_slug: planSlug });
+      const res = await api.post(endpoint, {
+        plan_slug: planSlug,
+        billing_period: period,
+        visitor_id: getVisitorId(),
+        session_id: getOrRotateSessionId(),
+      });
       if (res.data?.url) {
         window.location.href = res.data.url;
       } else {
@@ -149,6 +161,8 @@ const BillingPage: React.FC = () => {
           'Para cambiar de plan usa "Administrar suscripcion" — evita cobros duplicados.',
           { icon: 'ℹ️', duration: 6000 }
         );
+      } else if (code === 'ANNUAL_NOT_CONFIGURED') {
+        toast.error('El pago anual de este plan aún no está disponible. Selecciona mensual, o solicítalo y te contactamos.', { duration: 6000 });
       } else {
         toast.error(message);
       }
@@ -256,9 +270,30 @@ const BillingPage: React.FC = () => {
 
       {/* Lista de planes */}
       <div id="cambiar-de-plan" className="scroll-mt-24">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">
-          {subscription?.subscriptionStatus === 'active' ? 'Cambiar de plan' : 'Elige tu plan'}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-2xl font-bold text-gray-900">
+            {subscription?.subscriptionStatus === 'active' ? 'Cambiar de plan' : 'Elige tu plan'}
+          </h2>
+          {whopEnabled && (
+            <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+              <button
+                type="button"
+                onClick={() => { setBillingPeriod('monthly'); trackBillingToggleChanged('monthly'); }}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${billingPeriod === 'monthly' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+              >
+                Mensual
+              </button>
+              <button
+                type="button"
+                onClick={() => { setBillingPeriod('annual'); trackBillingToggleChanged('annual'); }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${billingPeriod === 'annual' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+              >
+                Anual
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">3 meses gratis</span>
+              </button>
+            </div>
+          )}
+        </div>
         {plans.length === 0 ? (
           <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
@@ -276,6 +311,8 @@ const BillingPage: React.FC = () => {
               const isMyPlan = subscription?.planSlug === plan.slug;
               const isCurrent = isMyPlan && subscription?.subscriptionStatus === 'active' && !isExpiredByDate;
               const isRenewable = isMyPlan && !isCurrent; // mi plan pero vencido/cancelado
+              const effectivePeriod: BillingPeriod = billingPeriod === 'annual' && annualAvailable[plan.slug] ? 'annual' : 'monthly';
+              const annualPricing = computeAnnualPricing(plan.priceMonthly);
               return (
                 <div key={plan.id} className={`relative rounded-lg border-2 p-6 flex flex-col ${isCurrent ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white hover:border-blue-400'} transition-colors`}>
                   {isCurrent && (
@@ -284,10 +321,25 @@ const BillingPage: React.FC = () => {
                     </span>
                   )}
                   <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-                  <div className="mt-3 mb-4">
-                    <span className="text-4xl font-bold text-gray-900">${plan.priceMonthly}</span>
-                    <span className="text-gray-500"> / mes</span>
-                  </div>
+                  {effectivePeriod === 'monthly' ? (
+                    <div className="mt-3 mb-4">
+                      <span className="text-4xl font-bold text-gray-900">${plan.priceMonthly}</span>
+                      <span className="text-gray-500"> / mes</span>
+                      {billingPeriod === 'annual' && !annualAvailable[plan.slug] && (
+                        <p className="mt-1 text-xs text-amber-600">Anual no disponible aún para este plan</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-3 mb-4">
+                      <span className="text-4xl font-bold text-gray-900">${annualPricing.annual}</span>
+                      <span className="text-gray-500"> / año</span>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className="text-gray-400 line-through">${annualPricing.normalYearPrice}/año</span>
+                        <span className="text-emerald-600 font-medium">Ahorras ${annualPricing.savings}</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-gray-500">Equivale a ${annualPricing.monthlyEquivalent}/mes</p>
+                    </div>
+                  )}
                   {plan.description && (
                     <p className="text-sm text-gray-600 mb-4">{plan.description}</p>
                   )}
@@ -313,8 +365,9 @@ const BillingPage: React.FC = () => {
                   </ul>
                   <button
                     onClick={() => {
+                      trackPlanSelected(plan.slug, effectivePeriod);
                       if (whopEnabled || (plan as any).stripe_price_id) {
-                        handleSubscribe(plan.slug);
+                        handleSubscribe(plan.slug, effectivePeriod);
                       } else {
                         setRequestModal({ planSlug: plan.slug, planName: plan.name });
                         setRequestNote('');

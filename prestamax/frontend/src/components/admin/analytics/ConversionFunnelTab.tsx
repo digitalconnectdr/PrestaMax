@@ -1,6 +1,8 @@
 // ConversionFunnelTab — vista "Conversión": Landing → Pricing → CTA → Signup
-// iniciado → Signup completado → Trial activado, con segmentación opcional
-// por país/dispositivo/fuente/UTM cuando hay datos disponibles.
+// iniciado → Signup completado → Trial activado → Activado → Checkout iniciado
+// → Suscripción iniciada (Fase 3 extiende el funnel de adquisición hasta
+// suscripción real), con segmentación opcional por país/dispositivo/fuente/
+// UTM/plan/período de facturación cuando hay datos disponibles.
 import React, { useEffect, useState } from 'react'
 import { RefreshCw, TrendingDown, ArrowDown } from 'lucide-react'
 import api from '@/lib/api'
@@ -15,12 +17,16 @@ interface FunnelData {
   availableCountries: string[]
   availableDevices: string[]
   availableSources: string[]
+  availablePlans: string[]
+  availableBillingPeriods: string[]
 }
 
 const STEP_LABELS: Record<string, string> = {
   landing: 'Landing', pricing: 'Pricing', cta: 'CTA prueba gratuita',
   signup_started: 'Signup iniciado', signup_completed: 'Signup completado', trial_activated: 'Trial activado',
+  activated: 'Activado', checkout_started: 'Checkout iniciado', subscription_started: 'Suscripción iniciada',
 }
+const BILLING_PERIOD_LABELS: Record<string, string> = { monthly: 'Mensual', annual: 'Anual' }
 const SOURCE_LABELS: Record<string, string> = {
   organic: 'Orgánico', direct: 'Directo', referral: 'Referencia', social: 'Redes sociales', paid: 'Pago', unknown: 'Desconocido',
 }
@@ -30,6 +36,8 @@ const ConversionFunnelTab: React.FC = () => {
   const [country, setCountry] = useState('')
   const [device, setDevice] = useState('')
   const [source, setSource] = useState('')
+  const [plan, setPlan] = useState('')
+  const [billingPeriod, setBillingPeriod] = useState('')
   const [data, setData] = useState<FunnelData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -40,6 +48,8 @@ const ConversionFunnelTab: React.FC = () => {
       if (country) params.set('country', country)
       if (device) params.set('device', device)
       if (source) params.set('source', source)
+      if (plan) params.set('plan', plan)
+      if (billingPeriod) params.set('billing_period', billingPeriod)
       const res = await api.get(`/admin/analytics/funnel?${params.toString()}`)
       setData(res.data)
     } catch (err: any) {
@@ -48,7 +58,7 @@ const ConversionFunnelTab: React.FC = () => {
       setIsLoading(false)
     }
   }
-  useEffect(() => { load() }, [range.preset, range.from, range.to, country, device, source])
+  useEffect(() => { load() }, [range.preset, range.from, range.to, country, device, source, plan, billingPeriod])
 
   const maxCount = Math.max(1, ...(data?.steps.map(s => s.count) || [1]))
 
@@ -61,7 +71,7 @@ const ConversionFunnelTab: React.FC = () => {
         </button>
       </div>
 
-      {data && (data.availableCountries.length > 0 || data.availableDevices.length > 0 || data.availableSources.length > 0) && (
+      {data && (data.availableCountries.length > 0 || data.availableDevices.length > 0 || data.availableSources.length > 0 || data.availablePlans.length > 0 || data.availableBillingPeriods.length > 0) && (
         <div className="flex flex-wrap gap-2">
           {data.availableCountries.length > 0 && (
             <select value={country} onChange={e => setCountry(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -81,8 +91,20 @@ const ConversionFunnelTab: React.FC = () => {
               {data.availableSources.map(s => <option key={s} value={s}>{SOURCE_LABELS[s] || s}</option>)}
             </select>
           )}
-          {(country || device || source) && (
-            <button onClick={() => { setCountry(''); setDevice(''); setSource('') }} className="text-xs text-slate-400 hover:text-slate-700 underline">
+          {data.availablePlans.length > 0 && (
+            <select value={plan} onChange={e => setPlan(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">Todos los planes</option>
+              {data.availablePlans.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          )}
+          {data.availableBillingPeriods.length > 0 && (
+            <select value={billingPeriod} onChange={e => setBillingPeriod(e.target.value)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">Mensual y anual</option>
+              {data.availableBillingPeriods.map(p => <option key={p} value={p}>{BILLING_PERIOD_LABELS[p] || p}</option>)}
+            </select>
+          )}
+          {(country || device || source || plan || billingPeriod) && (
+            <button onClick={() => { setCountry(''); setDevice(''); setSource(''); setPlan(''); setBillingPeriod('') }} className="text-xs text-slate-400 hover:text-slate-700 underline">
               Limpiar filtros
             </button>
           )}

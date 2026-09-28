@@ -165,4 +165,12 @@ export const ALLOWED_EVENT_NAMES = new Set([
   'scroll_75',
   'scroll_90',
   'scroll_100',
+  // ── Fase 3: activación + checkout/suscripción ──────────────────────────────
+  'onboarding_started',
+  'first_client_created',
+  'first_loan_created',
+  'first_payment_created',
+  'activation_completed',
+  'checkout_started',
+  'subscription_started',
 ]);

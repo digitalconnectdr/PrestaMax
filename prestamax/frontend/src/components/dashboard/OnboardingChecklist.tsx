@@ -5,12 +5,13 @@
 // esa preferencia en localStorage; vuelve a aparecer si hay pasos pendientes
 // y el usuario no lo ocultó explícitamente.
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Building2, Package, UserPlus, DollarSign, CreditCard, Link2, Truck, Calendar as CalendarIcon, ChevronDown, ChevronUp, X, PartyPopper } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { Building2, Package, UserPlus, DollarSign, CreditCard, Link2, Truck, Calendar as CalendarIcon, ChevronDown, ChevronUp, X, PartyPopper, Clock } from 'lucide-react'
 import api from '@/lib/api'
 import { useT } from '@/lib/i18n'
 import { runTour } from '@/lib/tourEngine'
 import { getTourSteps, getTourLabels } from '@/lib/tours'
+import { trackOnboardingStarted } from '@/lib/analytics'
 
 interface Status {
   bankAccount: boolean
@@ -23,6 +24,11 @@ interface Status {
 }
 
 const HIDE_KEY = 'credytek_onboarding_hidden'
+// Fase 3: onboarding_started se dispara una sola vez por navegador (no hay
+// forma de saber "una sola vez por trial" sin estado de servidor, y esta señal
+// no necesita esa precisión — solo indica que el checklist se le mostró al
+// usuario mientras aún tenía pasos pendientes).
+const ONBOARDING_STARTED_KEY = 'credytek_onboarding_started_sent'
 // Se dispara UNA sola vez por navegador: si el tenant entra con la cartera
 // vacía, lo guiamos directo a crear su primer cliente en vez de esperar a
 // que descubra el botón "Guíame" por su cuenta. Reduce fricción en el primer
@@ -32,14 +38,30 @@ const AUTO_TOUR_KEY = 'credytek_auto_tour_shown'
 const OnboardingChecklist: React.FC = () => {
   const t = useT()
   const navigate = useNavigate()
+  const location = useLocation()
+  const goToPlans = () => {
+    if (location.pathname === '/settings/subscription' || location.pathname === '/billing') {
+      document.getElementById('cambiar-de-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      navigate('/settings/subscription')
+    }
+  }
   const [status, setStatus] = useState<Status | null>(null)
   const [collapsed, setCollapsed] = useState(false)
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null)
+  const [isTrial, setIsTrial] = useState(false)
   const [hidden, setHidden] = useState<boolean>(() => {
     try { return localStorage.getItem(HIDE_KEY) === '1' } catch { return false }
   })
 
   useEffect(() => {
     api.get('/onboarding/status').then(res => setStatus(res.data)).catch(() => setStatus(null))
+    // Best-effort: si falla (plan sin acceso a /billing, etc.) simplemente no
+    // se muestra el bloque de "días de prueba" — el checklist sigue funcionando.
+    api.get('/billing/subscription').then(res => {
+      setIsTrial(!!res.data?.isTrial)
+      setTrialDaysLeft(res.data?.trialDaysLeft ?? null)
+    }).catch(() => {})
   }, [])
 
   const STEPS = [
@@ -57,6 +79,18 @@ const OnboardingChecklist: React.FC = () => {
   const startTour = (tourId: string) => {
     runTour(tourId, getTourSteps(tourId, t), navigate, getTourLabels(t))
   }
+
+  // Fase 3: onboarding_started — se dispara la primera vez que el checklist
+  // se muestra con pasos pendientes (no simplemente al montar el componente,
+  // que ocurre en cada visita al dashboard).
+  useEffect(() => {
+    if (!status || pendingSteps.length === 0) return
+    try {
+      if (localStorage.getItem(ONBOARDING_STARTED_KEY) === '1') return
+      localStorage.setItem(ONBOARDING_STARTED_KEY, '1')
+    } catch { return }
+    trackOnboardingStarted(trialDaysLeft ?? undefined)
+  }, [status])
 
   useEffect(() => {
     // FIX (onboarding audit, Sep 2026): antes este tour se disparaba SIEMPRE
@@ -147,6 +181,22 @@ const OnboardingChecklist: React.FC = () => {
           style={{ width: `${(done / total) * 100}%` }}
         />
       </div>
+
+      {/* Fase 3: días de prueba restantes + CTA para elegir plan */}
+      {!collapsed && isTrial && trialDaysLeft != null && (
+        <div className="flex items-center justify-between gap-3 px-5 py-2.5 bg-amber-50 border-b border-amber-100">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-amber-800">
+            <Clock className="w-3.5 h-3.5" />
+            {trialDaysLeft > 0 ? t('onb.trial_days').replace('{n}', String(trialDaysLeft)) : t('onb.trial_today')}
+          </span>
+          <button
+            onClick={goToPlans}
+            className="text-xs px-3 py-1 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition flex-shrink-0"
+          >
+            {t('onb.choose_plan')}
+          </button>
+        </div>
+      )}
 
       {!collapsed && !allDone && (
         <ul className="divide-y divide-slate-100">

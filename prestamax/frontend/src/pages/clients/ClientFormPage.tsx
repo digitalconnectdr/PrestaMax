@@ -9,6 +9,7 @@ import { ArrowLeft } from 'lucide-react'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useT } from '@/lib/i18n'
+import { trackFirstClientCreated, trackActivationCompleted } from '@/lib/analytics'
 
 interface FormData {
   firstName: string
@@ -186,7 +187,11 @@ const ClientFormPage: React.FC = () => {
       }
 
       if (!isEditMode) {
-        await api.post('/clients', payload)
+        const res = await api.post('/clients', payload)
+        // NOTA: el interceptor de api.ts convierte la respuesta a camelCase
+        // (is_first_client -> isFirstClient) — usar la clave camelCase aquí.
+        if (res.data?.isFirstClient) trackFirstClientCreated()
+        if (res.data?.activationCompleted) trackActivationCompleted()
         toast.success(t('cf.created_ok'))
       } else {
         await api.put(`/clients/${id}`, payload)

@@ -6,6 +6,7 @@ import {
   stripe,
   isStripeConfigured,
   getPriceIdForPlanSlug,
+  isStripeAnnualConfigured,
   getSlugForPriceId,
   createCheckoutSession,
   createPortalSession,
@@ -14,10 +15,19 @@ import {
 import {
   isWhopConfigured,
   getWhopPlanIdForSlug,
+  isWhopAnnualConfigured,
   getSlugForWhopPlanId,
   createWhopCheckout,
   verifyWhopWebhook,
 } from '../services/whopService';
+import { insertServerAnalyticsEvent } from '../lib/analyticsEvents';
+
+// Fase 3: mensual (único período aceptado hasta hoy) o anual (requiere IDs de
+// plan/precio anuales configurados en el proveedor activo — ver whopService/
+// stripeService). Cualquier otro valor recibido cae a 'monthly'.
+function normalizeBillingPeriod(v: any): 'monthly' | 'annual' {
+  return v === 'annual' ? 'annual' : 'monthly';
+}
 
 const router = Router();
 
@@ -110,10 +120,17 @@ router.post('/checkout', authenticate, requireTenant, async (req: AuthRequest, r
     return res.status(503).json({ error: 'Pagos no estan disponibles en este momento' });
   }
   try {
-    const { plan_slug } = req.body;
+    const { plan_slug, billing_period, visitor_id, session_id } = req.body;
     if (!plan_slug) return res.status(400).json({ error: 'plan_slug es requerido' });
+    const billingPeriod = normalizeBillingPeriod(billing_period);
 
-    const priceId = getPriceIdForPlanSlug(plan_slug);
+    if (billingPeriod === 'annual' && !isStripeAnnualConfigured(plan_slug)) {
+      return res.status(400).json({
+        error: `El plan "${plan_slug}" aún no tiene un precio anual configurado. Selecciona mensual, o contacta a soporte.`,
+        code: 'ANNUAL_NOT_CONFIGURED',
+      });
+    }
+    const priceId = getPriceIdForPlanSlug(plan_slug, billingPeriod);
     if (!priceId) return res.status(400).json({ error: `Plan "${plan_slug}" no esta disponible para suscripcion` });
 
     const tenantId = req.tenant.id;
@@ -148,7 +165,7 @@ router.post('/checkout', authenticate, requireTenant, async (req: AuthRequest, r
     // Idempotency key: previene que un click duplicado (red lenta, doble tap)
     // cree dos sesiones de Stripe distintas para el mismo intento.
     // Stripe no creara una sesion duplicada con la misma key dentro de 24h.
-    const idempotencyKey = `checkout-${tenantId}-${plan_slug}-${Math.floor(Date.now() / 60000)}`;
+    const idempotencyKey = `checkout-${tenantId}-${plan_slug}-${billingPeriod}-${Math.floor(Date.now() / 60000)}`;
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -157,8 +174,8 @@ router.post('/checkout', authenticate, requireTenant, async (req: AuthRequest, r
       success_url: `${FRONTEND()}/settings?stripe=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${FRONTEND()}/settings?stripe=cancel`,
       client_reference_id: tenantId,
-      metadata: { tenant_id: tenantId, plan_slug },
-      subscription_data: { metadata: { tenant_id: tenantId, plan_slug } },
+      metadata: { tenant_id: tenantId, plan_slug, billing_period: billingPeriod, visitor_id: visitor_id || '', session_id: session_id || '' },
+      subscription_data: { metadata: { tenant_id: tenantId, plan_slug, billing_period: billingPeriod, visitor_id: visitor_id || '', session_id: session_id || '' } },
       allow_promotion_codes: true,
       billing_address_collection: 'auto',
       ...(req.tenant.stripe_customer_id
@@ -251,13 +268,17 @@ const webhookHandler = async (req: Request, res: Response) => {
         if (tenantId) {
           // Resolver el plan a partir del subscription line item (priceId)
           let newPlanId: string | null = null;
+          let resolvedSlug: string | null = null;
+          let billingPeriod: 'monthly' | 'annual' = normalizeBillingPeriod(session.metadata?.billing_period);
           try {
             if (subscriptionId && stripe) {
               const sub = await stripe.subscriptions.retrieve(subscriptionId);
               const priceId = sub.items?.data?.[0]?.price?.id;
-              const planSlug = priceId ? getSlugForPriceId(priceId) : null;
-              if (planSlug) {
-                const planRow = db.prepare('SELECT id FROM plans WHERE slug=?').get(planSlug) as any;
+              const resolved = priceId ? getSlugForPriceId(priceId) : null;
+              if (resolved) {
+                resolvedSlug = resolved.slug;
+                billingPeriod = resolved.billingPeriod;
+                const planRow = db.prepare('SELECT id FROM plans WHERE slug=?').get(resolved.slug) as any;
                 newPlanId = planRow?.id || null;
               }
             }
@@ -266,19 +287,28 @@ const webhookHandler = async (req: Request, res: Response) => {
           if (newPlanId) {
             db.prepare(`UPDATE tenants
               SET stripe_customer_id=?, stripe_subscription_id=?, subscription_status='active',
-                  plan_id=?, subscription_start=datetime('now'), updated_at=datetime('now')
+                  plan_id=?, billing_cycle=?, subscription_start=datetime('now'), updated_at=datetime('now')
               WHERE id=?`)
-              .run(customerId, subscriptionId, newPlanId, tenantId);
+              .run(customerId, subscriptionId, newPlanId, billingPeriod, tenantId);
             // Limpiar permisos explicitos que el nuevo plan no permite
             applyPlanChange(db, tenantId, newPlanId);
           } else {
             db.prepare(`UPDATE tenants
               SET stripe_customer_id=?, stripe_subscription_id=?, subscription_status='active',
-                  subscription_start=datetime('now'), updated_at=datetime('now')
+                  billing_cycle=?, subscription_start=datetime('now'), updated_at=datetime('now')
               WHERE id=?`)
-              .run(customerId, subscriptionId, tenantId);
+              .run(customerId, subscriptionId, billingPeriod, tenantId);
           }
-          console.log(`[Stripe] Tenant ${tenantId} suscripcion activada (sub: ${subscriptionId}, plan: ${newPlanId || 'unchanged'})`);
+          // Fase 3: subscription_started — la fuente de verdad es este webhook,
+          // no una redirección del navegador que podría no completarse nunca.
+          insertServerAnalyticsEvent(db, {
+            eventName: 'subscription_started',
+            visitorId: session.metadata?.visitor_id,
+            sessionId: session.metadata?.session_id,
+            plan: resolvedSlug || session.metadata?.plan_slug,
+            billingPeriod,
+          });
+          console.log(`[Stripe] Tenant ${tenantId} suscripcion activada (sub: ${subscriptionId}, plan: ${newPlanId || 'unchanged'}, periodo: ${billingPeriod})`);
         }
         break;
       }
@@ -291,10 +321,10 @@ const webhookHandler = async (req: Request, res: Response) => {
         const status = sub.status; // active, past_due, canceled, unpaid, trialing
         const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
         const priceId = sub.items?.data?.[0]?.price?.id;
-        const planSlug = priceId ? getSlugForPriceId(priceId) : null;
+        const resolved = priceId ? getSlugForPriceId(priceId) : null;
         let newPlanId: string | null = null;
-        if (planSlug) {
-          const planRow = db.prepare('SELECT id FROM plans WHERE slug=?').get(planSlug) as any;
+        if (resolved) {
+          const planRow = db.prepare('SELECT id FROM plans WHERE slug=?').get(resolved.slug) as any;
           newPlanId = planRow?.id || null;
         }
         if (tenantId) {
@@ -308,13 +338,14 @@ const webhookHandler = async (req: Request, res: Response) => {
           const localStatus = ['active', 'trialing'].includes(status) ? 'active'
             : status === 'canceled' ? 'cancelled'
             : 'expired'; // unpaid / incomplete_expired / etc — Stripe ya agotó reintentos
+          const billingPeriod = resolved?.billingPeriod || normalizeBillingPeriod(sub.metadata?.billing_period);
           if (newPlanId) {
             // Verificar si es un cambio real de plan (upgrade o downgrade)
             const current = db.prepare('SELECT plan_id FROM tenants WHERE id=?').get(tenantId) as any;
             const planChanged = current?.plan_id !== newPlanId;
 
-            db.prepare(`UPDATE tenants SET subscription_status=?, subscription_end=?, plan_id=?, updated_at=datetime('now') WHERE id=?`)
-              .run(localStatus, periodEnd, newPlanId, tenantId);
+            db.prepare(`UPDATE tenants SET subscription_status=?, subscription_end=?, plan_id=?, billing_cycle=?, updated_at=datetime('now') WHERE id=?`)
+              .run(localStatus, periodEnd, newPlanId, billingPeriod, tenantId);
 
             // Si hubo cambio de plan, limpiar permisos explicitos que el nuevo plan no permite
             if (planChanged) {
@@ -322,10 +353,10 @@ const webhookHandler = async (req: Request, res: Response) => {
               console.log(`[Stripe] Tenant ${tenantId} cambio plan ${current?.plan_id} -> ${newPlanId}, permisos limpiados`);
             }
           } else {
-            db.prepare(`UPDATE tenants SET subscription_status=?, subscription_end=?, updated_at=datetime('now') WHERE id=?`)
-              .run(localStatus, periodEnd, tenantId);
+            db.prepare(`UPDATE tenants SET subscription_status=?, subscription_end=?, billing_cycle=?, updated_at=datetime('now') WHERE id=?`)
+              .run(localStatus, periodEnd, billingPeriod, tenantId);
           }
-          console.log(`[Stripe] Tenant ${tenantId} estado=${localStatus} hasta=${periodEnd}`);
+          console.log(`[Stripe] Tenant ${tenantId} estado=${localStatus} hasta=${periodEnd} periodo=${billingPeriod}`);
         }
         break;
       }
@@ -495,23 +526,41 @@ router.get('/my-pending-request', authenticate, requireTenant, (req: AuthRequest
 // WHOP — pasarela de pago alternativa a Stripe
 // ═════════════════════════════════════════════════════════════════════════════
 
-// GET /api/billing/whop-config — indica si Whop está disponible (para el frontend)
+// GET /api/billing/whop-config — indica si Whop está disponible (para el frontend),
+// y qué planes tienen ya un plan_id ANUAL configurado (Fase 3) — así el toggle
+// anual del frontend puede ocultarse/deshabilitarse por plan en vez de fallar
+// recién al intentar el checkout.
 router.get('/whop-config', (_req: Request, res: Response) => {
-  res.json({ enabled: isWhopConfigured() });
+  const annualBySlug: Record<string, boolean> = {};
+  for (const slug of ['starter', 'basico', 'profesional', 'enterprise']) {
+    annualBySlug[slug] = isWhopAnnualConfigured(slug);
+  }
+  res.json({ enabled: isWhopConfigured(), annualAvailable: annualBySlug });
 });
 
 // POST /api/billing/whop-checkout — crea una checkout configuration en Whop con
-// metadata {tenant_id, plan_slug} y devuelve la URL de pago.
-// Body: { plan_slug }
+// metadata {tenant_id, plan_slug, billing_period, visitor_id, session_id} y
+// devuelve la URL de pago.
+// Body: { plan_slug, billing_period?, visitor_id?, session_id? }
 router.post('/whop-checkout', authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
   if (!isWhopConfigured()) {
     return res.status(503).json({ error: 'Pagos no están disponibles en este momento' });
   }
   try {
-    const { plan_slug } = req.body || {};
+    const { plan_slug, billing_period, visitor_id, session_id } = req.body || {};
     if (!plan_slug) return res.status(400).json({ error: 'plan_slug es requerido' });
+    const billingPeriod = normalizeBillingPeriod(billing_period);
 
-    const whopPlanId = getWhopPlanIdForSlug(plan_slug);
+    // No simular: si se pide anual y el plan_id anual no existe en Whop
+    // (todavía no se creó/configuró en el dashboard de Whop), se rechaza
+    // explícitamente en vez de cobrar el precio mensual por error.
+    if (billingPeriod === 'annual' && !isWhopAnnualConfigured(plan_slug)) {
+      return res.status(400).json({
+        error: `El plan "${plan_slug}" aún no tiene un precio anual configurado en Whop. Selecciona mensual, o contacta a soporte.`,
+        code: 'ANNUAL_NOT_CONFIGURED',
+      });
+    }
+    const whopPlanId = getWhopPlanIdForSlug(plan_slug, billingPeriod);
     if (!whopPlanId) return res.status(400).json({ error: `Plan "${plan_slug}" no está disponible para suscripción` });
 
     const tenantId = req.tenant.id;
@@ -519,7 +568,11 @@ router.post('/whop-checkout', authenticate, requireTenant, async (req: AuthReque
 
     const { purchase_url } = await createWhopCheckout(
       whopPlanId,
-      { tenant_id: tenantId, plan_slug, user_id: (req as any).user.id },
+      {
+        tenant_id: tenantId, plan_slug, billing_period: billingPeriod,
+        visitor_id: visitor_id || '', session_id: session_id || '',
+        user_id: (req as any).user.id,
+      },
       redirectUrl,
     );
     res.json({ url: purchase_url });
@@ -554,11 +607,15 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
     || data.plan?.metadata
     || {};
   const tenantId = meta.tenant_id || null;
-  // plan_slug: de la metadata, o resuelto por el plan_id de Whop presente en el evento.
+  // plan_slug + periodo: de la metadata (billing_period explícito de nuestro
+  // checkout), o resuelto por el plan_id de Whop presente en el evento (que ya
+  // distingue mensual/anual porque son plan_ids distintos en Whop).
   const whopPlanId = data.plan_id || data.plan?.id || data.membership?.plan_id || null;
-  const planSlug = meta.plan_slug || (whopPlanId ? getSlugForWhopPlanId(whopPlanId) : null);
+  const resolvedByPlanId = whopPlanId ? getSlugForWhopPlanId(whopPlanId) : null;
+  const planSlug: string | null = meta.plan_slug || resolvedByPlanId?.slug || null;
+  const billingPeriod: 'monthly' | 'annual' = normalizeBillingPeriod(meta.billing_period || resolvedByPlanId?.billingPeriod);
 
-  console.log(`[Whop] Evento: ${rawType} | tenant=${tenantId || '?'} | plan=${planSlug || '?'}`);
+  console.log(`[Whop] Evento: ${rawType} | tenant=${tenantId || '?'} | plan=${planSlug || '?'} | periodo=${billingPeriod}`);
 
   try {
     const isActivation = rawType.includes('membership_activated') || rawType.includes('went_valid') || rawType === 'payment_succeeded';
@@ -582,18 +639,27 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
       if (newPlanId) {
         db.prepare(`UPDATE tenants
           SET whop_membership_id=?, whop_plan_id=?, subscription_status='active',
-              plan_id=?, subscription_start=datetime('now'), subscription_end=?, updated_at=datetime('now')
+              plan_id=?, billing_cycle=?, subscription_start=datetime('now'), subscription_end=?, updated_at=datetime('now')
           WHERE id=?`)
-          .run(membershipId, whopPlanId, newPlanId, subEnd, tenantId);
+          .run(membershipId, whopPlanId, newPlanId, billingPeriod, subEnd, tenantId);
         applyPlanChange(db, tenantId, newPlanId);
       } else {
         db.prepare(`UPDATE tenants
           SET whop_membership_id=?, subscription_status='active',
-              subscription_start=datetime('now'), subscription_end=?, updated_at=datetime('now')
+              billing_cycle=?, subscription_start=datetime('now'), subscription_end=?, updated_at=datetime('now')
           WHERE id=?`)
-          .run(membershipId, subEnd, tenantId);
+          .run(membershipId, billingPeriod, subEnd, tenantId);
       }
-      console.log(`[Whop] Tenant ${tenantId} suscripción ACTIVADA (plan: ${newPlanId || 'sin cambio'}, hasta ${subEnd})`);
+      // Fase 3: subscription_started — la fuente de verdad es este webhook, no
+      // la redirección de éxito del navegador (que podría cerrarse antes).
+      insertServerAnalyticsEvent(db, {
+        eventName: 'subscription_started',
+        visitorId: meta.visitor_id,
+        sessionId: meta.session_id,
+        plan: planSlug,
+        billingPeriod,
+      });
+      console.log(`[Whop] Tenant ${tenantId} suscripción ACTIVADA (plan: ${newPlanId || 'sin cambio'}, periodo: ${billingPeriod}, hasta ${subEnd})`);
     } else if (isDeactivation) {
       // Localizar tenant por metadata o por whop_membership_id
       const membershipId = data.id || data.membership?.id || null;

@@ -86,6 +86,10 @@ export type FunnelEventName =
   | 'signup_completed' | 'trial_activated' | 'billing_toggle_changed'
   | 'plan_selected' | 'whatsapp_click' | 'section_view'
   | 'scroll_25' | 'scroll_50' | 'scroll_75' | 'scroll_90' | 'scroll_100'
+  // Fase 3 — activación + checkout/suscripción
+  | 'onboarding_started' | 'first_client_created' | 'first_loan_created'
+  | 'first_payment_created' | 'activation_completed' | 'checkout_started'
+  | 'subscription_started'
 
 export interface FunnelEventProps {
   cta_location?: string
@@ -200,4 +204,38 @@ export function trackSectionView(section: string): void {
 
 export function trackScrollDepth(depth: 25 | 50 | 75 | 90 | 100): void {
   track(`scroll_${depth}` as FunnelEventName, { scroll_depth: depth })
+}
+
+// ── Fase 3: activación (checklist post-signup) + checkout/suscripción ───────
+// Todos idempotentes desde el punto de vista de quien los llama: el backend
+// (no localStorage) decide si el hito realmente es "el primero" o si la
+// cuenta "se activó", y devuelve esa verdad en la respuesta de la creación
+// (is_first_client/is_first_loan/is_first_payment/activation_completed). El
+// frontend solo dispara el evento cuando esa bandera viene en true — nunca
+// deriva el estado por su cuenta. Ninguno de estos eventos lleva PII, montos,
+// ni identificadores de negocio (cliente, préstamo, contrato): solo el hecho
+// de que ocurrieron.
+
+export function trackOnboardingStarted(daysRemaining?: number): void {
+  track('onboarding_started', daysRemaining != null ? { days_remaining: daysRemaining } : {})
+}
+
+export function trackFirstClientCreated(): void {
+  track('first_client_created')
+}
+
+export function trackFirstLoanCreated(): void {
+  track('first_loan_created')
+}
+
+export function trackFirstPaymentCreated(): void {
+  track('first_payment_created')
+}
+
+export function trackActivationCompleted(): void {
+  track('activation_completed')
+}
+
+export function trackCheckoutStarted(plan: string, billingPeriod: string, ctaLocation?: string): void {
+  track('checkout_started', { plan, billing_period: billingPeriod, cta_location: ctaLocation })
 }

@@ -622,16 +622,28 @@ router.get('/analytics/summary', authenticate, requirePlatformAdmin, (req: AuthR
 });
 
 // GET funnel de conversion: Landing -> Pricing -> CTA -> Signup iniciado ->
-// Signup completado -> Trial activado. Segmentable por pais/dispositivo/
-// fuente/utm_source cuando hay dato disponible (no inventa segmentacion que
-// aun no se puede relacionar).
-const FUNNEL_STEPS: { key: string; event: string }[] = [
-  { key: 'landing', event: 'landing_view' },
-  { key: 'pricing', event: 'pricing_view' },
-  { key: 'cta', event: 'trial_cta_click' },
-  { key: 'signup_started', event: 'signup_started' },
-  { key: 'signup_completed', event: 'signup_completed' },
-  { key: 'trial_activated', event: 'trial_activated' },
+// Signup completado -> Trial activado -> Activado -> Checkout iniciado ->
+// Suscripcion iniciada (Fase 3 extiende el funnel de Fase 1 hasta suscripcion
+// real). Segmentable por pais/dispositivo/fuente/utm_source/plan/periodo de
+// facturacion cuando hay dato disponible.
+//
+// NOTA DE METODOLOGIA (Fase 3): los primeros 6 pasos (adquisicion, hasta
+// trial_activated) cuentan SESIONES distintas — tiene sentido porque ocurren
+// en la misma visita. Los ultimos 3 pasos (activated/checkout/subscription)
+// cuentan VISITANTES distintos: son eventos de ciclo de vida que pueden
+// ocurrir dias despues, en otra sesion (la sesion original ya expiro a los
+// 30 min de inactividad). Comparar sesiones vs visitantes es una aproximacion
+// razonable — nunca un mismo visitante cuenta dos veces dentro de cada grupo.
+const FUNNEL_STEPS: { key: string; event: string; countBy: 'session_id' | 'visitor_id' }[] = [
+  { key: 'landing', event: 'landing_view', countBy: 'session_id' },
+  { key: 'pricing', event: 'pricing_view', countBy: 'session_id' },
+  { key: 'cta', event: 'trial_cta_click', countBy: 'session_id' },
+  { key: 'signup_started', event: 'signup_started', countBy: 'session_id' },
+  { key: 'signup_completed', event: 'signup_completed', countBy: 'session_id' },
+  { key: 'trial_activated', event: 'trial_activated', countBy: 'session_id' },
+  { key: 'activated', event: 'activation_completed', countBy: 'visitor_id' },
+  { key: 'checkout_started', event: 'checkout_started', countBy: 'visitor_id' },
+  { key: 'subscription_started', event: 'subscription_started', countBy: 'visitor_id' },
 ];
 router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
@@ -644,11 +656,13 @@ router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRe
     if (q.device) { extra += ' AND device_type = ?'; params.push(q.device); }
     if (q.source) { extra += ' AND traffic_source = ?'; params.push(q.source); }
     if (q.utm_source) { extra += ' AND utm_source = ?'; params.push(q.utm_source); }
+    if (q.plan) { extra += ' AND plan = ?'; params.push(q.plan); }
+    if (q.billing_period) { extra += ' AND billing_period = ?'; params.push(q.billing_period); }
 
     const steps = FUNNEL_STEPS.map(s => {
       const count = (db.prepare(`
-        SELECT COUNT(DISTINCT session_id) as c FROM analytics_events
-        WHERE event_name=? AND created_at BETWEEN ? AND ? AND (is_bot=0 OR is_bot IS NULL) AND session_id IS NOT NULL ${extra}
+        SELECT COUNT(DISTINCT ${s.countBy}) as c FROM analytics_events
+        WHERE event_name=? AND created_at BETWEEN ? AND ? AND (is_bot=0 OR is_bot IS NULL) AND ${s.countBy} IS NOT NULL ${extra}
       `).get(s.event, ...params) as any).c;
       return { key: s.key, event: s.event, count };
     });
@@ -667,20 +681,31 @@ router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRe
     const availableCountries = db.prepare(`SELECT DISTINCT country FROM analytics_events WHERE country IS NOT NULL AND created_at BETWEEN ? AND ? LIMIT 50`).all(from, to).map((r: any) => r.country);
     const availableDevices = db.prepare(`SELECT DISTINCT device_type FROM analytics_events WHERE device_type IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.device_type);
     const availableSources = db.prepare(`SELECT DISTINCT traffic_source FROM analytics_events WHERE traffic_source IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.traffic_source);
+    const availablePlans = db.prepare(`SELECT DISTINCT plan FROM analytics_events WHERE plan IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.plan);
+    const availableBillingPeriods = db.prepare(`SELECT DISTINCT billing_period FROM analytics_events WHERE billing_period IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.billing_period);
 
     res.json({
       range: { from, to },
       steps: stepsWithRates,
       overallConversion,
-      filters: { country: q.country || null, device: q.device || null, source: q.source || null, utm_source: q.utm_source || null },
-      availableCountries, availableDevices, availableSources,
+      filters: {
+        country: q.country || null, device: q.device || null, source: q.source || null,
+        utm_source: q.utm_source || null, plan: q.plan || null, billing_period: q.billing_period || null,
+      },
+      availableCountries, availableDevices, availableSources, availablePlans, availableBillingPeriods,
     });
   } catch (e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
 // GET comportamiento: profundidad de scroll y visibilidad de secciones del
 // landing, mas clics de CTA por ubicacion (para comparar rendimiento).
-const LANDING_SECTIONS = ['hero', 'benefits', 'how-it-works', 'features', 'pricing', 'faq', 'cta-final'];
+// FIX (Fase 3): esta lista se había quedado con los nombres de secciones V1
+// del landing (benefits/features) tras el rediseño de Fase 2, que renombró la
+// estructura a problem-result/capabilities/differentiator/migration/security.
+// Sin este fix, la pestaña Comportamiento reportaba 0 visitantes/CTA para
+// TODAS las secciones del landing actual (V2) porque section_name nunca
+// coincidía con esta lista.
+const LANDING_SECTIONS = ['hero', 'problem-result', 'how-it-works', 'capabilities', 'differentiator', 'migration', 'security', 'pricing', 'faq', 'cta-final'];
 router.get('/analytics/behavior', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();

@@ -17,6 +17,7 @@ import { AuthContext } from '@/contexts/AuthContext'
 import { TenantContext } from '@/contexts/TenantContext'
 import { usePermission } from '@/hooks/usePermission'
 import { useT, t as tg } from '@/lib/i18n'
+import { trackFirstPaymentCreated, trackActivationCompleted } from '@/lib/analytics'
 
 interface Payment {
   id: string
@@ -277,6 +278,9 @@ const PaymentsPage: React.FC = () => {
         paymentType: payForm.paymentType,
         overpaymentAction: confirmedOverpaymentAction || payForm.overpaymentAction,
       })
+      // NOTA: el interceptor de api.ts convierte la respuesta a camelCase.
+      if (payRes.data?.isFirstPayment) trackFirstPaymentCreated()
+      if (payRes.data?.activationCompleted) trackActivationCompleted()
       toast.success(t('pay.registered_ok'))
       const loanForReceipt = selectedLoan
       closeModal()
