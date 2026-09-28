@@ -36,6 +36,7 @@ import { trackEvent, trackLandingVisit, track, trackTrialCtaClick, trackPlanSele
 import { useLandingTracking } from '@/hooks/useLandingTracking'
 import { computeAnnualPricing, type BillingPeriod } from '@/lib/pricing'
 import dashboardScreenshot from '@/assets/landing/dashboard-screenshot.png'
+import dashboardScreenshotWebp from '@/assets/landing/dashboard-screenshot.webp'
 
 type TFn = (key: string) => string
 interface Plan {
@@ -286,15 +287,18 @@ const LandingPage: React.FC = () => {
           {/* Captura real del producto */}
           <div className="mt-14 relative max-w-5xl mx-auto">
             <div className="bg-white rounded-xl border border-slate-200 shadow-2xl shadow-slate-900/10 overflow-hidden">
-              <img
-                src={dashboardScreenshot}
-                alt={t('lp.hero.shot_alt')}
-                width={1440}
-                height={900}
-                loading="eager"
-                fetchPriority="high"
-                className="w-full h-auto block"
-              />
+              <picture>
+                <source srcSet={dashboardScreenshotWebp} type="image/webp" />
+                <img
+                  src={dashboardScreenshot}
+                  alt={t('lp.hero.shot_alt')}
+                  width={1440}
+                  height={900}
+                  loading="eager"
+                  fetchPriority="high"
+                  className="w-full h-auto block"
+                />
+              </picture>
             </div>
           </div>
         </div>
