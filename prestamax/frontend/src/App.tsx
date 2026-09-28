@@ -72,6 +72,10 @@ const LoanRequestPublicPage = lazy(() => import('@/pages/public/LoanRequestPubli
 const TermsPage = lazy(() => import('@/pages/public/TermsPage'))
 const PrivacyPage = lazy(() => import('@/pages/public/PrivacyPage'))
 const ContactPage = lazy(() => import('@/pages/public/ContactPage'))
+const ResourcesIndexPage = lazy(() => import('@/pages/public/ResourcesIndexPage'))
+const ResourceArticlePage = lazy(() => import('@/pages/public/ResourceArticlePage'))
+const SeoLandingPage = lazy(() => import('@/pages/public/SeoLandingPage'))
+const CalculatorPublicPage = lazy(() => import('@/pages/public/CalculatorPublicPage'))
 const HelpPage = lazy(() => import('@/pages/help/HelpPage'))
 const LoanRequestsPage = lazy(() => import('@/pages/requests/LoanRequestsPage'))
 const LoanCalculatorPage = lazy(() => import('@/pages/calculator/LoanCalculatorPage'))
@@ -174,6 +178,15 @@ const AppRoutes: React.FC = () => {
       <Route path="/contact" element={<ContactPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+
+      {/* Fase 4 — SEO / Centro de Recursos (públicas, sin autenticación) */}
+      <Route path="/recursos" element={<ResourcesIndexPage />} />
+      <Route path="/recursos/:slug" element={<ResourceArticlePage />} />
+      <Route path="/calculadora-prestamos" element={<CalculatorPublicPage />} />
+      <Route path="/software-prestamos-republica-dominicana" element={<SeoLandingPage slug="software-prestamos-republica-dominicana" />} />
+      <Route path="/software-para-prestamistas" element={<SeoLandingPage slug="software-para-prestamistas" />} />
+      <Route path="/control-prestamos-cobros" element={<SeoLandingPage slug="control-prestamos-cobros" />} />
+      <Route path="/alternativa-excel-prestamos" element={<SeoLandingPage slug="alternativa-excel-prestamos" />} />
 
       <Route path="/" element={state.isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
       <Route path="*" element={<Navigate to={state.isAuthenticated ? '/dashboard' : '/'} replace />} />

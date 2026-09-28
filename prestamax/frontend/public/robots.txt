@@ -11,6 +11,12 @@ Allow: /terms
 Allow: /privacy
 Allow: /llms.txt
 Allow: /sitemap.xml
+Allow: /recursos
+Allow: /calculadora-prestamos
+Allow: /software-prestamos-republica-dominicana
+Allow: /software-para-prestamistas
+Allow: /control-prestamos-cobros
+Allow: /alternativa-excel-prestamos
 Disallow: /dashboard
 Disallow: /clients
 Disallow: /loans

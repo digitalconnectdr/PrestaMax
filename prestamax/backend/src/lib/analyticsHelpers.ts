@@ -125,7 +125,12 @@ export function categorizeTrafficSource(input: {
 // server-side: si una propiedad llega con un nombre sugestivo de dato sensible,
 // o un valor con forma de email/telefono, se redacta en vez de guardarse o de
 // tirar el evento completo (asi un bug queda visible, no oculto).
-const SENSITIVE_KEY_PATTERN = /email|correo|phone|tel[eé]fono|celular|nombre|name|apellido|cedula|c[eé]dula|dni|ssn|rnc|passport|pasaporte|address|direcci[oó]n|monto|amount|contract|contrato|salario|salary|income|ingreso|document|documento/i;
+// FIX (Fase 4): "name" a secas hacía falso-positivo con "tool_name" (una
+// propiedad legítima y no sensible de calculator_used, ver ALLOWED_EVENT_NAMES)
+// — cualquier clave que contuviera la subcadena "name" se redactaba, sin
+// importar el contexto. El lookbehind excluye ese caso puntual sin debilitar
+// la detección real de nombres de persona (full_name, client_name, etc.).
+const SENSITIVE_KEY_PATTERN = /email|correo|phone|tel[eé]fono|celular|nombre|(?<!tool_)name|apellido|cedula|c[eé]dula|dni|ssn|rnc|passport|pasaporte|address|direcci[oó]n|monto|amount|contract|contrato|salario|salary|income|ingreso|document|documento/i;
 const EMAIL_PATTERN = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 const PHONE_LIKE_PATTERN = /(?:\d[\s\-.()]*){7,}\d/;
 
@@ -173,4 +178,8 @@ export const ALLOWED_EVENT_NAMES = new Set([
   'activation_completed',
   'checkout_started',
   'subscription_started',
+  // ── Fase 4: SEO / Centro de Recursos / calculadora pública ─────────────────
+  'resource_view',
+  'seo_cta_click',
+  'calculator_used',
 ]);

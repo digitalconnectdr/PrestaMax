@@ -90,6 +90,8 @@ export type FunnelEventName =
   | 'onboarding_started' | 'first_client_created' | 'first_loan_created'
   | 'first_payment_created' | 'activation_completed' | 'checkout_started'
   | 'subscription_started'
+  // Fase 4 — SEO / Centro de Recursos / calculadora pública
+  | 'resource_view' | 'seo_cta_click' | 'calculator_used'
 
 export interface FunnelEventProps {
   cta_location?: string
@@ -238,4 +240,22 @@ export function trackActivationCompleted(): void {
 
 export function trackCheckoutStarted(plan: string, billingPeriod: string, ctaLocation?: string): void {
   track('checkout_started', { plan, billing_period: billingPeriod, cta_location: ctaLocation })
+}
+
+// ── Fase 4: SEO / Centro de Recursos / calculadora pública ──────────────────
+// content_type distingue artículo de recursos vs. página SEO comercial, para
+// poder atribuir después qué tipo de contenido genera más trials.
+export type ContentType = 'article' | 'seo_page' | 'resources_index'
+
+export function trackResourceView(contentSlug: string, contentType: ContentType): void {
+  track('resource_view', { content_slug: contentSlug, content_type: contentType })
+}
+
+export function trackSeoCtaClick(contentSlug: string, ctaLocation: string): void {
+  track('seo_cta_click', { content_slug: contentSlug, cta_location: ctaLocation })
+}
+
+/** No enviar los valores que el usuario tipeó (monto/tasa/plazo) — solo que se usó la herramienta. */
+export function trackCalculatorUsed(toolName: 'loan_calculator'): void {
+  track('calculator_used', { tool_name: toolName })
 }

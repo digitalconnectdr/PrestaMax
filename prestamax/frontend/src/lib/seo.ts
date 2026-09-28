@@ -5,7 +5,19 @@
 // para crawlers que ejecutan JS (Googlebot).
 
 // Rutas públicas indexables (todo lo demás → noindex)
-const PUBLIC_INDEXABLE = new Set<string>(['/', '/terms', '/privacy', '/contact'])
+const PUBLIC_INDEXABLE = new Set<string>([
+  '/', '/terms', '/privacy', '/contact',
+  // Fase 4 — SEO / Centro de Recursos
+  '/recursos',
+  '/calculadora-prestamos',
+  '/software-prestamos-republica-dominicana',
+  '/software-para-prestamistas',
+  '/control-prestamos-cobros',
+  '/alternativa-excel-prestamos',
+])
+// /recursos/:slug es dinámica — cualquier artículo bajo este prefijo es indexable
+// sin tener que listar cada slug aquí.
+const PUBLIC_INDEXABLE_PREFIXES = ['/recursos/']
 
 function setMetaRobots(content: string) {
   let el = document.querySelector('meta[name="robots"]') as HTMLMetaElement | null
@@ -20,6 +32,6 @@ function setMetaRobots(content: string) {
 /** Ajusta robots (index/noindex) según la ruta actual. */
 export function applyRouteSeo(pathname: string): void {
   if (typeof document === 'undefined') return
-  const indexable = PUBLIC_INDEXABLE.has(pathname)
+  const indexable = PUBLIC_INDEXABLE.has(pathname) || PUBLIC_INDEXABLE_PREFIXES.some(p => pathname.startsWith(p))
   setMetaRobots(indexable ? 'index, follow' : 'noindex, nofollow')
 }

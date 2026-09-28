@@ -708,6 +708,8 @@ const LandingPage: React.FC = () => {
                 <li><a href="#how-it-works" className="hover:text-white">{t('lp.nav.how')}</a></li>
                 <li><a href="#pricing" className="hover:text-white">{t('lp.nav.pricing')}</a></li>
                 <li><a href="#faq" className="hover:text-white">{t('lp.nav.faq')}</a></li>
+                <li><Link to="/recursos" className="hover:text-white">Recursos</Link></li>
+                <li><Link to="/calculadora-prestamos" className="hover:text-white">Calculadora de préstamos</Link></li>
               </ul>
             </div>
 
