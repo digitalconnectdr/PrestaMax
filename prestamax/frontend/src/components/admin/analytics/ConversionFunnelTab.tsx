@@ -14,6 +14,8 @@ interface FunnelStep { key: string; event: string; count: number; pctOfPrevious:
 interface GlobalCount { event: string; sessions: number; visitors: number }
 interface FunnelData {
   steps: FunnelStep[]
+  pricingSteps: FunnelStep[]
+  pricingOverallConversion: number
   globals: GlobalCount[]
   // OJO: el interceptor de axios convierte snake_case -> camelCase en TODA respuesta
   // (landing_cta -> landingCta, duplicate_email -> duplicateEmail). Las claves de abajo son las ya convertidas.
@@ -29,9 +31,45 @@ interface FunnelData {
 }
 
 const STEP_LABELS: Record<string, string> = {
-  landing: 'Landing', pricing: 'Pricing', cta: 'CTA prueba gratuita',
+  landing: 'Landing', pricing: 'Vista de Precios', cta: 'CTA prueba gratuita', cta_pricing: 'CTA de Precios',
   signup_started: 'Signup iniciado', signup_completed: 'Signup completado', trial_activated: 'Trial activado',
   activated: 'Activado', checkout_started: 'Checkout iniciado', subscription_started: 'Suscripción iniciada',
+}
+
+/** Barras de un funnel secuencial (cada paso <= 100% del anterior). */
+const FunnelBars: React.FC<{ steps: FunnelStep[] }> = ({ steps }) => {
+  const max = Math.max(1, ...steps.map(s => s.count))
+  return (
+    <div className="space-y-1">
+      {steps.map((step, i) => (
+        <div key={step.key}>
+          <div className="flex items-center gap-3">
+            <div className="w-40 flex-shrink-0 text-sm text-slate-700 font-medium">{STEP_LABELS[step.key] || step.key}</div>
+            <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden relative">
+              <div
+                className="h-full bg-gradient-to-r from-[#1e3a5f] to-[#2c5a8f] rounded-lg flex items-center justify-end pr-2 transition-all"
+                style={{ width: `${Math.max(4, (step.count / max) * 100)}%` }}
+              >
+                <span className="text-xs font-bold text-white">{step.count}</span>
+              </div>
+            </div>
+            <div className="w-16 flex-shrink-0 text-right text-xs text-slate-500">{step.pctOfTotal}%</div>
+          </div>
+          {i < steps.length - 1 && (
+            <div className="flex items-center gap-2 pl-40 py-1 text-xs text-slate-400">
+              <ArrowDown className="w-3 h-3" />
+              <span className={step.pctOfPrevious < 30 ? 'text-red-500 font-medium' : ''}>
+                {steps[i + 1].pctOfPrevious}% pasa al siguiente paso
+                {steps[i + 1].dropOff > 0 && (
+                  <span className="text-slate-400"> · {steps[i + 1].dropOff} abandonan aquí</span>
+                )}
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }
 const BILLING_PERIOD_LABELS: Record<string, string> = { monthly: 'Mensual', annual: 'Anual' }
 const SOURCE_LABELS: Record<string, string> = {
@@ -79,12 +117,10 @@ const ConversionFunnelTab: React.FC<{ range: DateRangeValue }> = ({ range }) => 
   }
   useEffect(() => { load() }, [range.preset, range.from, range.to, country, device, source, plan, billingPeriod])
 
-  const maxCount = Math.max(1, ...(data?.steps.map(s => s.count) || [1]))
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">Funnel <b>secuencial</b>: cada paso cuenta solo a quien completó el anterior, en orden. Pasos 1–6 por sesión; 7–9 por visitante. Tráfico humano.</p>
+        <p className="text-xs text-slate-500">Funnel <b>secuencial</b>: cada paso cuenta solo a quien completó el anterior, en orden. Adquisición por sesión; activación, checkout y suscripción por visitante. Tráfico humano.</p>
         <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Actualizar
         </button>
@@ -136,38 +172,21 @@ const ConversionFunnelTab: React.FC<{ range: DateRangeValue }> = ({ range }) => 
         <>
           <Card className="p-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-800">Funnel de adquisición</h3>
+              <h3 className="font-semibold text-slate-800">Funnel principal de adquisición</h3>
               <span className="text-sm font-bold text-emerald-700">{data.overallConversion}% conversión global</span>
             </div>
-            <div className="space-y-1">
-              {data.steps.map((step, i) => (
-                <div key={step.key}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-40 flex-shrink-0 text-sm text-slate-700 font-medium">{STEP_LABELS[step.key] || step.key}</div>
-                    <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden relative">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#1e3a5f] to-[#2c5a8f] rounded-lg flex items-center justify-end pr-2 transition-all"
-                        style={{ width: `${Math.max(4, (step.count / maxCount) * 100)}%` }}
-                      >
-                        <span className="text-xs font-bold text-white">{step.count}</span>
-                      </div>
-                    </div>
-                    <div className="w-16 flex-shrink-0 text-right text-xs text-slate-500">{step.pctOfTotal}%</div>
-                  </div>
-                  {i < data.steps.length - 1 && (
-                    <div className="flex items-center gap-2 pl-40 py-1 text-xs text-slate-400">
-                      <ArrowDown className="w-3 h-3" />
-                      <span className={step.pctOfPrevious < 30 ? 'text-red-500 font-medium' : ''}>
-                        {data.steps[i + 1].pctOfPrevious}% pasa al siguiente paso
-                        {data.steps[i + 1].dropOff > 0 && (
-                          <span className="text-slate-400"> · {data.steps[i + 1].dropOff} abandonan aquí</span>
-                        )}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+            <FunnelBars steps={data.steps} />
+          </Card>
+
+          {/* Diagnóstico separado: solo el camino que pasa por la sección de Precios y termina en SU CTA.
+              No es el funnel principal: quien convierte desde el Hero, el footer o una página SEO no aparece aquí. */}
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-semibold text-slate-800">Diagnóstico: camino por Precios</h3>
+              <span className="text-sm font-bold text-slate-600">{data.pricingOverallConversion}% llegan a signup completado</span>
             </div>
+            <p className="text-xs text-slate-500 mb-4">Landing → vista de Precios → clic en el CTA de Precios → signup iniciado → completado. Mide qué tan bien convierte la sección de precios, no la conversión total.</p>
+            <FunnelBars steps={data.pricingSteps} />
           </Card>
 
           {/* Totales globales: NO exigen el paso anterior. Un acceso directo a /register cuenta aquí como signup, pero no en el funnel secuencial. */}
@@ -178,14 +197,18 @@ const ConversionFunnelTab: React.FC<{ range: DateRangeValue }> = ({ range }) => 
               <table className="w-full text-sm">
                 <thead><tr className="text-xs text-slate-500 border-b border-slate-200"><th className="text-left py-1.5 font-medium">Evento</th><th className="text-right py-1.5 font-medium">Sesiones</th><th className="text-right py-1.5 font-medium">Visitantes</th><th className="text-right py-1.5 font-medium">En el funnel secuencial</th></tr></thead>
                 <tbody>
-                  {data.globals.map((g, i) => (
-                    <tr key={g.event} className="border-b border-slate-100 last:border-0">
-                      <td className="py-1.5 text-slate-700">{GLOBAL_EVENT_LABELS[g.event] || g.event}</td>
-                      <td className="py-1.5 text-right font-semibold text-slate-800">{g.sessions}</td>
-                      <td className="py-1.5 text-right text-slate-600">{g.visitors}</td>
-                      <td className="py-1.5 text-right text-slate-600">{data.steps[i]?.count ?? 0}</td>
-                    </tr>
-                  ))}
+                  {data.globals.map(g => {
+                    // pricing_view no es un paso del funnel principal (solo del diagnóstico de Precios).
+                    const mainStep = data.steps.find(s => s.event === g.event)
+                    return (
+                      <tr key={g.event} className="border-b border-slate-100 last:border-0">
+                        <td className="py-1.5 text-slate-700">{GLOBAL_EVENT_LABELS[g.event] || g.event}</td>
+                        <td className="py-1.5 text-right font-semibold text-slate-800">{g.sessions}</td>
+                        <td className="py-1.5 text-right text-slate-600">{g.visitors}</td>
+                        <td className="py-1.5 text-right text-slate-600">{mainStep ? mainStep.count : '—'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

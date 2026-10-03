@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { seedDemo } from '../db/seed_demo';
 import { validatePlanFeatures } from '../lib/permissions';
-import { FUNNEL_STEPS, computeSequentialFunnel, computeSignupSources, FunnelEventRow } from '../lib/analyticsFunnel';
+import { PRICING_FUNNEL_STEPS, ALL_FUNNEL_EVENTS, computeSequentialFunnel, computeGlobalCounts, computeSignupSources, FunnelEventRow } from '../lib/analyticsFunnel';
 
 // Helper: valida el campo `features` de un plan (string JSON o array) contra
 // PERM_DEFS. Devuelve un error legible si hay claves inválidas, o null si OK.
@@ -531,11 +531,11 @@ function pvComposition(db: any, fromSql: string, toSql: string) {
   };
 }
 
-const FUNNEL_EVENT_NAMES = [...FUNNEL_STEPS.map(s => s.event), 'seo_cta_click', 'resource_view'];
+const FUNNEL_EVENT_NAMES = [...ALL_FUNNEL_EVENTS, 'seo_cta_click', 'resource_view'];
 function loadFunnelRows(db: any, fromSql: string, toSql: string, extra = '', params: any[] = []): FunnelEventRow[] {
   const ph = FUNNEL_EVENT_NAMES.map(() => '?').join(',');
   return db.prepare(`
-    SELECT rowid AS rid, event_name, session_id, visitor_id, created_at, traffic_source
+    SELECT rowid AS rid, event_name, session_id, visitor_id, created_at, traffic_source, cta_location
     FROM analytics_events
     WHERE created_at BETWEEN ? AND ? AND ${EV_HUMAN} AND event_name IN (${ph}) ${extra}
     ORDER BY created_at, rowid
@@ -719,7 +719,10 @@ router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRe
     if (q.billing_period) { extra += ' AND billing_period = ?'; params.push(q.billing_period); }
 
     const rows = loadFunnelRows(db, fromSql, toSql, extra, params);
-    const { steps, overallConversion, globals } = computeSequentialFunnel(rows);
+    // Funnel PRINCIPAL (no exige pricing_view) + funnel DIAGNOSTICO de Precios (separado).
+    const { steps, overallConversion } = computeSequentialFunnel(rows);
+    const { steps: pricingSteps, overallConversion: pricingOverallConversion } = computeSequentialFunnel(rows, PRICING_FUNNEL_STEPS);
+    const globals = computeGlobalCounts(rows);
     const signupSources = computeSignupSources(rows);
 
     // Diagnostico del formulario de registro (sesiones humanas distintas).
@@ -752,7 +755,7 @@ router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRe
 
     res.json({
       range: { from, to },
-      steps, overallConversion, globals, signupSources, signupForm,
+      steps, overallConversion, pricingSteps, pricingOverallConversion, globals, signupSources, signupForm,
       registrations: { tenantsCreated, signupCompletedSessions: signupForm.completed },
       filters: {
         country: q.country || null, device: q.device || null, source: q.source || null,

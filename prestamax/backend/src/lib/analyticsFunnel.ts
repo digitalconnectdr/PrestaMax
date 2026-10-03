@@ -18,13 +18,23 @@ export interface FunnelEventRow {
   visitor_id: string | null;
   created_at: string;
   traffic_source?: string | null;    // solo se usa para clasificar el origen del signup
+  cta_location?: string | null;      // solo lo usa el funnel diagnostico de Precios
 }
 
-// Pasos 1-6 (adquisicion): misma SESION. Pasos 7-9 (ciclo de vida): mismo
-// VISITANTE, porque pueden ocurrir dias despues, en otra sesion.
-export const FUNNEL_STEPS: { key: string; event: string; scope: 'session' | 'visitor' }[] = [
+export interface FunnelStepDef {
+  key: string;
+  event: string;
+  scope: 'session' | 'visitor';
+  cta?: string; // exige ademas cta_location = este valor (p. ej. 'pricing')
+}
+
+// FUNNEL PRINCIPAL de adquisicion. NO exige pricing_view: un usuario puede
+// convertir desde el CTA del Hero, del footer o de una pagina SEO sin haber
+// visto la seccion de precios. Pasos de adquisicion: misma SESION. Pasos de
+// ciclo de vida (activacion/checkout/suscripcion): mismo VISITANTE, porque pueden
+// ocurrir dias despues, en otra sesion.
+export const MAIN_FUNNEL_STEPS: FunnelStepDef[] = [
   { key: 'landing', event: 'landing_view', scope: 'session' },
-  { key: 'pricing', event: 'pricing_view', scope: 'session' },
   { key: 'cta', event: 'trial_cta_click', scope: 'session' },
   { key: 'signup_started', event: 'signup_started', scope: 'session' },
   { key: 'signup_completed', event: 'signup_completed', scope: 'session' },
@@ -32,6 +42,23 @@ export const FUNNEL_STEPS: { key: string; event: string; scope: 'session' | 'vis
   { key: 'activated', event: 'activation_completed', scope: 'visitor' },
   { key: 'checkout_started', event: 'checkout_started', scope: 'visitor' },
   { key: 'subscription_started', event: 'subscription_started', scope: 'visitor' },
+];
+
+// FUNNEL DIAGNOSTICO de Precios (separado): mide solo el camino que pasa por la
+// seccion de precios y termina en su CTA. Es una vista de apoyo, no el funnel
+// principal.
+export const PRICING_FUNNEL_STEPS: FunnelStepDef[] = [
+  { key: 'landing', event: 'landing_view', scope: 'session' },
+  { key: 'pricing', event: 'pricing_view', scope: 'session' },
+  { key: 'cta_pricing', event: 'trial_cta_click', scope: 'session', cta: 'pricing' },
+  { key: 'signup_started', event: 'signup_started', scope: 'session' },
+  { key: 'signup_completed', event: 'signup_completed', scope: 'session' },
+];
+
+/** Todos los eventos que alimentan los funnels, los totales globales y el origen del signup. */
+export const ALL_FUNNEL_EVENTS = [
+  'landing_view', 'pricing_view', 'trial_cta_click', 'signup_started', 'signup_completed',
+  'trial_activated', 'activation_completed', 'checkout_started', 'subscription_started',
 ];
 
 export interface FunnelStepResult {
@@ -49,26 +76,51 @@ function sortRows(rows: FunnelEventRow[]): (FunnelEventRow & { ord: number })[] 
     .map((r, i) => ({ ...r, ord: i }));
 }
 
-export function computeSequentialFunnel(rawRows: FunnelEventRow[]): {
-  steps: FunnelStepResult[];
-  overallConversion: number;
-  globals: GlobalEventCount[];
-} {
-  const rows = sortRows(rawRows);
+const evKey = (s: { event: string; cta?: string }) => (s.cta ? `${s.event}#${s.cta}` : s.event);
 
-  // Indices por evento: clave -> lista ascendente de ord
-  const bySession = new Map<string, Map<string, number[]>>(); // event -> session -> ords
-  const byVisitor = new Map<string, Map<string, number[]>>(); // event -> visitor -> ords
+/** Indices por evento (y por evento+cta_location) -> lista ascendente de ord. */
+function buildIndexes(rows: (FunnelEventRow & { ord: number })[]) {
+  const bySession = new Map<string, Map<string, number[]>>(); // clave de evento -> session -> ords
+  const byVisitor = new Map<string, Map<string, number[]>>(); // clave de evento -> visitor -> ords
   const sessionVisitor = new Map<string, string>();
   const add = (m: Map<string, Map<string, number[]>>, ev: string, key: string, ord: number) => {
     let inner = m.get(ev); if (!inner) { inner = new Map(); m.set(ev, inner); }
     const arr = inner.get(key); if (arr) arr.push(ord); else inner.set(key, [ord]);
   };
   for (const r of rows) {
-    if (r.session_id) add(bySession, r.event_name, r.session_id, r.ord);
-    if (r.visitor_id) add(byVisitor, r.event_name, r.visitor_id, r.ord);
+    const keys = [r.event_name];
+    if (r.cta_location) keys.push(`${r.event_name}#${r.cta_location}`);
+    for (const k of keys) {
+      if (r.session_id) add(bySession, k, r.session_id, r.ord);
+      if (r.visitor_id) add(byVisitor, k, r.visitor_id, r.ord);
+    }
     if (r.session_id && r.visitor_id && !sessionVisitor.has(r.session_id)) sessionVisitor.set(r.session_id, r.visitor_id);
   }
+  return { bySession, byVisitor, sessionVisitor };
+}
+
+/** Sesiones y visitantes distintos que dispararon cada evento, SIN exigir ningun paso previo. */
+export function computeGlobalCounts(rawRows: FunnelEventRow[], events: string[] = ALL_FUNNEL_EVENTS): GlobalEventCount[] {
+  const { bySession, byVisitor } = buildIndexes(sortRows(rawRows));
+  return events.map(event => ({
+    event,
+    sessions: bySession.get(event)?.size || 0,
+    visitors: byVisitor.get(event)?.size || 0,
+  }));
+}
+
+/**
+ * Funnel estrictamente secuencial para la lista de pasos dada (por defecto el
+ * funnel PRINCIPAL, que no exige pricing_view). Cada paso cuenta solo a quien
+ * completo el anterior, en orden temporal; nunca supera 100% del paso previo.
+ */
+export function computeSequentialFunnel(rawRows: FunnelEventRow[], stepDefs: FunnelStepDef[] = MAIN_FUNNEL_STEPS): {
+  steps: FunnelStepResult[];
+  overallConversion: number;
+  globals: GlobalEventCount[];
+} {
+  const rows = sortRows(rawRows);
+  const { bySession, byVisitor, sessionVisitor } = buildIndexes(rows);
   const firstAfter = (ords: number[] | undefined, after: number) => {
     if (!ords) return undefined;
     for (const o of ords) if (o > after) return o;
@@ -76,16 +128,16 @@ export function computeSequentialFunnel(rawRows: FunnelEventRow[]): {
   };
 
   const counts: number[] = [];
-  // ── Paso 1: sesiones con landing_view (primer evento) ──
+  // ── Paso 1: sesiones con el primer evento (landing_view) ──
   let cur = new Map<string, number>();
-  for (const [sid, ords] of bySession.get(FUNNEL_STEPS[0].event) || []) cur.set(sid, ords[0]);
+  for (const [sid, ords] of bySession.get(evKey(stepDefs[0])) || []) cur.set(sid, ords[0]);
   counts.push(cur.size);
 
-  // ── Pasos 2..6: misma sesion, evento posterior al paso previo ──
+  // ── Pasos de adquisicion: misma sesion, evento posterior al paso previo ──
   let i = 1;
-  for (; i < FUNNEL_STEPS.length && FUNNEL_STEPS[i].scope === 'session'; i++) {
+  for (; i < stepDefs.length && stepDefs[i].scope === 'session'; i++) {
     const next = new Map<string, number>();
-    const evMap = bySession.get(FUNNEL_STEPS[i].event);
+    const evMap = bySession.get(evKey(stepDefs[i]));
     for (const [sid, prevOrd] of cur) {
       const o = firstAfter(evMap?.get(sid), prevOrd);
       if (o !== undefined) next.set(sid, o);
@@ -94,8 +146,8 @@ export function computeSequentialFunnel(rawRows: FunnelEventRow[]): {
     counts.push(cur.size);
   }
 
-  // ── Pasos 7..9: por visitante. Se parte de los visitantes de las sesiones que
-  // llegaron a trial_activated (ord minimo por visitante). ──
+  // ── Pasos de ciclo de vida: por visitante. Se parte de los visitantes de las
+  // sesiones que llegaron al ultimo paso de adquisicion (ord minimo por visitante). ──
   let curV = new Map<string, number>();
   for (const [sid, ord] of cur) {
     const vid = sessionVisitor.get(sid);
@@ -103,9 +155,9 @@ export function computeSequentialFunnel(rawRows: FunnelEventRow[]): {
     const prev = curV.get(vid);
     if (prev === undefined || ord < prev) curV.set(vid, ord);
   }
-  for (; i < FUNNEL_STEPS.length; i++) {
+  for (; i < stepDefs.length; i++) {
     const next = new Map<string, number>();
-    const evMap = byVisitor.get(FUNNEL_STEPS[i].event);
+    const evMap = byVisitor.get(evKey(stepDefs[i]));
     for (const [vid, prevOrd] of curV) {
       const o = firstAfter(evMap?.get(vid), prevOrd);
       if (o !== undefined) next.set(vid, o);
@@ -115,7 +167,7 @@ export function computeSequentialFunnel(rawRows: FunnelEventRow[]): {
   }
 
   const first = counts[0] || 0;
-  const steps: FunnelStepResult[] = FUNNEL_STEPS.map((s, idx) => {
+  const steps: FunnelStepResult[] = stepDefs.map((s, idx) => {
     const count = counts[idx];
     const prev = idx === 0 ? null : counts[idx - 1];
     return {
@@ -126,7 +178,7 @@ export function computeSequentialFunnel(rawRows: FunnelEventRow[]): {
     };
   });
 
-  const globals: GlobalEventCount[] = FUNNEL_STEPS.map(s => ({
+  const globals: GlobalEventCount[] = stepDefs.map(s => ({
     event: s.event,
     sessions: bySession.get(s.event)?.size || 0,
     visitors: byVisitor.get(s.event)?.size || 0,
