@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { TenantProvider } from '@/contexts/TenantContext'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermission } from '@/hooks/usePermission'
+import { isInvestorOnly } from '@/lib/roles'
 import type { PermKey } from '@/lib/permissions'
 import { initAnalytics, trackPageView, registerAnalyticsContext } from '@/lib/analytics'
 import { applyRouteSeo } from '@/lib/seo'
@@ -109,9 +110,11 @@ const PlatformRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 const AppRoutes: React.FC = () => {
   const { state } = useAuth()
 
-  const currentTenant = (state.user as any)?.currentTenant
-  const userRoles: string[] = currentTenant?.roles || []
-  const isInvestorOnly = userRoles.length > 0 && userRoles.every(r => r === 'investor')
+  // Los roles vienen del TenantContext (los mismos que usa usePermission), NO de
+  // state.user: el login no envía user.currentTenant, así que antes esta regla
+  // nunca se cumplía y los inversionistas caían en el dashboard de la empresa.
+  const { roles: userRoles } = usePermission()
+  const isInvestorOnlyUser = isInvestorOnly(userRoles)
 
   return (
     <Routes>
@@ -121,14 +124,14 @@ const AppRoutes: React.FC = () => {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/apply/:token" element={<LoanRequestPublicPage />} />
 
-      {state.isAuthenticated && isInvestorOnly && (
+      {state.isAuthenticated && isInvestorOnlyUser && (
         <>
           <Route path="/portal" element={<PortalInvestorPage />} />
           <Route path="*" element={<Navigate to="/portal" replace />} />
         </>
       )}
 
-      {state.isAuthenticated && !isInvestorOnly && (
+      {state.isAuthenticated && !isInvestorOnlyUser && (
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
 

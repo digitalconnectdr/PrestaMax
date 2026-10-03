@@ -458,7 +458,8 @@ const PaymentsPage: React.FC = () => {
                           <Printer className="w-3.5 h-3.5"/>
                         </button>
                         {/* WhatsApp */}
-                        {!payment.isVoided && payment.clientPhone && (
+                        {/* WhatsApp es Básico+: solo con el permiso efectivo (plan ∧ rol) */}
+                        {can('whatsapp.send') && !payment.isVoided && payment.clientPhone && (
                           <button
                             onClick={() => sendWhatsApp(payment, (tenantState as any)?.currentTenant?.tenant?.name || 'Negocio')}
                             className="p-1.5 hover:bg-green-50 rounded text-green-600 transition-colors"
