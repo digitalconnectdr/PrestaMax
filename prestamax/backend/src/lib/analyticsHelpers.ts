@@ -182,4 +182,21 @@ export const ALLOWED_EVENT_NAMES = new Set([
   'resource_view',
   'seo_cta_click',
   'calculator_used',
+  // ── Correccion funnel de signup (oct 2026): localizar donde se abandona el
+  // formulario sin tocar signup_started/completed. Ninguno lleva PII.
+  'signup_submit',
+  'signup_error',
 ]);
+
+// signup_error solo acepta una categoria tecnica de esta lista cerrada. Cualquier
+// otro valor (incluido texto libre que un usuario pudo haber escrito) se
+// normaliza a 'unknown' — nunca se persiste el valor recibido.
+export const SIGNUP_ERROR_TYPES = new Set(['validation', 'duplicate_email', 'network', 'server', 'unknown']);
+export function normalizeSignupErrorType(value: unknown): string {
+  return typeof value === 'string' && SIGNUP_ERROR_TYPES.has(value) ? value : 'unknown';
+}
+
+// Eventos "de un solo disparo por sesion": el backend ignora un segundo
+// insert para la misma sesion (refresh/re-render/reintento del cliente) para
+// que el conteo crudo tampoco se duplique.
+export const ONCE_PER_SESSION_EVENTS = new Set(['signup_completed', 'trial_activated']);

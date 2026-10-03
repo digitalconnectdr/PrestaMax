@@ -92,6 +92,8 @@ export type FunnelEventName =
   | 'subscription_started'
   // Fase 4 — SEO / Centro de Recursos / calculadora pública
   | 'resource_view' | 'seo_cta_click' | 'calculator_used'
+  // Corrección funnel de signup (oct 2026) — localizar dónde se abandona el formulario
+  | 'signup_submit' | 'signup_error'
 
 export interface FunnelEventProps {
   cta_location?: string
@@ -188,16 +190,67 @@ export function trackWhatsAppClick(location: string): void {
   track('whatsapp_click', { cta_location: location })
 }
 
+// ── Deduplicación de eventos de un solo disparo ─────────────────────────────
+// Un refresh, un re-render o el doble efecto de React.StrictMode (solo dev)
+// no deben duplicar el evento. Se recuerda por (evento + sesión) en memoria y
+// en sessionStorage (sobrevive al refresh de la misma pestaña).
+const firedOnce = new Set<string>()
+function trackOnce(event: FunnelEventName, props: FunnelEventProps = {}): void {
+  const key = `credytek_once_${event}_${getOrRotateSessionId()}`
+  if (firedOnce.has(key)) return
+  try { if (sessionStorage.getItem(key)) { firedOnce.add(key); return } } catch { /* noop */ }
+  firedOnce.add(key)
+  try { sessionStorage.setItem(key, '1') } catch { /* noop */ }
+  track(event, props)
+}
+
+/** signup_started = "llegó al formulario de registro". Una vez por sesión. */
 export function trackSignupStarted(): void {
-  track('signup_started')
+  trackOnce('signup_started')
+}
+
+/** El usuario envió el formulario con validación local correcta (antes de la respuesta del servidor). */
+export function trackSignupSubmit(): void {
+  track('signup_submit')
+}
+
+export type SignupErrorType = 'validation' | 'duplicate_email' | 'network' | 'server' | 'unknown'
+/**
+ * Solo una categoría técnica de lista cerrada — NUNCA el mensaje, el correo, el
+ * nombre ni nada que el usuario haya escrito (el backend además normaliza
+ * cualquier otro valor a 'unknown').
+ */
+export function trackSignupError(errorType: SignupErrorType): void {
+  track('signup_error', { error_type: errorType })
 }
 
 export function trackSignupCompleted(plan: string): void {
-  track('signup_completed', { plan })
+  trackOnce('signup_completed', { plan })
 }
 
 export function trackTrialActivated(plan: string): void {
-  track('trial_activated', { plan })
+  trackOnce('trial_activated', { plan })
+}
+
+/**
+ * Contexto NO sensible (visitor_id, session_id, UTM, referrer) que se envía junto
+ * al registro para que el backend emita signup_completed/trial_activated tras
+ * guardar la cuenta, atribuido al mismo visitante/sesión. Sin PII.
+ */
+export function getAnalyticsPayload(): Record<string, string | boolean | null> {
+  const ctx = getAcquisitionContext()
+  return {
+    visitor_id: getVisitorId(),
+    session_id: getOrRotateSessionId(),
+    page_url: typeof window !== 'undefined' ? window.location.href : '',
+    webdriver: safeWebdriverFlag(),
+    referrer: ctx.referrer,
+    utm_source: ctx.utm_source,
+    utm_medium: ctx.utm_medium,
+    utm_campaign: ctx.utm_campaign,
+    utm_term: ctx.utm_term,
+    utm_content: ctx.utm_content,
+  }
 }
 
 export function trackSectionView(section: string): void {

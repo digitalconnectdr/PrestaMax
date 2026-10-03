@@ -8,11 +8,18 @@ import { RefreshCw, TrendingDown, ArrowDown } from 'lucide-react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import Card from '@/components/ui/Card'
-import DateRangeFilter, { DateRangeValue, rangeToQuery } from './DateRangeFilter'
+import { DateRangeValue, rangeToQuery } from './DateRangeFilter'
 
 interface FunnelStep { key: string; event: string; count: number; pctOfPrevious: number; pctOfTotal: number; dropOff: number }
+interface GlobalCount { event: string; sessions: number; visitors: number }
 interface FunnelData {
   steps: FunnelStep[]
+  globals: GlobalCount[]
+  // OJO: el interceptor de axios convierte snake_case -> camelCase en TODA respuesta
+  // (landing_cta -> landingCta, duplicate_email -> duplicateEmail). Las claves de abajo son las ya convertidas.
+  signupSources: { landingCta: number; seo: number; direct: number; referral: number; otherUnknown: number }
+  signupForm: { started: number; submitted: number; completed: number; errors: Record<string, number> }
+  registrations: { tenantsCreated: number; signupCompletedSessions: number }
   overallConversion: number
   availableCountries: string[]
   availableDevices: string[]
@@ -31,8 +38,20 @@ const SOURCE_LABELS: Record<string, string> = {
   organic: 'Orgánico', direct: 'Directo', referral: 'Referencia', social: 'Redes sociales', paid: 'Pago', unknown: 'Desconocido',
 }
 
-const ConversionFunnelTab: React.FC = () => {
-  const [range, setRange] = useState<DateRangeValue>({ preset: '30d' })
+const SIGNUP_SOURCE_LABELS: Record<string, string> = {
+  landingCta: 'CTA del landing', seo: 'SEO / recursos', direct: 'Directo', referral: 'Referencia / redes', otherUnknown: 'Otro / desconocido',
+}
+const SIGNUP_ERROR_LABELS: Record<string, string> = {
+  validation: 'Validación', duplicateEmail: 'Correo ya registrado', network: 'Red / tiempo agotado', server: 'Servidor', unknown: 'Otro',
+}
+const GLOBAL_EVENT_LABELS: Record<string, string> = {
+  landing_view: 'Vista del landing', pricing_view: 'Vista de precios', trial_cta_click: 'Clic en CTA de prueba',
+  signup_started: 'Signup iniciado', signup_completed: 'Signup completado', trial_activated: 'Trial activado',
+  activation_completed: 'Activado', checkout_started: 'Checkout iniciado', subscription_started: 'Suscripción iniciada',
+}
+
+// El filtro de fechas es compartido por todas las vistas (lo posee GeographyPanel).
+const ConversionFunnelTab: React.FC<{ range: DateRangeValue }> = ({ range }) => {
   const [country, setCountry] = useState('')
   const [device, setDevice] = useState('')
   const [source, setSource] = useState('')
@@ -65,7 +84,7 @@ const ConversionFunnelTab: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <DateRangeFilter value={range} onChange={setRange} />
+        <p className="text-xs text-slate-500">Funnel <b>secuencial</b>: cada paso cuenta solo a quien completó el anterior, en orden. Pasos 1–6 por sesión; 7–9 por visitante. Tráfico humano.</p>
         <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Actualizar
         </button>
@@ -150,6 +169,66 @@ const ConversionFunnelTab: React.FC = () => {
               ))}
             </div>
           </Card>
+
+          {/* Totales globales: NO exigen el paso anterior. Un acceso directo a /register cuenta aquí como signup, pero no en el funnel secuencial. */}
+          <Card className="p-4">
+            <h3 className="font-semibold text-slate-800 mb-1">Eventos globales (no secuenciales)</h3>
+            <p className="text-xs text-slate-500 mb-3">Cuántas sesiones/visitantes distintos dispararon cada evento, sin importar si pasaron por el paso anterior. Por eso pueden ser mayores que el funnel secuencial.</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-xs text-slate-500 border-b border-slate-200"><th className="text-left py-1.5 font-medium">Evento</th><th className="text-right py-1.5 font-medium">Sesiones</th><th className="text-right py-1.5 font-medium">Visitantes</th><th className="text-right py-1.5 font-medium">En el funnel secuencial</th></tr></thead>
+                <tbody>
+                  {data.globals.map((g, i) => (
+                    <tr key={g.event} className="border-b border-slate-100 last:border-0">
+                      <td className="py-1.5 text-slate-700">{GLOBAL_EVENT_LABELS[g.event] || g.event}</td>
+                      <td className="py-1.5 text-right font-semibold text-slate-800">{g.sessions}</td>
+                      <td className="py-1.5 text-right text-slate-600">{g.visitors}</td>
+                      <td className="py-1.5 text-right text-slate-600">{data.steps[i]?.count ?? 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card className="p-4">
+              <h3 className="font-semibold text-slate-800 mb-1">Origen de los signups iniciados</h3>
+              <p className="text-xs text-slate-500 mb-3">Por sesión. "CTA del landing" = hubo un clic en CTA antes del signup. Los accesos directos a /register no se atribuyen al landing.</p>
+              <div className="space-y-1.5">
+                {(Object.keys(SIGNUP_SOURCE_LABELS) as (keyof typeof data.signupSources)[]).map(k => (
+                  <div key={k} className="flex items-center justify-between text-sm py-1 border-b border-slate-100 last:border-0">
+                    <span className="text-slate-700">{SIGNUP_SOURCE_LABELS[k]}</span>
+                    <span className="font-semibold text-slate-800">{data.signupSources[k]}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <Card className="p-4">
+              <h3 className="font-semibold text-slate-800 mb-1">Formulario de registro</h3>
+              <p className="text-xs text-slate-500 mb-3">Dónde se abandona: llegaron → enviaron → completaron (sesiones distintas).</p>
+              <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                <div className="rounded-lg bg-slate-50 p-2"><div className="text-lg font-bold text-slate-800">{data.signupForm.started}</div><div className="text-[11px] text-slate-500">Llegaron</div></div>
+                <div className="rounded-lg bg-slate-50 p-2"><div className="text-lg font-bold text-slate-800">{data.signupForm.submitted}</div><div className="text-[11px] text-slate-500">Enviaron</div></div>
+                <div className="rounded-lg bg-slate-50 p-2"><div className="text-lg font-bold text-emerald-700">{data.signupForm.completed}</div><div className="text-[11px] text-slate-500">Completaron</div></div>
+              </div>
+              <div className="text-xs text-slate-500 mb-1">Errores al registrar (categoría técnica, sin datos del usuario):</div>
+              <div className="space-y-1">
+                {Object.entries(data.signupForm.errors).map(([k, v]) => (
+                  <div key={k} className="flex justify-between text-xs text-slate-600"><span>{SIGNUP_ERROR_LABELS[k] || k}</span><span className="font-semibold">{v}</span></div>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          {data.registrations.tenantsCreated > data.registrations.signupCompletedSessions && (
+            <Card className="p-4 flex items-start gap-3 bg-amber-50 border-amber-200">
+              <TrendingDown className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-800">
+                Hay <b>{data.registrations.tenantsCreated}</b> empresa{data.registrations.tenantsCreated === 1 ? '' : 's'} creada{data.registrations.tenantsCreated === 1 ? '' : 's'} en la base de datos en este rango (incluye cuentas de prueba/internas y altas manuales) frente a <b>{data.registrations.signupCompletedSessions}</b> signup{data.registrations.signupCompletedSessions === 1 ? '' : 's'} completado{data.registrations.signupCompletedSessions === 1 ? '' : 's'} medido{data.registrations.signupCompletedSessions === 1 ? '' : 's'}. La diferencia son registros sin evento de analítica (anteriores al tracking, altas manuales o tráfico excluido).
+              </p>
+            </Card>
+          )}
 
           {data.steps.every(s => s.count === 0) && (
             <Card className="p-4 flex items-center gap-3 bg-amber-50 border-amber-200">

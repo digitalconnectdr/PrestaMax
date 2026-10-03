@@ -5,7 +5,7 @@ import { RefreshCw, MousePointerClick } from 'lucide-react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import Card from '@/components/ui/Card'
-import DateRangeFilter, { DateRangeValue, rangeToQuery } from './DateRangeFilter'
+import { DateRangeValue, rangeToQuery } from './DateRangeFilter'
 
 interface ScrollRow { depth: number; count: number; pctOfSessions: number }
 interface SectionRow { section: string; visitors: number; pctOfSessions: number; ctaClicks: number }
@@ -29,8 +29,8 @@ const CTA_LABELS: Record<string, string> = {
   final: 'CTA final', nav: 'Menú (escritorio)', nav_mobile: 'Menú (móvil)', footer: 'Footer', unknown: 'Desconocido',
 }
 
-const BehaviorTab: React.FC = () => {
-  const [range, setRange] = useState<DateRangeValue>({ preset: '30d' })
+// El filtro de fechas es compartido por todas las vistas (lo posee GeographyPanel).
+const BehaviorTab: React.FC<{ range: DateRangeValue }> = ({ range }) => {
   const [data, setData] = useState<BehaviorData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -51,7 +51,7 @@ const BehaviorTab: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <DateRangeFilter value={range} onChange={setRange} />
+        <p className="text-xs text-slate-500">Tráfico humano (sin bots ni navegadores internos), en el rango seleccionado.</p>
         <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Actualizar
         </button>

@@ -17,7 +17,10 @@ import worldCountriesUrl from 'world-atlas/countries-110m.json?url'
 import AnalyticsSummaryTab from './analytics/AnalyticsSummaryTab'
 import ConversionFunnelTab from './analytics/ConversionFunnelTab'
 import BehaviorTab from './analytics/BehaviorTab'
+import DateRangeFilter, { DateRangeValue, rangeToQuery } from './analytics/DateRangeFilter'
+import { getVisitorId } from '@/lib/visitor'
 
+interface TrafficComposition { raw: number; human: number; bots: number; internal: number; legacy: number }
 interface CityRow { country: string; city: string | null; lat: number | null; lng: number | null; count: number }
 interface CountryRow { country: string; count: number }
 interface RevenueRow { country: string; tenantCount: number; activeCount: number; monthlyRevenue: number }
@@ -33,6 +36,9 @@ interface GeographyData {
   visitsLast7Days: number
   visitsLast30Days: number
   revenueByCountry: RevenueRow[]
+  traffic: 'human' | 'raw'
+  composition: TrafficComposition
+  unknownCity: CountryRow[]
 }
 
 // Nombres legibles para los codigos ISO-2 mas comunes entre los clientes de CredyTek.
@@ -60,11 +66,16 @@ const GeographyPanel: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [dataset, setDataset] = useState<Dataset>('visitors')
   const [hovered, setHovered] = useState<CityRow | null>(null)
+  // Un solo filtro de fechas y una sola definición de tráfico para las 4 vistas.
+  const [range, setRange] = useState<DateRangeValue>({ preset: '30d' })
+  const [traffic, setTraffic] = useState<'human' | 'raw'>('human')
 
   const load = async () => {
     setIsLoading(true)
     try {
-      const res = await api.get('/admin/geography')
+      const params = new URLSearchParams(rangeToQuery(range))
+      params.set('traffic', traffic)
+      const res = await api.get(`/admin/geography?${params.toString()}`)
       setData(res.data)
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Error cargando datos de geografía')
@@ -72,7 +83,15 @@ const GeographyPanel: React.FC = () => {
       setIsLoading(false)
     }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [range.preset, range.from, range.to, traffic])
+
+  // Marca este navegador como "interno" para que las visitas del propio admin no
+  // cuenten como adquisición (requiere sesión de admin; no depende de la IP).
+  useEffect(() => {
+    api.post('/admin/analytics/mark-internal', { visitor_id: getVisitorId() })
+      .then(() => load()) // refresca para que la primera vista ya excluya este navegador
+      .catch(() => { /* silencioso */ })
+  }, [])
 
   const renderGeographyTab = () => {
     if (isLoading && !data) {
@@ -108,24 +127,46 @@ const GeographyPanel: React.FC = () => {
       </div>
 
       {dataset === 'visitors' ? (
+        <>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <span>Visitas del landing en el <b>rango seleccionado</b>. Misma definición de tráfico que Resumen, Conversión y Comportamiento.</span>
+          <div className="flex gap-1">
+            {(['human', 'raw'] as const).map(t => (
+              <button key={t} onClick={() => setTraffic(t)}
+                className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${traffic === t ? 'bg-[#1e3a5f] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                {t === 'human' ? 'Tráfico humano' : 'Sin filtrar'}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="p-4 flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg"><Users className="w-5 h-5 text-blue-700" /></div>
-            <div><div className="text-2xl font-bold text-slate-800">{data.totalVisits}</div><div className="text-xs text-slate-500">Visitas totales</div></div>
+            <div>
+              <div className="text-2xl font-bold text-slate-800">{data.totalVisits}</div>
+              <div className="text-xs text-slate-500">{data.traffic === 'raw' ? 'Visitas sin filtrar (rango)' : 'Visitas humanas (rango)'}</div>
+            </div>
           </Card>
           <Card className="p-4 flex items-center gap-3">
             <div className="p-2 bg-emerald-100 rounded-lg"><CalendarDays className="w-5 h-5 text-emerald-700" /></div>
-            <div><div className="text-2xl font-bold text-slate-800">{data.visitsToday}</div><div className="text-xs text-slate-500">Visitas hoy</div></div>
+            <div><div className="text-2xl font-bold text-slate-800">{data.visitsToday}</div><div className="text-xs text-slate-500">Hoy · ventana fija</div></div>
           </Card>
           <Card className="p-4 flex items-center gap-3">
             <div className="p-2 bg-indigo-100 rounded-lg"><TrendingUp className="w-5 h-5 text-indigo-700" /></div>
-            <div><div className="text-2xl font-bold text-slate-800">{data.visitsLast7Days}</div><div className="text-xs text-slate-500">Últimos 7 días</div></div>
+            <div><div className="text-2xl font-bold text-slate-800">{data.visitsLast7Days}</div><div className="text-xs text-slate-500">Últimos 7 días · ventana fija</div></div>
           </Card>
           <Card className="p-4 flex items-center gap-3">
             <div className="p-2 bg-slate-100 rounded-lg"><MapPin className="w-5 h-5 text-slate-700" /></div>
-            <div><div className="text-2xl font-bold text-slate-800">{byCountry.length}</div><div className="text-xs text-slate-500">Países distintos</div></div>
+            <div><div className="text-2xl font-bold text-slate-800">{byCountry.length}</div><div className="text-xs text-slate-500">Países distintos (rango)</div></div>
           </Card>
         </div>
+        <p className="text-xs text-slate-500">
+          Del total registrado en el rango ({data.composition.raw}): <b>{data.composition.human}</b> humanas · {data.composition.bots} bots · {data.composition.internal} internas · {data.composition.legacy} históricas sin clasificar (anteriores a la instrumentación).
+          {data.unknownCity.length > 0 && (
+            <> Con ciudad desconocida: {data.unknownCity.slice(0, 3).map(u => `${countryLabel(u.country)} ${u.count}`).join(', ')} (la geolocalización por IP no resuelve ciudad en muchas IP de centros de datos o proveedores).</>
+          )}
+        </p>
+        </>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="p-4 flex items-center gap-3">
@@ -248,9 +289,17 @@ const GeographyPanel: React.FC = () => {
         ))}
       </div>
 
-      {mainTab === 'summary' && <AnalyticsSummaryTab />}
-      {mainTab === 'conversion' && <ConversionFunnelTab />}
-      {mainTab === 'behavior' && <BehaviorTab />}
+      {/* Un solo filtro de fechas para Resumen, Geografía (visitantes), Conversión y Comportamiento */}
+      <div className="flex flex-wrap items-center gap-3">
+        <DateRangeFilter value={range} onChange={setRange} />
+        {mainTab === 'geography' && dataset === 'tenants' && (
+          <span className="text-xs text-slate-500">Las empresas registradas se muestran con <b>todas las fechas</b>; el filtro aplica a los visitantes.</span>
+        )}
+      </div>
+
+      {mainTab === 'summary' && <AnalyticsSummaryTab range={range} />}
+      {mainTab === 'conversion' && <ConversionFunnelTab range={range} />}
+      {mainTab === 'behavior' && <BehaviorTab range={range} />}
       {mainTab === 'geography' && renderGeographyTab()}
     </div>
   )

@@ -9,7 +9,24 @@ import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { SUPPORTED_CURRENCIES } from '@/lib/utils'
 import { useT } from '@/lib/i18n'
-import { trackSignupStarted, trackSignupCompleted, trackTrialActivated } from '@/lib/analytics'
+import {
+  trackSignupStarted, trackSignupCompleted, trackTrialActivated,
+  trackSignupSubmit, trackSignupError, getAnalyticsPayload, type SignupErrorType,
+} from '@/lib/analytics'
+
+// Categoría técnica segura del fallo de registro (jamás el mensaje ni datos del usuario).
+function classifySignupError(err: any): SignupErrorType {
+  if (!err?.response) return 'network' // sin respuesta: red caída, timeout (cold start), CORS
+  const status = err.response.status as number
+  if (status >= 500 || status === 429) return 'server'
+  if (status === 400 || status === 409 || status === 422) {
+    const code = err.response.data?.code
+    const msg = String(err.response.data?.error || '')
+    if (code === 'TRIAL_ALREADY_USED' || /ya existe una cuenta/i.test(msg)) return 'duplicate_email'
+    return 'validation'
+  }
+  return 'unknown'
+}
 
 interface Plan {
   id: string
@@ -76,8 +93,10 @@ const RegisterPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!validate()) return
+    if (!validate()) { trackSignupError('validation'); return }
     setIsLoading(true)
+    trackSignupSubmit()
+    let accountCreated = false
     try {
       const response = await api.post('/auth/register-tenant', {
         company_name: form.companyName.trim(),
@@ -87,7 +106,10 @@ const RegisterPage: React.FC = () => {
         phone: form.phone || null,
         currency: form.currency,
         plan_id: form.planId || null,
+        // Contexto no sensible para que el backend emita signup_completed tras guardar la cuenta.
+        analytics: getAnalyticsPayload(),
       })
+      accountCreated = true
       const { user, token, tenants } = response.data
 
       login(user, token)
@@ -113,6 +135,9 @@ const RegisterPage: React.FC = () => {
         navigate('/dashboard')
       }, 2000)
     } catch (err: any) {
+      // Un fallo DESPUES de crear la cuenta (p. ej. al guardar la sesion local) no
+      // es un fallo de registro: no se reporta como signup_error.
+      if (!accountCreated) trackSignupError(classifySignupError(err))
       const message = err.response?.data?.error || t('reg.create_error')
       toast.error(message)
     } finally {

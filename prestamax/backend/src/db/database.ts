@@ -1124,6 +1124,20 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_analytics_events_bot ON analytics_events(is_bot);
   `);
 
+  // ── Correccion analytics (oct 2026): navegadores del equipo/admin. Cuando un
+  // admin de plataforma autenticado abre el Admin Panel, su visitor_id queda
+  // aqui y TODAS sus visitas/eventos (tambien las anteriores y las hechas sin
+  // sesion iniciada) se excluyen del trafico humano de adquisicion en los
+  // reportes. No depende de una IP fija y NO borra ni modifica ningun registro
+  // de page_views/analytics_events: solo se filtra al agregar.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS internal_visitors (
+      visitor_id TEXT PRIMARY KEY,
+      reason TEXT NOT NULL DEFAULT 'platform_admin',
+      first_marked_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   // Audit log enrichment columns (for existing databases without them)
   try { db.exec(`ALTER TABLE audit_logs ADD COLUMN user_name TEXT NOT NULL DEFAULT 'Sistema'`); } catch(_) {}
   try { db.exec(`ALTER TABLE audit_logs ADD COLUMN user_email TEXT`); } catch(_) {}

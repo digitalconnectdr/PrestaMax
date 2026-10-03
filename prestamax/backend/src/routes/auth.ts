@@ -5,6 +5,7 @@ import { getDb, uuid, now, seedDefaultLoanProducts } from '../db/database';
 import { authenticate, AuthRequest, isPlatformStaff } from '../middleware/auth';
 import { computePermissions } from '../lib/permissions';
 import { getClientIp, geolocateIp } from '../services/geoService';
+import { readTrackingContext, insertAnalyticsEvent } from '../lib/analyticsServer';
 import { sendPasswordResetEmail, sendNewLoginAlertEmail, sendWelcomeEmail } from '../services/emailService';
 import crypto from 'crypto';
 
@@ -276,6 +277,27 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       toEmail: normalizedEmail,
       trialDays: isStartingWithPaidPlan ? 0 : trialDaysGranted,
     }).catch(() => {});
+    // Analitica del funnel (oct 2026): signup_completed/trial_activated se emiten
+    // AQUI, justo despues de que el registro quedo guardado — asi dependen solo de
+    // que el registro haya sido exitoso (no de que el navegador siga abierto ni de
+    // que un bloqueador deje pasar un segundo request). El cliente envia solo
+    // visitor_id/session_id/UTM/referrer (sin PII). El evento del cliente que llega
+    // despues se ignora (ONCE_PER_SESSION_EVENTS). Nunca puede romper el registro.
+    try {
+      const a = req.body?.analytics;
+      if (a && typeof a === 'object') {
+        const actx = readTrackingContext(a, req);
+        if (actx.sessionId && actx.visitorId) {
+          let planSlug = 'trial';
+          if (isStartingWithPaidPlan) {
+            const p = db.prepare('SELECT slug FROM plans WHERE id=?').get(effectivePlanId) as any;
+            planSlug = p?.slug || 'unknown_paid';
+          }
+          insertAnalyticsEvent(db, req, 'signup_completed', actx, { path: '/register', properties: { plan: planSlug, server_side: true } });
+          if (!isStartingWithPaidPlan) insertAnalyticsEvent(db, req, 'trial_activated', actx, { path: '/register', properties: { plan: planSlug, server_side: true } });
+        }
+      }
+    } catch (_) { /* analitica nunca debe afectar el registro */ }
     res.status(201).json({ user: userSafe, token, tenants, message: 'Cuenta creada exitosamente! Bienvenido a CredyTek.' });
   } catch (e: any) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(400).json({ error: 'Ya existe una cuenta con ese email o nombre de empresa.' });

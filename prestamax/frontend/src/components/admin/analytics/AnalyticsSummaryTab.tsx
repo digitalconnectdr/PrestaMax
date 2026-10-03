@@ -6,9 +6,11 @@ import { Users, Fingerprint, Layers, Globe2, RefreshCw, TrendingUp, Smartphone, 
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import Card from '@/components/ui/Card'
-import DateRangeFilter, { DateRangeValue, rangeToQuery } from './DateRangeFilter'
+import { DateRangeValue, rangeToQuery } from './DateRangeFilter'
 
+interface Composition { raw: number; human: number; bots: number; internal: number; legacy: number }
 interface SummaryData {
+  composition: Composition
   totalVisits: number
   totalVisitsClean: number
   uniqueVisitors: number
@@ -20,7 +22,11 @@ interface SummaryData {
   byDevice: { device: string; count: number }[]
   bySource: { source: string; count: number }[]
   topReferrers: { referrer: string; count: number }[]
+  legacyByCountry: { country: string; count: number }[]
+  botUserAgents: { userAgent: string; count: number }[] // user_agent -> userAgent (interceptor de axios)
   trialsStarted: number
+  trialsFromLanding: number
+  landingSessions: number
   conversionRateToTrial: number
 }
 
@@ -37,8 +43,8 @@ const SOURCE_LABELS: Record<string, string> = {
 }
 const DEVICE_LABELS: Record<string, string> = { mobile: 'Móvil', tablet: 'Tablet', desktop: 'Escritorio', unknown: 'Desconocido' }
 
-const AnalyticsSummaryTab: React.FC = () => {
-  const [range, setRange] = useState<DateRangeValue>({ preset: '30d' })
+// El filtro de fechas es compartido por todas las vistas (lo posee GeographyPanel).
+const AnalyticsSummaryTab: React.FC<{ range: DateRangeValue }> = ({ range }) => {
   const [data, setData] = useState<SummaryData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -59,7 +65,7 @@ const AnalyticsSummaryTab: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <DateRangeFilter value={range} onChange={setRange} />
+        <p className="text-xs text-slate-500">Todas las cifras de esta vista son <b>tráfico humano</b> en el rango seleccionado, salvo donde se indique.</p>
         <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> Actualizar
         </button>
@@ -74,7 +80,7 @@ const AnalyticsSummaryTab: React.FC = () => {
               <div className="p-2 bg-blue-100 rounded-lg"><Users className="w-5 h-5 text-blue-700" /></div>
               <div>
                 <div className="text-2xl font-bold text-slate-800">{data.totalVisitsClean}</div>
-                <div className="text-xs text-slate-500">Visitas {data.totalVisits !== data.totalVisitsClean && <span title="Incluye trafico automatizado detectado (bots/crawlers)">({data.totalVisits} sin filtrar)</span>}</div>
+                <div className="text-xs text-slate-500">Visitas humanas <span title="Sin filtrar = todo lo registrado en el rango, incluidos bots, navegadores internos y registros históricos sin clasificar">({data.totalVisits} sin filtrar)</span></div>
               </div>
             </Card>
             <Card className="p-4 flex items-center gap-3">
@@ -87,23 +93,67 @@ const AnalyticsSummaryTab: React.FC = () => {
             </Card>
             <Card className="p-4 flex items-center gap-3">
               <div className="p-2 bg-amber-100 rounded-lg"><TrendingUp className="w-5 h-5 text-amber-700" /></div>
-              <div><div className="text-2xl font-bold text-slate-800">{data.conversionRateToTrial}%</div><div className="text-xs text-slate-500">{data.trialsStarted} trial{data.trialsStarted === 1 ? '' : 's'} iniciado{data.trialsStarted === 1 ? '' : 's'}</div></div>
+              <div>
+                <div className="text-2xl font-bold text-slate-800">{data.conversionRateToTrial}%</div>
+                <div className="text-xs text-slate-500" title="Sesiones que hicieron el recorrido Landing → … → Trial activado, entre las sesiones con vista del landing. Nunca supera 100%.">
+                  Landing → trial ({data.trialsFromLanding} de {data.landingSessions}) · {data.trialsStarted} trial{data.trialsStarted === 1 ? '' : 's'} en total
+                </div>
+              </div>
             </Card>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <Card className="p-3 text-center">
-              <div className="text-lg font-bold text-slate-800">{data.visitsToday}</div>
-              <div className="text-xs text-slate-500">Hoy</div>
-            </Card>
-            <Card className="p-3 text-center">
-              <div className="text-lg font-bold text-slate-800">{data.visitsLast7Days}</div>
-              <div className="text-xs text-slate-500">Últimos 7 días</div>
-            </Card>
-            <Card className="p-3 text-center">
-              <div className="text-lg font-bold text-slate-800">{data.visitsLast30Days}</div>
-              <div className="text-xs text-slate-500">Últimos 30 días</div>
-            </Card>
+          {/* Composición: bots + internos + históricas + humanas = sin filtrar */}
+          <Card className="p-4">
+            <h3 className="font-semibold text-slate-800 mb-1">Composición del tráfico registrado</h3>
+            <p className="text-xs text-slate-500 mb-3">Qué hay detrás de las {data.composition.raw} visitas sin filtrar del rango. Los registros no se borran: solo se separan.</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+              {[
+                { label: 'Humanas', value: data.composition.human, tip: 'Con identificador de visitante, no bot y no navegador interno.', cls: 'text-emerald-700' },
+                { label: 'Bots / crawlers', value: data.composition.bots, tip: 'User-Agent de buscador, previsualizador, IA, monitor o navegador automatizado.', cls: 'text-red-600' },
+                { label: 'Internas', value: data.composition.internal, tip: 'Navegadores de administradores de la plataforma (se detectan al abrir este panel).', cls: 'text-slate-600' },
+                { label: 'Históricas sin clasificar', value: data.composition.legacy, tip: 'Anteriores a la instrumentación: sin visitante, dispositivo ni fuente. No se puede afirmar si eran humanas o bots.', cls: 'text-amber-600' },
+                { label: 'Sin filtrar', value: data.composition.raw, tip: 'Total registrado en el rango.', cls: 'text-slate-800' },
+              ].map(x => (
+                <div key={x.label} className="rounded-lg bg-slate-50 p-3" title={x.tip}>
+                  <div className={`text-xl font-bold ${x.cls}`}>{x.value}</div>
+                  <div className="text-[11px] text-slate-500">{x.label}</div>
+                </div>
+              ))}
+            </div>
+            {(data.composition.legacy > 0 || data.composition.bots > 0) && (
+              <div className="grid md:grid-cols-2 gap-4 mt-4 text-xs text-slate-600">
+                {data.composition.legacy > 0 && (
+                  <div>
+                    <div className="font-medium text-slate-700 mb-1">Históricas sin clasificar — por país</div>
+                    {data.legacyByCountry.map(r => <div key={r.country} className="flex justify-between"><span>{countryLabel(r.country)}</span><span className="font-semibold">{r.count}</span></div>)}
+                  </div>
+                )}
+                {data.composition.bots > 0 && (
+                  <div>
+                    <div className="font-medium text-slate-700 mb-1">Bots detectados — principales User-Agent</div>
+                    {data.botUserAgents.map(r => <div key={r.userAgent} className="flex justify-between gap-2"><span className="truncate" title={r.userAgent}>{r.userAgent}</span><span className="font-semibold">{r.count}</span></div>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+
+          <div>
+            <p className="text-xs text-slate-500 mb-2">Ventanas fijas de tráfico humano — <b>no dependen</b> del filtro de fechas:</p>
+            <div className="grid grid-cols-3 gap-4">
+              <Card className="p-3 text-center">
+                <div className="text-lg font-bold text-slate-800">{data.visitsToday}</div>
+                <div className="text-xs text-slate-500">Hoy</div>
+              </Card>
+              <Card className="p-3 text-center">
+                <div className="text-lg font-bold text-slate-800">{data.visitsLast7Days}</div>
+                <div className="text-xs text-slate-500">Últimos 7 días</div>
+              </Card>
+              <Card className="p-3 text-center">
+                <div className="text-lg font-bold text-slate-800">{data.visitsLast30Days}</div>
+                <div className="text-xs text-slate-500">Últimos 30 días</div>
+              </Card>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

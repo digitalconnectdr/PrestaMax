@@ -3,41 +3,10 @@ import { getDb, uuid, now } from '../db/database';
 import { sendInquiryNotification } from '../services/emailService';
 import { getClientIp, geolocateIp } from '../services/geoService';
 import { notifyTenantAdmins } from '../lib/notify';
-import {
-  classifyBot, detectDeviceType, categorizeTrafficSource, stripPotentialPii, ALLOWED_EVENT_NAMES,
-} from '../lib/analyticsHelpers';
+import { ALLOWED_EVENT_NAMES, normalizeSignupErrorType } from '../lib/analyticsHelpers';
+import { readTrackingContext, insertAnalyticsEvent } from '../lib/analyticsServer';
 
 const router = Router();
-
-// Campos comunes de contexto que tanto /track-visit como /analytics-event
-// aceptan del cliente (documento.referrer y UTM se capturan en el navegador
-// porque el servidor NUNCA ve el referrer original de una llamada fetch — solo
-// vería el origen de nuestra propia pagina). Todo opcional y de solo texto.
-function readTrackingContext(body: any, req: Request) {
-  const str = (v: any, max = 300) => (typeof v === 'string' ? v.slice(0, max) : null);
-  const userAgent = (req.headers['user-agent'] as string) || '';
-  const webdriverFlag = body?.webdriver === true;
-  const bot = classifyBot(userAgent, webdriverFlag);
-  const referrer = str(body?.referrer, 500);
-  const utmSource = str(body?.utm_source);
-  const utmMedium = str(body?.utm_medium);
-  let currentHost: string | null = null;
-  try { currentHost = body?.page_url ? new URL(body.page_url).hostname : null; } catch { currentHost = null; }
-  return {
-    visitorId: str(body?.visitor_id, 100),
-    sessionId: str(body?.session_id, 100),
-    referrer,
-    utmSource,
-    utmMedium,
-    utmCampaign: str(body?.utm_campaign),
-    utmTerm: str(body?.utm_term),
-    utmContent: str(body?.utm_content),
-    deviceType: detectDeviceType(userAgent),
-    trafficSource: categorizeTrafficSource({ referrer, utmSource, utmMedium, currentHost }),
-    userAgent: userAgent.slice(0, 300),
-    isBot: bot.isBot ? 1 : 0,
-  };
-}
 
 // Trackea una visita al landing page (para el mapa de "visitantes" en Admin Panel).
 // Publico, sin auth. Geolocaliza por IP; no guarda ningun dato personal aparte de eso.
@@ -80,27 +49,11 @@ router.post('/analytics-event', (req: Request, res: Response) => {
     const eventName = typeof req.body?.event === 'string' ? req.body.event : '';
     if (!ALLOWED_EVENT_NAMES.has(eventName)) { res.status(204).end(); return; }
     const path = typeof req.body?.path === 'string' ? req.body.path.slice(0, 200) : null;
-    const geo = geolocateIp(getClientIp(req));
     const ctx = readTrackingContext(req.body, req);
-    const cleanProps = stripPotentialPii(req.body?.properties);
-    const db = getDb();
-    db.prepare(`INSERT INTO analytics_events (
-        id, event_name, visitor_id, session_id, path, cta_location, plan, billing_period,
-        scroll_depth, section_name, country, city, device_type, traffic_source,
-        referrer, utm_source, utm_medium, utm_campaign, utm_term, utm_content,
-        user_agent, is_bot, properties, created_at
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`)
-      .run(
-        uuid(), eventName, ctx.visitorId, ctx.sessionId, path,
-        typeof cleanProps.cta_location === 'string' ? cleanProps.cta_location.slice(0, 50) : null,
-        typeof cleanProps.plan === 'string' ? cleanProps.plan.slice(0, 50) : null,
-        typeof cleanProps.billing_period === 'string' ? cleanProps.billing_period.slice(0, 20) : null,
-        typeof cleanProps.scroll_depth === 'number' ? cleanProps.scroll_depth : null,
-        typeof cleanProps.section === 'string' ? cleanProps.section.slice(0, 50) : null,
-        geo?.country || null, geo?.city || null, ctx.deviceType, ctx.trafficSource,
-        ctx.referrer, ctx.utmSource, ctx.utmMedium, ctx.utmCampaign, ctx.utmTerm, ctx.utmContent,
-        ctx.userAgent, ctx.isBot, JSON.stringify(cleanProps),
-      );
+    // signup_error: solo una categoria tecnica de la lista cerrada, nunca texto libre.
+    const rawProps = req.body?.properties && typeof req.body.properties === 'object' ? { ...req.body.properties } : {};
+    if (eventName === 'signup_error') rawProps.error_type = normalizeSignupErrorType(rawProps.error_type);
+    insertAnalyticsEvent(getDb(), req, eventName, ctx, { path, properties: rawProps });
     res.status(204).end();
   } catch (_e) {
     res.status(204).end();

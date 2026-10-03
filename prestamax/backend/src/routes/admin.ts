@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { seedDemo } from '../db/seed_demo';
 import { validatePlanFeatures } from '../lib/permissions';
+import { FUNNEL_STEPS, computeSequentialFunnel, computeSignupSources, FunnelEventRow } from '../lib/analyticsFunnel';
 
 // Helper: valida el campo `features` de un plan (string JSON o array) contra
 // PERM_DEFS. Devuelve un error legible si hay claves inválidas, o null si OK.
@@ -476,25 +477,114 @@ router.get('/stats', authenticate, requirePlatformAdmin, (req: AuthRequest, res:
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
+// ── Analitica de adquisicion: DEFINICIONES UNICAS (oct 2026) ─────────────────
+// Antes cada vista armaba su propio filtro y su propia poblacion: Resumen usaba
+// rango + "no bot", Geografia usaba TODO el historico sin filtrar, y los datos
+// anteriores a la instrumentacion (fila sin visitor_id/user_agent, con is_bot=0
+// por el DEFAULT del ALTER) contaban como "humanos". Ahora todas las vistas usan
+// estas mismas definiciones sobre page_views:
+//   bot       = is_bot=1 (UA de crawler/preview/headless/IA, o sin User-Agent)
+//   interno   = no bot y visitor_id en internal_visitors (navegador de un admin)
+//   legacy    = no bot y SIN visitor_id: fila anterior a la instrumentacion. No se
+//               puede afirmar que sea humana ni bot -> NO cuenta como humana, pero
+//               se conserva y se muestra aparte
+//   humano    = no bot, con visitor_id, no interno
+// bots + internal + legacy + human = raw (sin filtrar), siempre.
+const PV_NOT_BOT = `(is_bot=0 OR is_bot IS NULL)`;
+const PV_INTERNAL = `visitor_id IN (SELECT visitor_id FROM internal_visitors)`;
+const PV_HUMAN = `${PV_NOT_BOT} AND visitor_id IS NOT NULL AND visitor_id NOT IN (SELECT visitor_id FROM internal_visitors)`;
+// analytics_events es posterior a la instrumentacion (todas sus filas traen UA/is_bot reales):
+// solo hay que excluir bots y navegadores internos.
+const EV_HUMAN = `${PV_NOT_BOT} AND (visitor_id IS NULL OR visitor_id NOT IN (SELECT visitor_id FROM internal_visitors))`;
+
+// Rango temporal compartido por TODAS las vistas. FIX (oct 2026): created_at se
+// guarda como 'YYYY-MM-DD HH:MM:SS' (datetime('now')) pero el rango se comparaba
+// contra ISO ('YYYY-MM-DDTHH:MM:SS.sssZ'): como texto ' ' < 'T', asi que todo el
+// primer dia del rango quedaba fuera y el filtro "Hoy" devolvia siempre 0.
+function resolveAnalyticsRange(req: Request): { from: string; to: string; fromSql: string; toSql: string } {
+  const q = req.query as any;
+  const nowD = new Date();
+  let from: string;
+  let to: string = typeof q.to === 'string' && q.to ? new Date(`${q.to}T23:59:59.999Z`).toISOString() : nowD.toISOString();
+  if (typeof q.from === 'string' && q.from) {
+    from = new Date(`${q.from}T00:00:00.000Z`).toISOString();
+  } else {
+    const range = typeof q.range === 'string' ? q.range : '30d';
+    const days = range === 'today' ? 0 : range === '7d' ? 7 : range === '90d' ? 90 : 30;
+    const d = new Date(nowD);
+    d.setUTCDate(d.getUTCDate() - days);
+    if (range === 'today' || days > 0) d.setUTCHours(0, 0, 0, 0); // dias completos, no "ahora - N*24h"
+    from = d.toISOString();
+  }
+  const toSqlFmt = (iso: string) => iso.replace('T', ' ').slice(0, 19);
+  return { from, to, fromSql: toSqlFmt(from), toSql: toSqlFmt(to) };
+}
+
+function pvComposition(db: any, fromSql: string, toSql: string) {
+  const c = (where: string) => (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at BETWEEN ? AND ? AND ${where}`).get(fromSql, toSql) as any).c as number;
+  return {
+    raw: c('1=1'),
+    human: c(PV_HUMAN),
+    bots: c('is_bot=1'),
+    internal: c(`${PV_NOT_BOT} AND ${PV_INTERNAL}`),
+    legacy: c(`${PV_NOT_BOT} AND visitor_id IS NULL`),
+  };
+}
+
+const FUNNEL_EVENT_NAMES = [...FUNNEL_STEPS.map(s => s.event), 'seo_cta_click', 'resource_view'];
+function loadFunnelRows(db: any, fromSql: string, toSql: string, extra = '', params: any[] = []): FunnelEventRow[] {
+  const ph = FUNNEL_EVENT_NAMES.map(() => '?').join(',');
+  return db.prepare(`
+    SELECT rowid AS rid, event_name, session_id, visitor_id, created_at, traffic_source
+    FROM analytics_events
+    WHERE created_at BETWEEN ? AND ? AND ${EV_HUMAN} AND event_name IN (${ph}) ${extra}
+    ORDER BY created_at, rowid
+  `).all(fromSql, toSql, ...FUNNEL_EVENT_NAMES, ...params) as any[];
+}
+
+// POST: marca el navegador (visitor_id) de un admin de plataforma como interno.
+// Requiere sesion de admin (nada de confiar en un flag del cliente publico) y es
+// idempotente. Lo llama el panel de Admin al abrirse.
+router.post('/analytics/mark-internal', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const vid = typeof req.body?.visitor_id === 'string' ? req.body.visitor_id.trim() : '';
+    if (!/^[A-Za-z0-9-]{8,100}$/.test(vid)) return res.status(400).json({ error: 'visitor_id invalido' });
+    getDb().prepare(`INSERT OR IGNORE INTO internal_visitors (visitor_id, reason) VALUES (?, 'platform_admin')`).run(vid);
+    res.json({ ok: true });
+  } catch (e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
+});
+
 // GET geolocalizacion agregada: visitantes del landing (page_views) y empresas
 // registradas (tenants.geo_*), agrupados por ciudad para pintar en un mapa.
+// Visitantes: MISMO rango temporal y MISMA definicion de trafico humano que
+// Resumen/Conversion/Comportamiento (?traffic=raw muestra todo sin filtrar).
+// Empresas registradas: historico completo (no dependen del rango).
 router.get('/geography', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
+    const { from, to, fromSql, toSql } = resolveAnalyticsRange(req);
+    const traffic = (req.query as any).traffic === 'raw' ? 'raw' : 'human';
+    const W = traffic === 'raw' ? '1=1' : PV_HUMAN;
+    const inRange = `created_at BETWEEN ? AND ? AND ${W}`;
     const visitorsByCity = db.prepare(`
       SELECT country, city, AVG(lat) as lat, AVG(lng) as lng, COUNT(*) as count
       FROM page_views
-      WHERE country IS NOT NULL
+      WHERE country IS NOT NULL AND ${inRange}
       GROUP BY country, COALESCE(city, '')
       ORDER BY count DESC
-    `).all() as any[];
+    `).all(fromSql, toSql) as any[];
     const visitorsByCountry = db.prepare(`
       SELECT country, COUNT(*) as count
       FROM page_views
-      WHERE country IS NOT NULL
+      WHERE country IS NOT NULL AND ${inRange}
       GROUP BY country
       ORDER BY count DESC
-    `).all() as any[];
+    `).all(fromSql, toSql) as any[];
+    const unknownCity = db.prepare(`
+      SELECT country, COUNT(*) as count FROM page_views
+      WHERE country IS NOT NULL AND (city IS NULL OR city='') AND ${inRange}
+      GROUP BY country ORDER BY count DESC
+    `).all(fromSql, toSql) as any[];
     const tenantsByCity = db.prepare(`
       SELECT geo_country as country, geo_city as city, AVG(geo_lat) as lat, AVG(geo_lng) as lng, COUNT(*) as count
       FROM tenants
@@ -509,12 +599,15 @@ router.get('/geography', authenticate, requirePlatformAdmin, (req: AuthRequest, 
       GROUP BY geo_country
       ORDER BY count DESC
     `).all() as any[];
-    const totalVisits = (db.prepare('SELECT COUNT(*) as c FROM page_views').get() as any).c;
+    const composition = pvComposition(db, fromSql, toSql);
+    const totalVisits = traffic === 'raw' ? composition.raw : composition.human;
     const totalTenantsWithGeo = (db.prepare('SELECT COUNT(*) as c FROM tenants WHERE geo_country IS NOT NULL').get() as any).c;
     const totalTenants = (db.prepare('SELECT COUNT(*) as c FROM tenants').get() as any).c;
-    const visitsToday = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE date(created_at) = date('now')`).get() as any).c;
-    const visitsLast7Days = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now','-7 days')`).get() as any).c;
-    const visitsLast30Days = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now','-30 days')`).get() as any).c;
+    // Ventanas fijas (independientes del filtro), con la MISMA definicion de trafico.
+    const fixed = (cond: string) => (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE ${cond} AND ${W}`).get() as any).c;
+    const visitsToday = fixed(`date(created_at) = date('now')`);
+    const visitsLast7Days = fixed(`created_at >= datetime('now','-7 days')`);
+    const visitsLast30Days = fixed(`created_at >= datetime('now','-30 days')`);
     // Ingreso mensual estimado por pais (solo suscripciones activas) — para decidir
     // donde enfocar publicidad segun de donde viene la facturacion, no solo el volumen.
     const revenueByCountry = db.prepare(`
@@ -527,131 +620,97 @@ router.get('/geography', authenticate, requirePlatformAdmin, (req: AuthRequest, 
       GROUP BY t.geo_country
       ORDER BY monthlyRevenue DESC
     `).all() as any[];
-    // FIX (Fase 1 Analytics, sep 2026): se agregan estos 2 campos SIN tocar
-    // ninguno de los existentes arriba — el tab "Geografía" sigue leyendo
-    // exactamente lo mismo que antes. visitorsByCountryClean/totalVisitsClean
-    // son la misma agregacion mas el filtro is_bot=0, para quien quiera
-    // comparar el numero crudo contra el numero sin trafico automatizado
-        // conocido (ver auditoria del reporte de Fase 1).
-    const totalVisitsClean = (db.prepare('SELECT COUNT(*) as c FROM page_views WHERE is_bot=0 OR is_bot IS NULL').get() as any).c;
-    const visitorsByCountryClean = db.prepare(`
-      SELECT country, COUNT(*) as count
-      FROM page_views
-      WHERE country IS NOT NULL AND (is_bot=0 OR is_bot IS NULL)
-      GROUP BY country
-      ORDER BY count DESC
-    `).all() as any[];
     res.json({
+      range: { from, to }, traffic, composition, unknownCity,
       visitorsByCity, visitorsByCountry, tenantsByCity, tenantsByCountry,
       totalVisits, totalTenantsWithGeo, totalTenants,
       visitsToday, visitsLast7Days, visitsLast30Days, revenueByCountry,
-      totalVisitsClean, visitorsByCountryClean,
     });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
 // ── Fase 1 Analytics: Resumen / Conversion / Comportamiento ──────────────────
-// Comparten un mismo resolvedor de rango de fechas (filtro Hoy/7d/30d/90d/
-// Personalizado del Admin Panel). "Limpio" = is_bot=0 (o NULL, filas viejas
-// anteriores a esta migracion que no tienen la columna poblada).
-function resolveAnalyticsRange(req: Request): { from: string; to: string } {
-  const q = req.query as any;
-  const nowD = new Date();
-  let from: string;
-  let to: string = typeof q.to === 'string' && q.to ? new Date(`${q.to}T23:59:59.999Z`).toISOString() : nowD.toISOString();
-  if (typeof q.from === 'string' && q.from) {
-    from = new Date(`${q.from}T00:00:00.000Z`).toISOString();
-  } else {
-    const range = typeof q.range === 'string' ? q.range : '30d';
-    const days = range === 'today' ? 0 : range === '7d' ? 7 : range === '90d' ? 90 : 30;
-    const d = new Date(nowD);
-    d.setUTCDate(d.getUTCDate() - days);
-    if (range === 'today') d.setUTCHours(0, 0, 0, 0);
-    from = d.toISOString();
-  }
-  return { from, to };
-}
-
-// GET resumen del funnel de adquisicion: visitas/visitantes/sesiones limpios,
-// dispositivo, fuentes principales, trials iniciados y tasa de conversion.
+// GET resumen del funnel de adquisicion: visitas/visitantes/sesiones humanos,
+// dispositivo, fuentes principales, trials y tasa de conversion.
 router.get('/analytics/summary', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    const { from, to } = resolveAnalyticsRange(req);
-    const CLEAN = `(is_bot=0 OR is_bot IS NULL)`;
-    const totalVisits = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at BETWEEN ? AND ?`).get(from, to) as any).c;
-    const totalVisitsClean = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at BETWEEN ? AND ? AND ${CLEAN}`).get(from, to) as any).c;
-    const uniqueVisitors = (db.prepare(`SELECT COUNT(DISTINCT visitor_id) as c FROM page_views WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND visitor_id IS NOT NULL`).get(from, to) as any).c;
-    const sessions = (db.prepare(`SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND session_id IS NOT NULL`).get(from, to) as any).c;
-    const visitsToday = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE date(created_at) = date('now') AND ${CLEAN}`).get() as any).c;
-    const visitsLast7Days = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now','-7 days') AND ${CLEAN}`).get() as any).c;
-    const visitsLast30Days = (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE created_at >= datetime('now','-30 days') AND ${CLEAN}`).get() as any).c;
+    const { from, to, fromSql, toSql } = resolveAnalyticsRange(req);
+    const composition = pvComposition(db, fromSql, toSql);
+    const inRange = `created_at BETWEEN ? AND ? AND ${PV_HUMAN}`;
+    const uniqueVisitors = (db.prepare(`SELECT COUNT(DISTINCT visitor_id) as c FROM page_views WHERE ${inRange}`).get(fromSql, toSql) as any).c;
+    const sessions = (db.prepare(`SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE ${inRange} AND session_id IS NOT NULL`).get(fromSql, toSql) as any).c;
+    const fixed = (cond: string) => (db.prepare(`SELECT COUNT(*) as c FROM page_views WHERE ${cond} AND ${PV_HUMAN}`).get() as any).c;
+    const visitsToday = fixed(`date(created_at) = date('now')`);
+    const visitsLast7Days = fixed(`created_at >= datetime('now','-7 days')`);
+    const visitsLast30Days = fixed(`created_at >= datetime('now','-30 days')`);
     const byCountry = db.prepare(`
       SELECT country, COUNT(*) as count FROM page_views
-      WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND country IS NOT NULL
+      WHERE ${inRange} AND country IS NOT NULL
       GROUP BY country ORDER BY count DESC LIMIT 15
-    `).all(from, to) as any[];
+    `).all(fromSql, toSql) as any[];
     const byDevice = db.prepare(`
       SELECT COALESCE(device_type,'unknown') as device, COUNT(*) as count FROM page_views
-      WHERE created_at BETWEEN ? AND ? AND ${CLEAN}
+      WHERE ${inRange}
       GROUP BY device ORDER BY count DESC
-    `).all(from, to) as any[];
+    `).all(fromSql, toSql) as any[];
     const bySource = db.prepare(`
       SELECT COALESCE(traffic_source,'unknown') as source, COUNT(*) as count FROM page_views
-      WHERE created_at BETWEEN ? AND ? AND ${CLEAN}
+      WHERE ${inRange}
       GROUP BY source ORDER BY count DESC
-    `).all(from, to) as any[];
+    `).all(fromSql, toSql) as any[];
     const topReferrers = db.prepare(`
       SELECT referrer, COUNT(*) as count FROM page_views
-      WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND referrer IS NOT NULL AND referrer != ''
+      WHERE ${inRange} AND referrer IS NOT NULL AND referrer != ''
       GROUP BY referrer ORDER BY count DESC LIMIT 10
-    `).all(from, to) as any[];
-    const trialsStarted = (db.prepare(`
-      SELECT COUNT(*) as c FROM analytics_events
-      WHERE event_name='trial_activated' AND created_at BETWEEN ? AND ? AND ${CLEAN}
-    `).get(from, to) as any).c;
-    const conversionRateToTrial = uniqueVisitors > 0 ? Math.round((trialsStarted / uniqueVisitors) * 1000) / 10 : 0;
+    `).all(fromSql, toSql) as any[];
+    // Trafico que NO cuenta como humano, para que se vea que es y de donde viene.
+    const legacyByCountry = db.prepare(`
+      SELECT country, COUNT(*) as count FROM page_views
+      WHERE created_at BETWEEN ? AND ? AND ${PV_NOT_BOT} AND visitor_id IS NULL AND country IS NOT NULL
+      GROUP BY country ORDER BY count DESC LIMIT 5
+    `).all(fromSql, toSql) as any[];
+    const botUserAgents = db.prepare(`
+      SELECT substr(COALESCE(user_agent,'(sin user-agent)'),1,60) as user_agent, COUNT(*) as count FROM page_views
+      WHERE created_at BETWEEN ? AND ? AND is_bot=1
+      GROUP BY user_agent ORDER BY count DESC LIMIT 5
+    `).all(fromSql, toSql) as any[];
+
+    // Trials: sesiones distintas con trial_activated (global) y, aparte, las que
+    // vienen de un recorrido landing -> ... -> trial (secuencial). La tasa usa solo
+    // el recorrido secuencial, asi que nunca puede superar 100%.
+    const fr = computeSequentialFunnel(loadFunnelRows(db, fromSql, toSql));
+    const trialsStarted = fr.globals.find(g => g.event === 'trial_activated')?.sessions || 0;
+    const landingSessions = fr.steps[0].count;
+    const trialsFromLanding = fr.steps.find(s => s.key === 'trial_activated')?.count || 0;
+    const conversionRateToTrial = landingSessions > 0 ? Math.round((trialsFromLanding / landingSessions) * 1000) / 10 : 0;
+
     res.json({
       range: { from, to },
-      totalVisits, totalVisitsClean, uniqueVisitors, sessions,
+      composition,
+      // Compatibilidad: totalVisits = sin filtrar (raw); totalVisitsClean = humanas.
+      totalVisits: composition.raw, totalVisitsClean: composition.human, uniqueVisitors, sessions,
       visitsToday, visitsLast7Days, visitsLast30Days,
       byCountry, byDevice, bySource, topReferrers,
-      trialsStarted, conversionRateToTrial,
+      legacyByCountry, botUserAgents,
+      trialsStarted, trialsFromLanding, landingSessions, conversionRateToTrial,
     });
   } catch (e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
-// GET funnel de conversion: Landing -> Pricing -> CTA -> Signup iniciado ->
-// Signup completado -> Trial activado -> Activado -> Checkout iniciado ->
-// Suscripcion iniciada (Fase 3 extiende el funnel de Fase 1 hasta suscripcion
-// real). Segmentable por pais/dispositivo/fuente/utm_source/plan/periodo de
-// facturacion cuando hay dato disponible.
-//
-// NOTA DE METODOLOGIA (Fase 3): los primeros 6 pasos (adquisicion, hasta
-// trial_activated) cuentan SESIONES distintas — tiene sentido porque ocurren
-// en la misma visita. Los ultimos 3 pasos (activated/checkout/subscription)
-// cuentan VISITANTES distintos: son eventos de ciclo de vida que pueden
-// ocurrir dias despues, en otra sesion (la sesion original ya expiro a los
-// 30 min de inactividad). Comparar sesiones vs visitantes es una aproximacion
-// razonable — nunca un mismo visitante cuenta dos veces dentro de cada grupo.
-const FUNNEL_STEPS: { key: string; event: string; countBy: 'session_id' | 'visitor_id' }[] = [
-  { key: 'landing', event: 'landing_view', countBy: 'session_id' },
-  { key: 'pricing', event: 'pricing_view', countBy: 'session_id' },
-  { key: 'cta', event: 'trial_cta_click', countBy: 'session_id' },
-  { key: 'signup_started', event: 'signup_started', countBy: 'session_id' },
-  { key: 'signup_completed', event: 'signup_completed', countBy: 'session_id' },
-  { key: 'trial_activated', event: 'trial_activated', countBy: 'session_id' },
-  { key: 'activated', event: 'activation_completed', countBy: 'visitor_id' },
-  { key: 'checkout_started', event: 'checkout_started', countBy: 'visitor_id' },
-  { key: 'subscription_started', event: 'subscription_started', countBy: 'visitor_id' },
-];
+// GET funnel de conversion ESTRICTAMENTE SECUENCIAL (ver lib/analyticsFunnel.ts):
+// cada paso cuenta solo a quien completo el anterior, en orden temporal.
+// Pasos 1-6 por SESION; pasos 7-9 (ciclo de vida) por VISITANTE. Ademas devuelve
+// los totales globales (sin exigir el paso previo), el origen del signup, el
+// diagnostico del formulario y un cotejo contra empresas realmente creadas.
+// Segmentable por pais/dispositivo/fuente/utm_source/plan/periodo de facturacion.
 router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    const { from, to } = resolveAnalyticsRange(req);
+    const { from, to, fromSql, toSql } = resolveAnalyticsRange(req);
     const q = req.query as any;
     let extra = '';
-    const params: any[] = [from, to];
+    const params: any[] = [];
     if (q.country) { extra += ' AND country = ?'; params.push(q.country); }
     if (q.device) { extra += ' AND device_type = ?'; params.push(q.device); }
     if (q.source) { extra += ' AND traffic_source = ?'; params.push(q.source); }
@@ -659,35 +718,42 @@ router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRe
     if (q.plan) { extra += ' AND plan = ?'; params.push(q.plan); }
     if (q.billing_period) { extra += ' AND billing_period = ?'; params.push(q.billing_period); }
 
-    const steps = FUNNEL_STEPS.map(s => {
-      const count = (db.prepare(`
-        SELECT COUNT(DISTINCT ${s.countBy}) as c FROM analytics_events
-        WHERE event_name=? AND created_at BETWEEN ? AND ? AND (is_bot=0 OR is_bot IS NULL) AND ${s.countBy} IS NOT NULL ${extra}
-      `).get(s.event, ...params) as any).c;
-      return { key: s.key, event: s.event, count };
-    });
-    const first = steps[0]?.count || 0;
-    const stepsWithRates = steps.map((s, i) => {
-      const prev = i === 0 ? null : steps[i - 1].count;
-      const pctOfPrevious = prev && prev > 0 ? Math.round((s.count / prev) * 1000) / 10 : (i === 0 ? 100 : 0);
-      const pctOfTotal = first > 0 ? Math.round((s.count / first) * 1000) / 10 : 0;
-      const dropOff = prev != null ? Math.max(0, prev - s.count) : 0;
-      return { ...s, pctOfPrevious, pctOfTotal, dropOff };
-    });
-    const overallConversion = first > 0 ? Math.round((steps[steps.length - 1].count / first) * 1000) / 10 : 0;
+    const rows = loadFunnelRows(db, fromSql, toSql, extra, params);
+    const { steps, overallConversion, globals } = computeSequentialFunnel(rows);
+    const signupSources = computeSignupSources(rows);
+
+    // Diagnostico del formulario de registro (sesiones humanas distintas).
+    const sess = (event: string) => (db.prepare(`
+      SELECT COUNT(DISTINCT session_id) as c FROM analytics_events
+      WHERE event_name=? AND created_at BETWEEN ? AND ? AND ${EV_HUMAN} AND session_id IS NOT NULL
+    `).get(event, fromSql, toSql) as any).c as number;
+    const errorRows = db.prepare(`
+      SELECT COALESCE(json_extract(properties,'$.error_type'),'unknown') as error_type, COUNT(DISTINCT session_id) as c
+      FROM analytics_events
+      WHERE event_name='signup_error' AND created_at BETWEEN ? AND ? AND ${EV_HUMAN} AND session_id IS NOT NULL
+      GROUP BY error_type
+    `).all(fromSql, toSql) as any[];
+    const signupErrors: Record<string, number> = { validation: 0, duplicate_email: 0, network: 0, server: 0, unknown: 0 };
+    for (const r of errorRows) signupErrors[r.error_type in signupErrors ? r.error_type : 'unknown'] += r.c;
+    const signupForm = { started: sess('signup_started'), submitted: sess('signup_submit'), completed: sess('signup_completed'), errors: signupErrors };
+
+    // Cotejo: empresas realmente creadas en el rango (incluye cuentas de prueba/
+    // internas) vs sesiones con signup_completed. Si hay mas empresas que eventos,
+    // hay registros sin evento (bloqueador, alta manual o tracking roto).
+    const tenantsCreated = (db.prepare(`SELECT COUNT(*) as c FROM tenants WHERE created_at BETWEEN ? AND ?`).get(fromSql, toSql) as any).c;
 
     // Opciones disponibles para los selectores de segmentacion (solo valores
     // que realmente existen en el rango, para no ofrecer filtros vacios).
-    const availableCountries = db.prepare(`SELECT DISTINCT country FROM analytics_events WHERE country IS NOT NULL AND created_at BETWEEN ? AND ? LIMIT 50`).all(from, to).map((r: any) => r.country);
-    const availableDevices = db.prepare(`SELECT DISTINCT device_type FROM analytics_events WHERE device_type IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.device_type);
-    const availableSources = db.prepare(`SELECT DISTINCT traffic_source FROM analytics_events WHERE traffic_source IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.traffic_source);
-    const availablePlans = db.prepare(`SELECT DISTINCT plan FROM analytics_events WHERE plan IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.plan);
-    const availableBillingPeriods = db.prepare(`SELECT DISTINCT billing_period FROM analytics_events WHERE billing_period IS NOT NULL AND created_at BETWEEN ? AND ?`).all(from, to).map((r: any) => r.billing_period);
+    const availableCountries = db.prepare(`SELECT DISTINCT country FROM analytics_events WHERE country IS NOT NULL AND created_at BETWEEN ? AND ? LIMIT 50`).all(fromSql, toSql).map((r: any) => r.country);
+    const availableDevices = db.prepare(`SELECT DISTINCT device_type FROM analytics_events WHERE device_type IS NOT NULL AND created_at BETWEEN ? AND ?`).all(fromSql, toSql).map((r: any) => r.device_type);
+    const availableSources = db.prepare(`SELECT DISTINCT traffic_source FROM analytics_events WHERE traffic_source IS NOT NULL AND created_at BETWEEN ? AND ?`).all(fromSql, toSql).map((r: any) => r.traffic_source);
+    const availablePlans = db.prepare(`SELECT DISTINCT plan FROM analytics_events WHERE plan IS NOT NULL AND created_at BETWEEN ? AND ?`).all(fromSql, toSql).map((r: any) => r.plan);
+    const availableBillingPeriods = db.prepare(`SELECT DISTINCT billing_period FROM analytics_events WHERE billing_period IS NOT NULL AND created_at BETWEEN ? AND ?`).all(fromSql, toSql).map((r: any) => r.billing_period);
 
     res.json({
       range: { from, to },
-      steps: stepsWithRates,
-      overallConversion,
+      steps, overallConversion, globals, signupSources, signupForm,
+      registrations: { tenantsCreated, signupCompletedSessions: signupForm.completed },
       filters: {
         country: q.country || null, device: q.device || null, source: q.source || null,
         utm_source: q.utm_source || null, plan: q.plan || null, billing_period: q.billing_period || null,
@@ -705,22 +771,21 @@ router.get('/analytics/funnel', authenticate, requirePlatformAdmin, (req: AuthRe
 // Sin este fix, la pestaña Comportamiento reportaba 0 visitantes/CTA para
 // TODAS las secciones del landing actual (V2) porque section_name nunca
 // coincidía con esta lista.
+// (oct 2026) Mismo rango y misma definicion de trafico humano que el resto; el
+// numerador se limita a las sesiones del denominador, asi ningun % supera 100.
 const LANDING_SECTIONS = ['hero', 'problem-result', 'how-it-works', 'capabilities', 'differentiator', 'migration', 'security', 'pricing', 'faq', 'cta-final'];
 router.get('/analytics/behavior', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    const { from, to } = resolveAnalyticsRange(req);
-    const CLEAN = `(is_bot=0 OR is_bot IS NULL)`;
-    const totalSessions = (db.prepare(`
-      SELECT COUNT(DISTINCT session_id) as c FROM page_views
-      WHERE created_at BETWEEN ? AND ? AND ${CLEAN} AND session_id IS NOT NULL
-    `).get(from, to) as any).c;
+    const { from, to, fromSql, toSql } = resolveAnalyticsRange(req);
+    const HUMAN_SESSIONS = `SELECT DISTINCT session_id FROM page_views WHERE created_at BETWEEN ? AND ? AND ${PV_HUMAN} AND session_id IS NOT NULL`;
+    const totalSessions = (db.prepare(`SELECT COUNT(*) as c FROM (${HUMAN_SESSIONS})`).get(fromSql, toSql) as any).c;
 
     const scrollDepths = [25, 50, 75, 90, 100].map(depth => {
       const count = (db.prepare(`
         SELECT COUNT(DISTINCT session_id) as c FROM analytics_events
-        WHERE event_name=? AND created_at BETWEEN ? AND ? AND ${CLEAN} AND session_id IS NOT NULL
-      `).get(`scroll_${depth}`, from, to) as any).c;
+        WHERE event_name=? AND created_at BETWEEN ? AND ? AND ${EV_HUMAN} AND session_id IN (${HUMAN_SESSIONS})
+      `).get(`scroll_${depth}`, fromSql, toSql, fromSql, toSql) as any).c;
       const pct = totalSessions > 0 ? Math.round((count / totalSessions) * 1000) / 10 : 0;
       return { depth, count, pctOfSessions: pct };
     });
@@ -728,12 +793,12 @@ router.get('/analytics/behavior', authenticate, requirePlatformAdmin, (req: Auth
     const sections = LANDING_SECTIONS.map(section => {
       const visitors = (db.prepare(`
         SELECT COUNT(DISTINCT session_id) as c FROM analytics_events
-        WHERE event_name='section_view' AND section_name=? AND created_at BETWEEN ? AND ? AND ${CLEAN} AND session_id IS NOT NULL
-      `).get(section, from, to) as any).c;
+        WHERE event_name='section_view' AND section_name=? AND created_at BETWEEN ? AND ? AND ${EV_HUMAN} AND session_id IN (${HUMAN_SESSIONS})
+      `).get(section, fromSql, toSql, fromSql, toSql) as any).c;
       const ctaClicks = (db.prepare(`
         SELECT COUNT(*) as c FROM analytics_events
-        WHERE event_name='trial_cta_click' AND cta_location=? AND created_at BETWEEN ? AND ? AND ${CLEAN}
-      `).get(section, from, to) as any).c;
+        WHERE event_name='trial_cta_click' AND cta_location=? AND created_at BETWEEN ? AND ? AND ${EV_HUMAN}
+      `).get(section, fromSql, toSql) as any).c;
       const pct = totalSessions > 0 ? Math.round((visitors / totalSessions) * 1000) / 10 : 0;
       return { section, visitors, pctOfSessions: pct, ctaClicks };
     });
@@ -743,9 +808,9 @@ router.get('/analytics/behavior', authenticate, requirePlatformAdmin, (req: Auth
     const ctaByLocation = db.prepare(`
       SELECT COALESCE(cta_location,'unknown') as location, COUNT(*) as count
       FROM analytics_events
-      WHERE event_name='trial_cta_click' AND created_at BETWEEN ? AND ? AND ${CLEAN}
+      WHERE event_name='trial_cta_click' AND created_at BETWEEN ? AND ? AND ${EV_HUMAN}
       GROUP BY location ORDER BY count DESC
-    `).all(from, to) as any[];
+    `).all(fromSql, toSql) as any[];
 
     res.json({ range: { from, to }, totalSessions, scrollDepths, sections, ctaByLocation });
   } catch (e: any) { res.status(500).json({ error: e.message || 'Failed' }); }
