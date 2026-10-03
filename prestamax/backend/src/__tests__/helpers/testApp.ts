@@ -42,6 +42,13 @@ export async function bootTestApp(): Promise<TestApp> {
   process.env.NODE_ENV = 'test';
 
   const dbMod = await import('../../db/database');
+  // GUARDA DE AISLAMIENTO: DB_PATH se fija al importar db/database. Si algún import
+  // ESTÁTICO del archivo de test cargó ese módulo antes de bootTestApp() (p. ej. un
+  // servicio que lo importa), los tests escribirían en la BD local de desarrollo.
+  // Mejor fallar ruidosamente que ensuciar una base real.
+  if (path.resolve(dbMod.DB_PATH) !== path.resolve(dbFile)) {
+    throw new Error(`bootTestApp: la BD no está aislada (DB_PATH=${dbMod.DB_PATH}). Importa servicios/rutas con import() DINÁMICO después de bootTestApp().`);
+  }
   dbMod.initializeDatabase();
   const db: any = dbMod.getDb();
 

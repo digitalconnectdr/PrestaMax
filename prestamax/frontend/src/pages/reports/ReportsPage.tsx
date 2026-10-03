@@ -212,6 +212,7 @@ const ReportsPage: React.FC = () => {
   }, [])
 
   const loadSubscriptions = () => {
+    if (!can('reports.scheduled')) return   // Básico+; el backend es la autoridad final
     api.get('/reports/subscriptions').then(res => setSubscriptions(Array.isArray(res.data) ? res.data : [])).catch(() => {})
   }
   useEffect(() => { loadSubscriptions() }, [])
@@ -587,6 +588,7 @@ const ReportsPage: React.FC = () => {
                 </div>
               </Card>
 
+              {can('reports.scheduled') && (
               <Card className="bg-slate-50 border-slate-200">
                 <h3 className="section-title mb-1">{t('rpt.digest_title')}</h3>
                 <p className="text-xs text-slate-500 mb-3">{t('rpt.digest_desc')}</p>
@@ -612,6 +614,7 @@ const ReportsPage: React.FC = () => {
                   <Button size="sm" onClick={handleAddDigest} disabled={isSavingDigest}>{isSavingDigest ? t('rpt.saving') : t('rpt.activate_digest')}</Button>
                 </div>
               </Card>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Stat icon={DollarSign} title={t('rpt.stat_total_portfolio')} value={formatCurrency(data.kpis.totalPortfolio)} color="blue" />

@@ -101,7 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       items: [
         { icon: BarChart3,     label: t('nav.reports'),     path: '/reports',
           show: canAny(['reports.dashboard','reports.portfolio','reports.mora','reports.collections','reports.advanced','reports.income','reports.datacredito']) },
-        { icon: FileSpreadsheet,label: t('nav.accounting'), path: '/reports/accounting',     show: can('reports.dashboard') },
+        { icon: FileSpreadsheet,label: t('nav.accounting'), path: '/reports/accounting',     show: can('reports.accounting_export') },
         { icon: CalendarRange, label: t('nav.projection'),  path: '/reports/projection',
           show: can('reports.projection') },
       ],
@@ -114,7 +114,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
         { icon: Users2,    label: t('nav.users'),         path: '/settings/users',        show: can('settings.users') },
         { icon: MapPin,    label: t('nav.branches'),      path: '/settings/branches',     show: can('settings.branches') },
         { icon: Landmark,  label: t('nav.bank_accounts'), path: '/settings/bank-accounts',show: can('settings.bank_accounts') },
-        { icon: CreditCard,label: t('nav.subscription'),  path: '/settings/subscription', show: true },
+        { icon: CreditCard,label: t('nav.subscription'),  path: '/settings/subscription', show: can('settings.general') },
       ],
     },
     {

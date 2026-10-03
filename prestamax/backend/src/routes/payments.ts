@@ -686,6 +686,12 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
       `).get(loan.id) as any;
       const voidDaysOverdue = Math.max(0, voidedOverdue?.oldest_overdue ?? 0);
 
+      // EXCEPCION INTENCIONAL al limite de prestamos activos (NO es un bypass
+      // accidental): si anular este pago reabre un prestamo 'liquidated' -> 'active'
+      // /'in_mora', NO se valida el limite del plan. Una correccion financiera legitima
+      // jamas debe bloquearse; el tenant puede quedar temporalmente por encima del
+      // limite. Mientras siga excedido, solo se bloquean NUEVAS activaciones
+      // (disburse/consolidate/importar/convertir). Ver lib/planLimits.ts y su test.
       // FIX P1: respetar in_mora cuando hay cuotas vencidas tras grace_days.
       // Antes el void siempre devolvia 'active' aunque hubiera mora real.
       const newStatus = principalBalance <= 0.01

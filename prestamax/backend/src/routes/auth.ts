@@ -156,7 +156,8 @@ router.get('/subscription-status', authenticate, async (req: AuthRequest, res: R
 
 router.post('/register-tenant', async (req: Request, res: Response) => {
   try {
-    const { company_name, admin_name, admin_email, admin_password, phone, currency = 'DOP', plan_id } = req.body;
+    // `plan_id` enviado por el cliente se IGNORA a proposito (ver "PLAN" mas abajo).
+    const { company_name, admin_name, admin_email, admin_password, phone, currency = 'DOP' } = req.body;
     if (!company_name?.trim()) return res.status(400).json({ error: 'Nombre de empresa es requerido' });
     if (!admin_name?.trim()) return res.status(400).json({ error: 'Tu nombre es requerido' });
     if (!admin_email?.trim()) return res.status(400).json({ error: 'Email es requerido' });
@@ -179,27 +180,28 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     const trialUsedRow = db.prepare('SELECT email, first_tenant_id, first_used_at FROM trial_history WHERE email=?').get(normalizedEmail) as any;
     const trialAlreadyUsed = !!trialUsedRow;
 
-    // Si el usuario ya uso trial, debe seleccionar un plan pago de entrada
-    // (no se le otorga trial nuevamente).
-    if (trialAlreadyUsed && !plan_id) {
-      return res.status(400).json({
-        error: 'Este email ya uso el periodo de prueba anteriormente. Para crear una nueva cuenta debes seleccionar un plan pago.',
-        code: 'TRIAL_ALREADY_USED',
-        first_used_at: trialUsedRow.first_used_at,
-      });
+    // PLAN: SIEMPRE se resuelve en el servidor. Se ignora cualquier `plan_id` enviado
+    // por el cliente (id arbitrario/inexistente o un plan comercial elegido a mano):
+    // el registro publico es el trial gratuito (plan-trial activo). El paso a un plan
+    // de pago ocurre SOLO por los flujos de suscripcion (checkout/webhook) o por el
+    // Admin de plataforma, nunca por el registro.
+    const trialPlan = db.prepare('SELECT id, trial_days FROM plans WHERE is_trial_default=1 AND is_active=1 LIMIT 1').get() as any;
+    if (!trialPlan) {
+      return res.status(503).json({ error: 'El registro no esta disponible en este momento. Intenta mas tarde.', code: 'TRIAL_PLAN_UNAVAILABLE' });
     }
 
     // 2. Crear tenant
-    const trialPlan = plan_id ? null : (db.prepare('SELECT id, trial_days FROM plans WHERE is_trial_default=1 LIMIT 1').get() as any);
-    const effectivePlanId = plan_id || trialPlan?.id || null;
+    // Si este email ya uso el trial, NO se le otorga otro: la cuenta nace 'pending'
+    // (sin acceso a funciones hasta pagar un plan desde Suscripcion) con el plan
+    // trial como plan de partida; el plan real lo asigna el pago (webhook).
+    const effectivePlanId = trialPlan.id;
     const tenantId = uuid();
-    // Si el usuario selecciono un plan pago, NO le damos trial - se cobra desde el inicio
-    const isStartingWithPaidPlan = !!plan_id;
+    const isStartingWithPaidPlan = trialAlreadyUsed;
     const initialStatus = isStartingWithPaidPlan ? 'pending' : 'trial';
     // FIX (jun 2026): antes usaba un numero fijo (10 dias) desincronizado del
     // valor real anunciado en el landing/registro (14 dias). Ahora se lee
     // trial_days del plan trial-default -> una sola fuente de verdad.
-    const trialDaysGranted = trialPlan?.trial_days ?? 14;
+    const trialDaysGranted = trialPlan.trial_days ?? 14;
     const trialEnd = isStartingWithPaidPlan
       ? null
       : new Date(Date.now() + trialDaysGranted * 24 * 60 * 60 * 1000).toISOString();
@@ -288,17 +290,14 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       if (a && typeof a === 'object') {
         const actx = readTrackingContext(a, req);
         if (actx.sessionId && actx.visitorId) {
-          let planSlug = 'trial';
-          if (isStartingWithPaidPlan) {
-            const p = db.prepare('SELECT slug FROM plans WHERE id=?').get(effectivePlanId) as any;
-            planSlug = p?.slug || 'unknown_paid';
-          }
+          const planSlug = 'trial';
           insertAnalyticsEvent(db, req, 'signup_completed', actx, { path: '/register', properties: { plan: planSlug, server_side: true } });
           if (!isStartingWithPaidPlan) insertAnalyticsEvent(db, req, 'trial_activated', actx, { path: '/register', properties: { plan: planSlug, server_side: true } });
         }
       }
     } catch (_) { /* analitica nunca debe afectar el registro */ }
-    res.status(201).json({ user: userSafe, token, tenants, message: 'Cuenta creada exitosamente! Bienvenido a CredyTek.' });
+    // trialUsed: este email ya usó su trial -> la cuenta nace 'pending' (elige plan en Suscripción).
+    res.status(201).json({ user: userSafe, token, tenants, trialUsed: isStartingWithPaidPlan, message: 'Cuenta creada exitosamente! Bienvenido a CredyTek.' });
   } catch (e: any) {
     if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(400).json({ error: 'Ya existe una cuenta con ese email o nombre de empresa.' });
     console.error(e);

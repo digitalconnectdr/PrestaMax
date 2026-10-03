@@ -3,6 +3,7 @@
 // se enviaba automaticamente; el dueño tenia que entrar al sistema cada vez.
 import { now } from '../db/database';
 import { sendDashboardDigestEmail } from './emailService';
+import { planAllows } from '../lib/access';
 
 function isDue(sub: any, today: Date): boolean {
   if (!sub.last_sent_at) return true;
@@ -21,6 +22,9 @@ export async function runScheduledReportsCron(db: any): Promise<{ sent: number; 
 
   for (const sub of subs) {
     if (!isDue(sub, today)) continue;
+    // Entitlement: los reportes programados son Básico+ (reports.scheduled). Tras un
+    // downgrade a Starter la suscripción se CONSERVA pero deja de enviarse.
+    if (!planAllows(db, sub.tenant_id, 'reports.scheduled')) continue;
     try {
       const tenant = db.prepare('SELECT name FROM tenants WHERE id=?').get(sub.tenant_id) as any;
       if (!tenant) continue;

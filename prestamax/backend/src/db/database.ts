@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
-import { PLAN_CATALOG, TRIAL_PLAN, PRICING_V2_MIGRATION_KEY } from './planCatalog';
+import { PLAN_CATALOG, TRIAL_PLAN, PRICING_V2_MIGRATION_KEY, TRIAL_DESCRIPTION, TRIAL_DESCRIPTION_MIGRATION_KEY } from './planCatalog';
 
 // DB path: env variable > local prestamax.db next to backend folder > Linux sandbox path
 export const DB_PATH = process.env.DATABASE_PATH ||
@@ -1342,7 +1342,7 @@ export function initializeDatabase(): void {
   // Seed the Plan Trial (inserted only if not present — INSERT OR IGNORE).
   // El trial refleja Starter: clientes ilimitados, 100 préstamos activos, 3 usuarios, 1 cobrador.
   const insertTrialPlan = db.prepare(`INSERT OR IGNORE INTO plans (id, name, slug, price_monthly, max_collectors, max_clients, max_users, max_active_loans, trial_days, features, description, is_trial_default) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
-  insertTrialPlan.run(TRIAL_PLAN.id, 'Plan Trial', 'trial', 0, TRIAL_PLAN.maxCollectors, TRIAL_PLAN.maxClients, TRIAL_PLAN.maxUsers, TRIAL_PLAN.maxActiveLoans, 14, JSON.stringify(TRIAL_PLAN.features), 'Plan de prueba gratuito para nuevos prestamistas (equivalente a Starter). Configurable desde Admin.', 1);
+  insertTrialPlan.run(TRIAL_PLAN.id, 'Plan Trial', 'trial', 0, TRIAL_PLAN.maxCollectors, TRIAL_PLAN.maxClients, TRIAL_PLAN.maxUsers, TRIAL_PLAN.maxActiveLoans, 14, JSON.stringify(TRIAL_PLAN.features), TRIAL_DESCRIPTION, 1);
   // Patch existing trial plan features in case this DB already had the row
   db.prepare(`UPDATE plans SET features=? WHERE id='plan-trial' AND is_trial_default=1`).run(JSON.stringify(TRIAL_PLAN.features));
 
@@ -1358,6 +1358,8 @@ export function initializeDatabase(): void {
 
   // ── MIGRACION UNICA: nuevo pricing + limites (pricing v2) ──
   applyPricingV2Migration(db);
+  // ── MIGRACION UNICA: descripcion del Plan Trial ──
+  applyTrialDescriptionMigration(db);
 
   const planCount = (db.prepare('SELECT COUNT(*) as c FROM plans').get() as any).c;
   console.log(`✅ Plans table: ${planCount} plans available`);
@@ -1395,6 +1397,30 @@ export function applyPricingV2Migration(db: any): { applied: boolean } {
     }
   } catch (e: any) {
     console.error('Error en migración pricing v2 (se reintentará en el próximo arranque):', e?.message);
+    return { applied: false };
+  }
+}
+
+// Migración ÚNICA: reemplaza la descripción antigua del Plan Trial ("...Configurable
+// desde Admin.") por una coherente con el trial actual (= Starter). Se registra en
+// app_migrations, así que NO vuelve a sobrescribir ediciones futuras del Admin; y
+// solo toca la descripción si todavía es la antigua (no pisa un texto ya editado).
+export function applyTrialDescriptionMigration(db: any): { applied: boolean } {
+  try {
+    if (db.prepare('SELECT 1 FROM app_migrations WHERE key = ?').get(TRIAL_DESCRIPTION_MIGRATION_KEY)) return { applied: false };
+    db.exec('BEGIN');
+    try {
+      db.prepare(`UPDATE plans SET description=? WHERE id='plan-trial' AND (description IS NULL OR description LIKE '%Configurable desde Admin%')`)
+        .run(TRIAL_DESCRIPTION);
+      db.prepare('INSERT INTO app_migrations (key) VALUES (?)').run(TRIAL_DESCRIPTION_MIGRATION_KEY);
+      db.exec('COMMIT');
+      return { applied: true };
+    } catch (e) {
+      try { db.exec('ROLLBACK'); } catch (_) {}
+      throw e;
+    }
+  } catch (e: any) {
+    console.error('Error en migración de descripción del trial (se reintentará):', e?.message);
     return { applied: false };
   }
 }

@@ -150,7 +150,7 @@ const AppRoutes: React.FC = () => {
 
           <Route path="/reports" element={<PermissionRoute perm="reports.dashboard"><ReportsPage /></PermissionRoute>} />
           <Route path="/reports/projection" element={<PermissionRoute perm="reports.projection"><ProjectionPage /></PermissionRoute>} />
-          <Route path="/reports/accounting" element={<PermissionRoute perm="reports.dashboard"><AccountingExportPage /></PermissionRoute>} />
+          <Route path="/reports/accounting" element={<PermissionRoute perm="reports.accounting_export"><AccountingExportPage /></PermissionRoute>} />
 
           <Route path="/settings" element={<PermissionRoute perm="settings.general"><SettingsPage /></PermissionRoute>} />
           <Route path="/settings/products" element={<PermissionRoute perm="settings.products"><SettingsPage /></PermissionRoute>} />

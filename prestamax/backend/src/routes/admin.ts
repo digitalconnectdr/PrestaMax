@@ -6,7 +6,8 @@ import { authenticate, AuthRequest, isPlatformStaff } from '../middleware/auth';
 import path from 'path';
 import fs from 'fs';
 import { seedDemo } from '../db/seed_demo';
-import { validatePlanFeatures } from '../lib/permissions';
+import { validatePlanFeatures, PERM_DEFS } from '../lib/permissions';
+import { getPlanFeatures, findExplicitOutsidePlan, PERMISSION_OUTSIDE_PLAN } from '../lib/access';
 import { checkMembershipLimits, membershipDelta, countActiveLoans } from '../lib/planLimits';
 import { PLAN_CATALOG } from '../db/planCatalog';
 import { PRICING_FUNNEL_STEPS, ALL_FUNNEL_EVENTS, computeSequentialFunnel, computeGlobalCounts, computeSignupSources, FunnelEventRow } from '../lib/analyticsFunnel';
@@ -1061,9 +1062,11 @@ router.get('/users/:id/memberships', authenticate, requirePlatformAdmin, (req: A
     const rawMemberships = db.prepare(`
       SELECT tm.id as membership_id, tm.roles, tm.permissions,
              tm.is_active as membership_active,
-             t.id as tenant_id, t.name as tenant_name, t.is_active as tenant_active
+             t.id as tenant_id, t.name as tenant_name, t.is_active as tenant_active,
+             p.features as plan_features
       FROM tenant_memberships tm
       JOIN tenants t ON t.id = tm.tenant_id
+      LEFT JOIN plans p ON p.id = t.plan_id
       WHERE tm.user_id = ?
       ORDER BY t.name ASC
     `).all(req.params.id) as any[];
@@ -1083,6 +1086,9 @@ router.get('/users/:id/memberships', authenticate, requirePlatformAdmin, (req: A
         tenantName:         m.tenant_name,
         tenantActive:       m.tenant_active,
         roles:              role,
+        // Techo del plan de ESA empresa ([] = sin techo): la UI de permisos solo
+        // muestra las claves válidas para el plan.
+        planFeatures:       (() => { try { const f = JSON.parse(m.plan_features || '[]'); return Array.isArray(f) ? f : []; } catch (_) { return []; } })(),
         explicitPermissions: JSON.stringify(explicit),
       };
     });
@@ -1096,9 +1102,28 @@ router.put('/users/:id/memberships/:tenantId/permissions', authenticate, require
     const db = getDb();
     const { explicit } = req.body;
     const membership = db.prepare(
-      'SELECT id FROM tenant_memberships WHERE user_id=? AND tenant_id=?'
+      'SELECT id, permissions FROM tenant_memberships WHERE user_id=? AND tenant_id=?'
     ).get(req.params.id, req.params.tenantId) as any;
     if (!membership) return res.status(404).json({ error: 'Membresia no encontrada' });
+    // El Super Admin conserva acceso técnico, pero NO puede guardar permisos
+    // efectivos fuera del plan del tenant (para "subir" un plan hay que cambiar
+    // el plan, no conceder permisos sueltos). Mismo criterio que settings.
+    {
+      const requested: Record<string, any> = (explicit && typeof explicit === 'object' && !Array.isArray(explicit)) ? explicit : {};
+      const validKeys = new Set(PERM_DEFS.map((p: any) => p.key));
+      const badKeys = Object.keys(requested).filter(k => !validKeys.has(k as any));
+      if (badKeys.length > 0) return res.status(400).json({ error: `Claves de permiso inválidas: ${badKeys.join(', ')}`, code: 'INVALID_PERMISSION' });
+      if (Object.values(requested).some(v => typeof v !== 'boolean')) return res.status(400).json({ error: 'Los valores de permisos deben ser booleanos', code: 'INVALID_PERMISSION' });
+      const existing: Record<string, boolean> = (() => { try { return JSON.parse(membership.permissions || '{}'); } catch (_) { return {}; } })();
+      const outside = findExplicitOutsidePlan(requested as Record<string, boolean>, existing, getPlanFeatures(db, req.params.tenantId));
+      if (outside.length > 0) {
+        return res.status(403).json({
+          error: `El plan de esta empresa no incluye: ${outside.join(', ')}. Cambia el plan de la empresa para habilitarlas.`,
+          code: PERMISSION_OUTSIDE_PLAN,
+          permissions: outside,
+        });
+      }
+    }
     db.prepare('UPDATE tenant_memberships SET permissions=? WHERE id=?')
       .run(JSON.stringify(explicit || {}), membership.id);
     res.json({ success: true });

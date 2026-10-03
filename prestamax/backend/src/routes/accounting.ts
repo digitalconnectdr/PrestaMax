@@ -103,7 +103,7 @@ function sendCsv(res: Response, filename: string, csv: string) {
   res.send('﻿' + csv);  // BOM UTF-8 para Excel
 }
 
-router.get('/journal', authenticate, requireTenant, requirePermission('reports.dashboard'), async (req: AuthRequest, res: Response) => {
+router.get('/journal', authenticate, requireTenant, requirePermission('reports.accounting_export'), async (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
@@ -188,7 +188,7 @@ router.get('/journal', authenticate, requireTenant, requirePermission('reports.d
   }
 });
 
-router.get('/by-account', authenticate, requireTenant, requirePermission('reports.dashboard'), async (req: AuthRequest, res: Response) => {
+router.get('/by-account', authenticate, requireTenant, requirePermission('reports.accounting_export'), async (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);
@@ -251,7 +251,7 @@ router.get('/by-account', authenticate, requireTenant, requirePermission('report
   }
 });
 
-router.get('/summary', authenticate, requireTenant, requirePermission('reports.dashboard'), async (req: AuthRequest, res: Response) => {
+router.get('/summary', authenticate, requireTenant, requirePermission('reports.accounting_export'), async (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     const { from, to } = parseDateRange(req);

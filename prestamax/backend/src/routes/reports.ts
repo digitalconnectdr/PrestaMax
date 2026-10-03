@@ -12,14 +12,14 @@ const money = (v: any): number => Math.round((Number(v) || 0) * 100) / 100;
 // Antes ningun reporte se enviaba automaticamente; el dueño tenia que entrar
 // al sistema a revisarlo cada vez. El envio real lo hace el cron de
 // reportSubscriptionService.ts (7am); estas rutas solo gestionan la config.
-router.get('/subscriptions', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+router.get('/subscriptions', authenticate, requireTenant, requirePermission('reports.scheduled'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     res.json(db.prepare(`SELECT * FROM report_subscriptions WHERE tenant_id=? AND user_id=? ORDER BY created_at DESC`).all(req.tenant.id, req.user.id));
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
-router.post('/subscriptions', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+router.post('/subscriptions', authenticate, requireTenant, requirePermission('reports.scheduled'), (req: AuthRequest, res: Response) => {
   try {
     const { frequency = 'weekly', recipients } = req.body;
     if (!['daily', 'weekly', 'monthly'].includes(frequency)) return res.status(400).json({ error: 'Frecuencia inválida' });
@@ -33,7 +33,7 @@ router.post('/subscriptions', authenticate, requireTenant, requirePermission('re
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
-router.delete('/subscriptions/:id', authenticate, requireTenant, requirePermission('reports.dashboard'), (req: AuthRequest, res: Response) => {
+router.delete('/subscriptions/:id', authenticate, requireTenant, requirePermission('reports.scheduled'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     db.prepare('DELETE FROM report_subscriptions WHERE id=? AND tenant_id=? AND user_id=?').run(req.params.id, req.tenant.id, req.user.id);

@@ -26,6 +26,8 @@ export type PermKey =
   | 'reports.dashboard' | 'reports.portfolio' | 'reports.mora'
   | 'reports.collections' | 'reports.advanced' | 'reports.income' | 'reports.projection'
   | 'reports.datacredito'
+  // Reportes programados y exportación contable — Básico+ (antes colgaban de reports.dashboard)
+  | 'reports.scheduled' | 'reports.accounting_export'
   // WhatsApp
   | 'whatsapp.view' | 'whatsapp.send' | 'whatsapp.templates'
   // Income / Expenses
@@ -101,8 +103,10 @@ export const PERM_DEFS: PermDef[] = [
   { key:'reports.income',      module:'reports', moduleLabel:'Reportes',      label:'Ingresos y gastos',     description:'Ver reporte de ingresos y gastos' },
   { key:'reports.projection',  module:'reports', moduleLabel:'Reportes',      label:'Proyección de cobros',  description:'Ver proyección de ingresos a cobrar por fecha o rango' },
   { key:'reports.datacredito', module:'reports', moduleLabel:'Reportes',      label:'Reporte DataCrédito',   description:'Generar y descargar el reporte mensual para DataCrédito' },
+  { key:'reports.scheduled',         module:'reports', moduleLabel:'Reportes',      label:'Reportes programados',  description:'Programar el envío periódico del resumen del dashboard por correo' },
+  { key:'reports.accounting_export', module:'reports', moduleLabel:'Reportes',      label:'Exportación contable',  description:'Exportar el libro diario y los resúmenes contables' },
   // ── WhatsApp ──────────────────────────────────────────────────────
-  { key:'whatsapp.view',      module:'whatsapp', moduleLabel:'WhatsApp',      label:'Ver mensajes',          description:'Ver historial de mensajes de WhatsApp' },
+  { key:'whatsapp.view',     module:'whatsapp', moduleLabel:'WhatsApp',      label:'Ver mensajes',          description:'Ver historial de mensajes de WhatsApp' },
   { key:'whatsapp.send',      module:'whatsapp', moduleLabel:'WhatsApp',      label:'Enviar mensajes',       description:'Enviar mensajes por WhatsApp a clientes' },
   { key:'whatsapp.templates', module:'whatsapp', moduleLabel:'WhatsApp',      label:'Gestionar plantillas',  description:'Crear, editar y eliminar plantillas de WhatsApp' },
   // ── Ingresos/Gastos ───────────────────────────────────────────────

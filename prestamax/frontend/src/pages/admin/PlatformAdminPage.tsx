@@ -2048,8 +2048,16 @@ const PlatformAdminPage: React.FC = () => {
                 {/* Permissions by module */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Permisos Granulares</label>
+                  <p className="text-[11px] text-slate-500 mb-2">
+                    Solo se muestran los permisos incluidos en el plan de esta empresa. Para habilitar más, cambia el plan de la empresa.
+                  </p>
                   <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-                    {Object.entries(PERM_BY_MODULE).map(([mod, { label: modLabel, perms }]) => (
+                    {Object.entries(PERM_BY_MODULE).map(([mod, { label: modLabel, perms: allPerms }]) => {
+                      // Techo del plan de la empresa seleccionada ([] = sin techo).
+                      const planFeatures: string[] = (permMemberships.find((x: any) => x.tenantId === permSelectedTenant) as any)?.planFeatures || []
+                      const perms = planFeatures.length === 0 ? allPerms : allPerms.filter(d => planFeatures.includes(d.key))
+                      if (perms.length === 0) return null
+                      return (
                       <div key={mod} className="border border-slate-200 rounded-lg p-3">
                         <p className="text-xs font-semibold text-slate-700 mb-2">{modLabel}</p>
                         <div className="grid grid-cols-2 gap-1.5">
@@ -2071,7 +2079,8 @@ const PlatformAdminPage: React.FC = () => {
                           })}
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
 

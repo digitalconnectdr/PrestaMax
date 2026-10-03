@@ -468,15 +468,17 @@ const PaymentsPage: React.FC = () => {
                           </button>
                         )}
                         {/* Edit / Void */}
+                        {can('payments.edit') && !payment.isVoided && (
+                          <button
+                            onClick={() => openEditPayment(payment)}
+                            className="p-1.5 hover:bg-blue-50 rounded text-blue-400 transition-colors"
+                            title={t('pay.edit_title')}
+                          >
+                            <Edit2 className="w-3.5 h-3.5"/>
+                          </button>
+                        )}
                         {can('payments.void') && !payment.isVoided && (
                           <>
-                            <button
-                              onClick={() => openEditPayment(payment)}
-                              className="p-1.5 hover:bg-blue-50 rounded text-blue-400 transition-colors"
-                              title={t('pay.edit_title')}
-                            >
-                              <Edit2 className="w-3.5 h-3.5"/>
-                            </button>
                             <button
                               onClick={() => { setVoidingPayment(payment); setVoidReason('') }}
                               className="p-1.5 hover:bg-red-50 rounded text-red-400 transition-colors"

@@ -28,18 +28,6 @@ function classifySignupError(err: any): SignupErrorType {
   return 'unknown'
 }
 
-interface Plan {
-  id: string
-  name: string
-  slug: string
-  priceMonthly: number
-  maxCollectors: number
-  maxClients: number
-  maxUsers: number
-  trialDays: number
-  description: string
-}
-
 const RegisterPage: React.FC = () => {
   const t = useT()
   const [form, setForm] = useState({
@@ -50,23 +38,16 @@ const RegisterPage: React.FC = () => {
     confirmPassword: '',
     phone: '',
     currency: 'DOP',
-    planId: '',
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [plans, setPlans] = useState<Plan[]>([])
   const [step, setStep] = useState<'form' | 'success'>('form')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const { login } = useAuth()
   const { selectTenant, setUserTenants } = useTenant()
   const navigate = useNavigate()
-
-  useEffect(() => {
-    // Load available plans
-    api.get('/public/plans').then(res => setPlans(res.data || [])).catch(() => {})
-  }, [])
 
   // FIX (Fase 1 Analytics, sep 2026): signup_started marca "llego al
   // formulario de registro" — un paso propio del funnel, en vez de inferirlo
@@ -105,7 +86,7 @@ const RegisterPage: React.FC = () => {
         admin_password: form.adminPassword,
         phone: form.phone || null,
         currency: form.currency,
-        plan_id: form.planId || null,
+        // El plan NUNCA se envía: el servidor asigna el trial.
         // Contexto no sensible para que el backend emita signup_completed tras guardar la cuenta.
         analytics: getAnalyticsPayload(),
       })
@@ -118,21 +99,24 @@ const RegisterPage: React.FC = () => {
         selectTenant(tenants[0])
       }
 
-      // FIX (Fase 1 Analytics, sep 2026): un plan_id vacio significa que el
-      // backend activa el trial de inmediato al crear el tenant (ver
-      // isStartingWithPaidPlan en auth.ts) — no existe un paso de "activar
-      // trial" separado en la arquitectura actual, asi que ambos eventos se
-      // disparan juntos aqui cuando corresponde. Nunca se envia nombre/correo/
-      // telefono: solo el slug del plan (o 'trial').
-      const selectedPlan = plans.find(p => p.id === form.planId)
-      const planSlug = form.planId ? (selectedPlan?.slug || 'unknown_paid') : 'trial'
-      trackSignupCompleted(planSlug)
-      if (!form.planId) trackTrialActivated(planSlug)
+      // Analytics: el backend crea el tenant en trial de inmediato (no existe un
+      // paso de "activar trial" separado), asi que signup_completed y
+      // trial_activated se disparan juntos aqui. Nunca se envia nombre/correo/
+      // telefono, solo 'trial'.
+      // Email que ya usó el trial: el servidor crea la cuenta 'pending' (sin trial).
+      const trialUsed = response.data?.trialUsed === true
+      trackSignupCompleted('trial')
+      if (!trialUsed) trackTrialActivated('trial')
 
       setStep('success')
       setTimeout(() => {
-        toast.success(t('reg.welcome'))
-        navigate('/dashboard')
+        if (trialUsed) {
+          toast(t('reg.trial_used'), { icon: 'ℹ️', duration: 7000 })
+          navigate('/settings/subscription')
+        } else {
+          toast.success(t('reg.welcome'))
+          navigate('/dashboard')
+        }
       }, 2000)
     } catch (err: any) {
       // Un fallo DESPUES de crear la cuenta (p. ej. al guardar la sesion local) no
@@ -364,25 +348,10 @@ const RegisterPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Plan selector (optional) */}
-            {plans.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">{t('reg.plan_optional')}</label>
-                <select
-                  value={form.planId}
-                  onChange={e => set('planId', e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
-                >
-                  <option value="">{t('reg.plan_trial')}</option>
-                  {plans.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {t('reg.plan_option').replace('{name}', p.name).replace('{price}', String(p.priceMonthly)).replace('{days}', String(p.trialDays || 14))}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-400 mt-1">{t('reg.plan_hint')}</p>
-              </div>
-            )}
+            {/* Sin selector de plan: el registro público SIEMPRE entra por el trial
+                gratuito (lo resuelve el servidor). El plan de pago se elige después en
+                Suscripción. */}
+            <p className="text-xs text-slate-500">{t('reg.trial_note')}</p>
 
             <Button type="submit" isLoading={isLoading} size="lg" className="w-full">
               {t('reg.create_my')}

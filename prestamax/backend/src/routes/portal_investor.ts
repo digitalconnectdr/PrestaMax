@@ -1,6 +1,8 @@
 import { Router, Response, NextFunction } from 'express';
 import { getDb, r2 } from '../db/database';
 import { authenticate, requireTenant, AuthRequest } from '../middleware/auth';
+import { planAllows, effectivePermissionSet } from '../lib/access';
+import { tenantSubscriptionIsValid } from '../lib/planLimits';
 
 const router = Router();
 
@@ -17,6 +19,24 @@ function requireInvestor(req: AuthRequest, res: Response, next: NextFunction) {
     if (!membership) return res.status(403).json({ error: 'No tienes acceso a este tenant' });
     const roles: string[] = (() => { try { return JSON.parse(membership.roles || '[]') } catch { return [] } })();
     if (!roles.includes('investor')) return res.status(403).json({ error: 'Acceso solo para inversionistas' });
+
+    // Entitlement real: tenant con suscripción/trial vigente Y plan con
+    // investors.portal (Profesional+). Tras un downgrade se bloquea el acceso, pero
+    // NO se borra nada: inversionista, asignaciones y liquidaciones se conservan y
+    // el portal vuelve a funcionar si el plan lo vuelve a incluir.
+    if (!tenantSubscriptionIsValid(req.tenant)) {
+      return res.status(402).json({ error: 'La suscripción de la empresa no está vigente.', code: 'SUBSCRIPTION_EXPIRED' });
+    }
+    if (!planAllows(db, req.tenant!.id, 'investors.portal')) {
+      return res.status(403).json({
+        error: 'El portal del inversionista no está incluido en el plan actual de la empresa.',
+        code: 'PLAN_FEATURE_REQUIRED',
+        required_perm: 'investors.portal',
+      });
+    }
+    if (!effectivePermissionSet(req, db).has('investors.portal')) {
+      return res.status(403).json({ error: 'No tienes permiso para el portal del inversionista', required: 'investors.portal' });
+    }
 
     const investor = db.prepare('SELECT * FROM investors WHERE user_id=? AND tenant_id=? AND is_active=1')
       .get(req.user!.id, req.tenant!.id) as any;

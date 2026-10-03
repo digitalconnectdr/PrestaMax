@@ -12,6 +12,7 @@ import { computePermissions, PermKey } from '../lib/permissions';
 import { sendReport, ExportColumn } from '../lib/exportHelpers';
 import { checkAndMarkActivation } from '../lib/activation';
 import { checkActiveLoanLimit, ACTIVE_LOAN_STATUSES, PLAN_LIMIT_ACTIVE_LOANS } from '../lib/planLimits';
+import { planAllows } from '../lib/access';
 
 const router = Router();
 
@@ -396,7 +397,13 @@ router.post('/:id/approve', authenticate, requireTenant, requirePermission('loan
     // de 'approved', y queda a la espera de una segunda aprobacion.
     const tenantSettings = db.prepare('SELECT approval_threshold_amount FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id) as any;
     const threshold = tenantSettings?.approval_threshold_amount;
-    const needsManagerApproval = threshold != null && threshold > 0 && approvedAmount > threshold;
+    // La aprobación por monto es Profesional+ (loans.approve_high_value). Si el plan
+    // del tenant no la incluye (p. ej. tras un downgrade con umbral ya guardado), el
+    // umbral se IGNORA: nadie podría dar la 2.ª aprobación y el préstamo quedaría
+    // atrapado. Los que ya estaban en 'pending_manager_approval' se resuelven por
+    // este mismo flujo normal de aprobación.
+    const planHasHighValue = planAllows(db, req.tenant.id, 'loans.approve_high_value');
+    const needsManagerApproval = planHasHighValue && threshold != null && threshold > 0 && approvedAmount > threshold;
     const hasHighValuePerm = requesterHasPermission(req, db, 'loans.approve_high_value');
 
     if (needsManagerApproval && !hasHighValuePerm && loanForApproval.status !== 'pending_manager_approval') {

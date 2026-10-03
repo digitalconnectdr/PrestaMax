@@ -25,7 +25,7 @@ Prestamistas individuales, financieras, cooperativas de ahorro y crédito, casas
 - **Enterprise** — US$99.99/mes: clientes, préstamos activos, usuarios y cobradores ilimitados
 - Los cobradores están incluidos dentro del total de usuarios de cada plan.
 - Pago anual: 3 meses gratis (se pagan 9 mensualidades).
-- Prueba gratis de hasta 14 días, sin tarjeta de crédito. Cancelación en cualquier momento.
+- Prueba gratis de 14 días con las funciones del plan Starter, sin tarjeta. Cancelación en cualquier momento.
 
 ## Características clave
 

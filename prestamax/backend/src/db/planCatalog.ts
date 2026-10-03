@@ -19,21 +19,22 @@ export const STARTER_FEATURES: string[] = [
   'reports.dashboard', 'reports.portfolio', 'reports.mora',
   'calculator.use',
   'collections.view', 'collections.notes', 'collections.manage',
-  'templates.view',
   'settings.general', 'settings.users', 'settings.products', 'settings.bank_accounts',
 ];
 
 // BÁSICO: Starter + cobranza avanzada (promesas, tareas), contratos, WhatsApp,
-// plantillas editables, reportes de cobranza y avanzados, ingresos (income.*) e
-// importación CSV de préstamos. SIN sucursales, solicitudes públicas, inversionistas.
+// plantillas (templates.*, desde Básico), reportes de cobranza y avanzados,
+// reportes programados, exportación contable, ingresos (income.*) e importación
+// CSV de préstamos. SIN sucursales, solicitudes públicas, inversionistas.
 export const BASICO_FEATURES: string[] = [
   ...STARTER_FEATURES,
   'collections.promises', 'collections.tasks', 'collections.tasks.manage',
-  'templates.create', 'templates.edit', 'templates.delete',
+  'templates.view', 'templates.create', 'templates.edit', 'templates.delete',
   'contracts.view', 'contracts.create', 'contracts.sign', 'contracts.delete',
   'whatsapp.view', 'whatsapp.send', 'whatsapp.templates',
   'income.view', 'income.create', 'income.edit', 'income.delete',
   'reports.collections', 'reports.advanced',
+  'reports.scheduled', 'reports.accounting_export',
   'loans.import',
 ];
 
@@ -99,3 +100,8 @@ export const TRIAL_PLAN = {
 // Identificador de la migración de precios/límites/packaging (se aplica UNA vez
 // por base de datos; después el Admin puede seguir editando los planes).
 export const PRICING_V2_MIGRATION_KEY = 'pricing_v2_2026_10';
+
+// Migración única: descripción del Plan Trial (ver applyTrialDescriptionMigration).
+export const TRIAL_DESCRIPTION_MIGRATION_KEY = 'trial_description_2026_10';
+export const TRIAL_DESCRIPTION =
+  'Prueba gratuita de 14 días, sin tarjeta, con las funciones y los límites del plan Starter.';

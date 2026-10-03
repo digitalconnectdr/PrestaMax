@@ -31,6 +31,7 @@ import PlanInquiryModal from '@/components/public/PlanInquiryModal'
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher'
 import ShareButton from '@/components/shared/ShareButton'
 import { useT } from '@/lib/i18n'
+import { planFeatureKeys } from '@/lib/planFeatures'
 import { Reveal } from '@/components/shared/Reveal'
 import { trackEvent, trackLandingVisit, track, trackTrialCtaClick, trackPlanSelected, trackBillingToggleChanged } from '@/lib/analytics'
 import { useLandingTracking } from '@/hooks/useLandingTracking'
@@ -61,20 +62,13 @@ const buildPlans = (t: TFn): Plan[] => [
     name: t('lp.plan.starter'), slug: 'starter', price: 9.99,
     description: t('lp.plan.starter.d'),
     clients: t('lp.lim.cliInf'), activeLoans: t('lp.lim.loans100'), users: t('lp.lim.usr3'), collectors: t('lp.lim.col1'),
-    features: [
-      t('lp.pf.clients_mgmt'), t('lp.pf.amort'), t('lp.pf.digital_pay'),
-      t('lp.pf.calc'), t('lp.pf.dash_basic'), t('lp.pf.collections_basic'), t('lp.pf.email_support'),
-    ],
+    features: planFeatureKeys('starter').map(k => t(k)),
   },
   {
     name: t('lp.plan.basico'), slug: 'basico', price: 24.99,
     description: t('lp.plan.basico.d'),
     clients: t('lp.lim.cliInf'), activeLoans: t('lp.lim.loans500'), users: t('lp.lim.usr8'), collectors: t('lp.lim.col3'),
-    features: [
-      t('lp.pf.all_starter'), t('lp.pf.collections'), t('lp.pf.promises'), t('lp.pf.tasks'),
-      t('lp.pf.contracts'), t('lp.pf.whatsapp'), t('lp.pf.templates'),
-      t('lp.pf.adv_reports'), t('lp.pf.income_mgmt'), t('lp.pf.csv_import'),
-    ],
+    features: planFeatureKeys('basico').map(k => t(k)),
     highlighted: true,
     ctaLabel: t('lp.pricing.popular'),
   },
@@ -82,19 +76,13 @@ const buildPlans = (t: TFn): Plan[] => [
     name: t('lp.plan.profesional'), slug: 'profesional', price: 49.99,
     description: t('lp.plan.profesional.d'),
     clients: t('lp.lim.cliInf'), activeLoans: t('lp.lim.loans2000'), users: t('lp.lim.usr20'), collectors: t('lp.lim.col10'),
-    features: [
-      t('lp.pf.all_basico'), t('lp.pf.branches'), t('lp.pf.public_req'),
-      t('lp.pf.investors'), t('lp.pf.projections'), t('lp.pf.assisted_migration'), t('lp.pf.priority'),
-    ],
+    features: planFeatureKeys('profesional').map(k => t(k)),
   },
   {
     name: t('lp.plan.enterprise'), slug: 'enterprise', price: 99.99,
     description: t('lp.plan.enterprise.d'),
     clients: t('lp.lim.cliInf'), activeLoans: t('lp.lim.loansInf'), users: t('lp.lim.usrInf'), collectors: t('lp.lim.colInf'),
-    features: [
-      t('lp.pf.all_pro'), t('lp.pf.no_limits'), t('lp.pf.datacredito'),
-      t('lp.pf.onboarding'), t('lp.pf.support_247'), t('lp.pf.sla'),
-    ],
+    features: planFeatureKeys('enterprise').map(k => t(k)),
   },
 ]
 

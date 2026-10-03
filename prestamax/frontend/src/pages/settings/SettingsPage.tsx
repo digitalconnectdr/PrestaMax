@@ -255,9 +255,11 @@ const SettingsPage: React.FC = () => {
         moraFixedEnabled: moraSettings.moraFixedEnabled,
         moraFixedAmount: moraSettings.moraFixedAmount,
       })
-      await api.put('/settings/approvals', {
-        approvalThresholdAmount: approvalThreshold.trim() === '' ? null : parseFloat(approvalThreshold),
-      })
+      if (can('loans.approve_high_value')) {
+        await api.put('/settings/approvals', {
+          approvalThresholdAmount: approvalThreshold.trim() === '' ? null : parseFloat(approvalThreshold),
+        })
+      }
       toast.success(tGen('set.saved_ok'))
     } catch (err: any) {
       toast.error(err?.response?.data?.error || tGen('set.save_error'))
@@ -942,6 +944,8 @@ const SettingsPage: React.FC = () => {
                 </div>
               </Card>
 
+              {/* Aprobación por monto: función Profesional+ (loans.approve_high_value) */}
+              {can('loans.approve_high_value') && (
               <Card>
                 <h3 className="section-title mb-1">{tGen('set.approval_title')}</h3>
                 <p className="text-xs text-slate-500 mb-4">{tGen('set.approval_desc')}</p>
@@ -958,6 +962,7 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <p className="text-xs text-slate-400 mt-2">{tGen('set.approval_threshold_help')}</p>
               </Card>
+              )}
 
               <Button onClick={handleSaveGeneral} isLoading={isSaving} disabled={isSaving} className="flex items-center gap-2">
                 <Save className="w-4 h-4" />
@@ -1882,16 +1887,8 @@ const SettingsPage: React.FC = () => {
             const trialDaysRemaining: number | null = sub.trialDaysRemaining ?? null
             const trialEndDate: string | null = sub.trialEndDate ?? null
             const planName = sub.planName || sub.plan_name || tGen('set.sub_no_plan')
-            const features: string[] = (() => { try { return JSON.parse(sub.features || '[]') } catch(_) { return [] } })()
-            const FEATURE_LABELS: Record<string, string> = {
-              loans:tGen('set.feat.loans'), payments:tGen('set.feat.payments'), receipts:tGen('set.feat.receipts'),
-              clients:tGen('set.feat.clients'), contracts:tGen('set.feat.contracts'), reports_basic:tGen('set.feat.reports_basic'),
-              reports_advanced:tGen('set.feat.reports_advanced'), whatsapp:tGen('set.feat.whatsapp'),
-              branches:tGen('set.feat.branches'), multiple_collectors:tGen('set.feat.multiple_collectors'),
-              digital_signature:tGen('set.feat.digital_signature'), export_data:tGen('set.feat.export_data'),
-              api_access:tGen('set.feat.api_access'), priority_support:tGen('set.feat.priority_support'),
-              custom_branding:tGen('set.feat.custom_branding'), bulk_notifications:tGen('set.feat.bulk_notifications'),
-            }
+            // (Bloque "Funciones incluidas" eliminado: mostraba PermKeys técnicas y esta
+            // pestaña ya no se alcanza — /settings/subscription renderiza BillingPage.)
             const STATUS_MAP: Record<string, { label: string; color: string; icon: string }> = {
               trial: { label: tGen('set.sub_st_trial'), color: 'bg-blue-100 text-blue-700 border-blue-200', icon: '🧪' },
               active: { label: tGen('set.sub_st_active'), color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: '✅' },
@@ -2040,20 +2037,6 @@ const SettingsPage: React.FC = () => {
                   </Card>
                 </div>
 
-                {/* Features */}
-                {features.length > 0 && (
-                  <Card>
-                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-4">{tGen('set.plan_features')}</p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      {features.map(fk => (
-                        <div key={fk} className="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg border border-emerald-100 text-sm text-emerald-800">
-                          <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0"/>
-                          {FEATURE_LABELS[fk] || fk}
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                )}
               </>
             )
           })() : (

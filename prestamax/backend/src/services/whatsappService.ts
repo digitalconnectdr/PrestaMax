@@ -15,6 +15,7 @@
 //   Si tampoco hay, se usa un fallback en codigo.
 
 import { uuid, now } from '../db/database';
+import { planAllows } from '../lib/access';
 
 export type WhatsAppEvent =
   | 'loan_created'
@@ -176,6 +177,11 @@ export function generateDraft(
   data: { client_id?: string; loan_id?: string; payment_id?: string; user_id?: string }
 ): string | undefined {
   try {
+    // 0. Entitlement: sin WhatsApp en el plan NO se generan borradores automáticos
+    //    (p. ej. tras bajar a Starter con eventos ya habilitados). Las
+    //    configuraciones y datos existentes se conservan; si el plan vuelve a
+    //    incluir WhatsApp, las automatizaciones retoman solas.
+    if (!planAllows(db, tenant_id, 'whatsapp.send')) return undefined;
     // 1. Esta el evento habilitado?
     const cfg = db.prepare(
       `SELECT enabled, template_id FROM whatsapp_event_settings WHERE tenant_id=? AND event=?`
@@ -234,6 +240,7 @@ export function generateDraft(
 // Helper para verificar si un evento esta enabled (usado por hooks)
 export function isEventEnabled(db: any, tenant_id: string, event: WhatsAppEvent): boolean {
   try {
+    if (!planAllows(db, tenant_id, 'whatsapp.send')) return false;
     const cfg = db.prepare(
       `SELECT enabled FROM whatsapp_event_settings WHERE tenant_id=? AND event=?`
     ).get(tenant_id, event) as any;
@@ -305,6 +312,8 @@ export function generateOverdueDraft(
 ): string | undefined {
   if (shouldSkipOverdue(db, tenant_id, event, data)) return undefined;
   try {
+    // Entitlement (ver generateDraft): el cron diario recorre TODOS los tenants.
+    if (!planAllows(db, tenant_id, 'whatsapp.send')) return undefined;
     const cfg = db.prepare(
       `SELECT enabled, template_id FROM whatsapp_event_settings WHERE tenant_id=? AND event=?`
     ).get(tenant_id, event) as any;

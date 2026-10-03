@@ -3,6 +3,7 @@ import { getDb, uuid, now } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { PERM_DEFS, ROLE_DEFAULTS, computePermissions } from '../lib/permissions';
 import { checkMembershipLimits, membershipDelta, rolesHaveCollector } from '../lib/planLimits';
+import { getPlanFeatures, planAllows, findExplicitOutsidePlan, PERMISSION_OUTSIDE_PLAN } from '../lib/access';
 const router = Router();
 
 // ─── Role hierarchy helpers ─────────────────────────────────────────────────
@@ -150,6 +151,20 @@ router.put('/approvals', authenticate, requireTenant, requirePermission('setting
     const d = req.body; const db = getDb();
     const threshold = d.approval_threshold_amount === '' || d.approval_threshold_amount === null || d.approval_threshold_amount === undefined
       ? null : parseFloat(d.approval_threshold_amount);
+    if (threshold !== null && Number.isNaN(threshold)) {
+      return res.status(400).json({ error: 'El umbral debe ser un número' });
+    }
+    // La aprobación por monto (2.ª aprobación) es una función Profesional+
+    // (loans.approve_high_value). Sin ese entitlement NO se puede ACTIVAR (un
+    // umbral sin nadie que pueda dar la 2.ª aprobación atascaría los préstamos).
+    // Desactivarla (null / 0) siempre se permite.
+    if (threshold !== null && threshold > 0 && !planAllows(db, req.tenant.id, 'loans.approve_high_value')) {
+      return res.status(403).json({
+        error: 'La aprobación por monto no está incluida en tu plan. Disponible desde el plan Profesional.',
+        code: 'PLAN_FEATURE_REQUIRED',
+        required_perm: 'loans.approve_high_value',
+      });
+    }
     const existing = db.prepare('SELECT id FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id) as any;
     if (existing) {
       db.prepare('UPDATE tenant_settings SET approval_threshold_amount=?, updated_at=? WHERE tenant_id=?')
@@ -237,10 +252,25 @@ router.put('/users/:membershipId', authenticate, requireTenant, requirePermissio
     if (roles && Array.isArray(roles) && roles.includes('tenant_owner')) {
       return res.status(403).json({ error: 'El rol tenant_owner no puede ser asignado manualmente' });
     }
+    // Solo roles de TENANT conocidos: nunca roles de plataforma (platform_admin, etc.)
+    // ni nombres arbitrarios. Misma lista que la invitación.
+    if (roles !== undefined && roles !== null) {
+      const ASSIGNABLE_ROLES = Object.keys(ROLE_DEFAULTS).filter(r => r !== 'tenant_owner');
+      if (!Array.isArray(roles) || roles.length === 0 || roles.some((r: any) => typeof r !== 'string' || !ASSIGNABLE_ROLES.includes(r))) {
+        return res.status(400).json({ error: 'Rol(es) no válido(s).', code: 'INVALID_ROLE' });
+      }
+    }
     // Also protect the owner membership from being deactivated by others
     const membership = db.prepare('SELECT * FROM tenant_memberships WHERE id=? AND tenant_id=?').get(req.params.membershipId, req.tenant.id) as any;
     if (!membership) return res.status(404).json({ error: 'Membresía no encontrada' });
     const currentRoles = (() => { try { return JSON.parse(membership.roles || '[]') } catch(_) { return [] } })();
+    // Jerarquía sobre el rol NUEVO: no puedes otorgar un rol igual o superior al tuyo
+    // (evita que un admin promueva a otro a admin: escalada lateral). Igual que invite.
+    if (Array.isArray(roles) && JSON.stringify([...roles].sort()) !== JSON.stringify([...currentRoles].sort())) {
+      if (maxRoleLevel(roles) >= getRequesterRoleLevel(db, req.user.id, req.tenant.id)) {
+        return res.status(403).json({ error: 'No puedes asignar un rol igual o superior al tuyo.' });
+      }
+    }
     if (currentRoles.includes('tenant_owner') && req.user.id !== membership.user_id) {
       return res.status(403).json({ error: 'No puedes modificar al propietario del tenant' });
     }
@@ -792,6 +822,21 @@ router.put('/users/:membershipId/permissions', authenticate, requireTenant, requ
     const invalidValues = Object.entries(explicit).filter(([, v]) => typeof v !== 'boolean');
     if (invalidValues.length > 0) {
       return res.status(400).json({ error: 'Los valores de permisos deben ser booleanos (true/false)' });
+    }
+    // Ningún permiso individual puede superar el techo del plan (aplica también al
+    // Super Admin de plataforma). Se rechaza TODA la petición, sin guardado parcial.
+    // Las concesiones históricas ya guardadas (downgrade) se conservan; solo se
+    // rechazan concesiones NUEVAS fuera del plan. El techo también se aplica al leer.
+    {
+      const existingExplicit: Record<string, boolean> = (() => { try { return JSON.parse(membership.permissions || '{}') } catch (_) { return {} } })();
+      const outside = findExplicitOutsidePlan(explicit, existingExplicit, getPlanFeatures(db, req.tenant.id));
+      if (outside.length > 0) {
+        return res.status(403).json({
+          error: `Tu plan no incluye estas funciones: ${outside.join(', ')}. Mejora tu plan para asignarlas.`,
+          code: PERMISSION_OUTSIDE_PLAN,
+          permissions: outside,
+        });
+      }
     }
     db.prepare('UPDATE tenant_memberships SET permissions=?, updated_at=? WHERE id=? AND tenant_id=?')
       .run(JSON.stringify(explicit), now(), req.params.membershipId, req.tenant.id);

@@ -26,6 +26,7 @@ export type PermKey =
   | 'reports.dashboard' | 'reports.portfolio' | 'reports.mora'
   | 'reports.collections' | 'reports.advanced' | 'reports.income' | 'reports.projection'
   | 'reports.datacredito'
+  | 'reports.scheduled' | 'reports.accounting_export'
   // WhatsApp
   | 'whatsapp.view' | 'whatsapp.send' | 'whatsapp.templates'
   // Income / Expenses
@@ -75,6 +76,7 @@ const PERM_PAIRS: { key: PermKey; module: string }[] = [
   { key:'reports.mora', module:'reports' }, { key:'reports.collections', module:'reports' },
   { key:'reports.advanced', module:'reports' }, { key:'reports.income', module:'reports' },
   { key:'reports.projection', module:'reports' }, { key:'reports.datacredito', module:'reports' },
+  { key:'reports.scheduled', module:'reports' }, { key:'reports.accounting_export', module:'reports' },
   { key:'whatsapp.view', module:'whatsapp' }, { key:'whatsapp.send', module:'whatsapp' },
   { key:'whatsapp.templates', module:'whatsapp' },
   { key:'income.view', module:'income' }, { key:'income.create', module:'income' },

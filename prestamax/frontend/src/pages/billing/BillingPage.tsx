@@ -5,6 +5,8 @@ import { Check, Loader2, ExternalLink, AlertCircle, CheckCircle2 } from 'lucide-
 import toast from 'react-hot-toast';
 import { TenantContext } from '@/contexts/TenantContext';
 import { computeAnnualPricing, type BillingPeriod } from '@/lib/pricing';
+import { useT } from '@/lib/i18n';
+import { planFeatureKeys } from '@/lib/planFeatures';
 import { trackBillingToggleChanged, trackPlanSelected, trackCheckoutStarted } from '@/lib/analytics';
 import { getVisitorId, getOrRotateSessionId } from '@/lib/visitor';
 
@@ -54,6 +56,7 @@ const usersLabel = (n: number) => (n < 0 ? 'Usuarios ilimitados' : `Hasta ${fmtN
 const collectorsLabel = (n: number) => (n < 0 ? 'Cobradores ilimitados' : `Hasta ${fmtNum(n)} ${n === 1 ? 'cobrador' : 'cobradores'}`);
 
 const BillingPage: React.FC = () => {
+  const t = useT();
   const [params] = useSearchParams();
   const { refreshCurrentTenant } = useContext(TenantContext);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -374,10 +377,12 @@ const BillingPage: React.FC = () => {
                       <Check className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
                       <span>{collectorsLabel(plan.maxCollectors)}</span>
                     </li>
-                    {Array.isArray(plan.features) && plan.features.slice(0, 5).map((f: string) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
+                    {/* Beneficios comerciales (misma fuente que la Landing). Las PermKeys
+                        técnicas ("clients.view"...) NO se muestran al cliente. */}
+                    {planFeatureKeys(plan.slug).map((k: string) => (
+                      <li key={k} className="flex items-start gap-2 text-sm text-gray-600">
                         <Check className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                        <span>{f}</span>
+                        <span>{t(k)}</span>
                       </li>
                     ))}
                   </ul>

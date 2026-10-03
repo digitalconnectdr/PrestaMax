@@ -21,6 +21,7 @@ const PortalInvestorPage: React.FC = () => {
   const [loans, setLoans] = useState<any[]>([])
   const [payouts, setPayouts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [planBlocked, setPlanBlocked] = useState(false)
 
   const loadAll = async () => {
     setLoading(true)
@@ -36,7 +37,10 @@ const PortalInvestorPage: React.FC = () => {
       setLoans(Array.isArray(loansR.data) ? loansR.data : [])
       setPayouts(Array.isArray(payR.data) ? payR.data : [])
     } catch (err: any) {
-      if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(err?.response?.data?.error || t('pinv.load_error'))
+      // El portal es una función del plan (Profesional+). Si la empresa bajó de plan,
+      // el acceso se cierra pero los datos del inversionista se conservan.
+      if (err?.response?.data?.code === 'PLAN_FEATURE_REQUIRED') setPlanBlocked(true)
+      else if (!isAccessDenied(err) && !isSubscriptionExpired(err)) toast.error(err?.response?.data?.error || t('pinv.load_error'))
     } finally {
       setLoading(false)
     }
@@ -47,6 +51,20 @@ const PortalInvestorPage: React.FC = () => {
   const handleLogout = () => { logout(); navigate('/login') }
 
   if (loading) return <PageLoadingState />
+  if (planBlocked) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center">
+          <Briefcase className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <h1 className="text-lg font-bold text-slate-900">{t('pinv.plan_blocked_title')}</h1>
+          <p className="text-sm text-slate-500 mt-2">{t('pinv.plan_blocked_desc')}</p>
+          <button onClick={handleLogout} className="mt-5 inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">
+            <LogOut className="w-4 h-4" />{t('pinv.logout')}
+          </button>
+        </Card>
+      </div>
+    )
+  }
   if (!me) return null
 
   const fullName = me.fullName || (state.user as any)?.fullName || t('pinv.investor')
