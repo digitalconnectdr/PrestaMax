@@ -11,6 +11,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useT } from '@/lib/i18n'
+import { usePermission } from '@/hooks/usePermission'
 import {
   BarChart,
   Bar,
@@ -90,6 +91,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const DashboardPage: React.FC = () => {
+  const { can } = usePermission()
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const navigate = useNavigate()
@@ -189,7 +191,9 @@ const DashboardPage: React.FC = () => {
       </div>
 
       {/* Primeros pasos — checklist guiado con progreso automático */}
-      <OnboardingChecklist />
+      {/* "Primeros pasos" es del administrador de la empresa (settings.general): el
+          backend (/onboarding/status) exige el mismo permiso. */}
+      {can('settings.general') && <OnboardingChecklist />}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

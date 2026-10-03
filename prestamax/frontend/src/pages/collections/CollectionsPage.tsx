@@ -453,7 +453,8 @@ const CollectionsPage: React.FC = () => {
                       <Phone className="w-4 h-4"/>
                     </a>
                   )}
-                  {(loan.whatsapp || loan.phonePersonal) && (
+                  {/* WhatsApp es Básico+: solo con el permiso efectivo (plan ∧ rol) */}
+                  {can('whatsapp.send') && (loan.whatsapp || loan.phonePersonal) && (
                     <a href={`https://wa.me/${(loan.whatsapp || loan.phonePersonal || '').replace(/\D/g,'')}`}
                       target="_blank" rel="noreferrer"
                       className="p-2 rounded-lg hover:bg-green-50 text-green-600" title={t('pay.send_whatsapp')}>
@@ -699,9 +700,11 @@ const CollectionsPage: React.FC = () => {
               <button type="button" onClick={async () => { const tn = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; await printPaymentReceipt(lastPayment, tn); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition">
                 <Printer className="w-4 h-4" /> {t('pay.print_receipt')}
               </button>
+              {can('whatsapp.send') && (
               <button type="button" onClick={() => { const tn = (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' }; const phone = lastPayment.clientWhatsapp || ''; if (!phone) toast(t('pay.no_whatsapp'), { icon: '⚠️' }); sendReceiptByWhatsApp(phone, lastPayment, tn, { principalBalance: lastPayment.principalBalance, interestBalance: lastPayment.interestBalance, moraBalance: lastPayment.moraBalance }); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition">
                 <MessageCircle className="w-4 h-4" /> {t('pay.send_whatsapp')}
               </button>
+              )}
               <button type="button" onClick={() => setShowPostPaymentModal(false)} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-900">{t('common.close')}</button>
             </div>
           </div>

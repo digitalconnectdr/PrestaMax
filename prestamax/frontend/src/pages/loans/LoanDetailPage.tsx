@@ -2253,6 +2253,7 @@ const LoanDetailPage: React.FC = () => {
               >
                 <Printer className="w-4 h-4" /> {t('ld.pp_print')}
               </button>
+              {can('whatsapp.send') && (
               <button
                 type="button"
                 onClick={() => {
@@ -2271,6 +2272,7 @@ const LoanDetailPage: React.FC = () => {
               >
                 <MessageCircle className="w-4 h-4" /> {t('ld.pp_whatsapp')}
               </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowPostPaymentModal(false)}

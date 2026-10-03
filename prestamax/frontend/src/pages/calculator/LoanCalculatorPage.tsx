@@ -475,6 +475,8 @@ const LoanCalculatorPage: React.FC = () => {
 
               {/* Action buttons */}
               <div className="flex gap-3">
+                {/* WhatsApp es Básico+: solo con el permiso efectivo (plan ∧ rol) */}
+                {can('whatsapp.send') && (
                 <button
                   onClick={async () => {
                     // Fetch JIT del tenant-info para garantizar datos frescos
@@ -491,6 +493,7 @@ const LoanCalculatorPage: React.FC = () => {
                 >
                   <MessageCircle className="w-4 h-4"/>Compartir por WhatsApp
                 </button>
+                )}
                 <button onClick={exportCSV}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors">
                   <Download className="w-4 h-4"/>Exportar CSV

@@ -2,11 +2,14 @@
 // Detecta qué ya configuró el usuario para el checklist guiado del dashboard.
 import { Router, Response } from 'express';
 import { getDb } from '../db/database';
-import { authenticate, AuthRequest, requireTenant } from '../middleware/auth';
+import { authenticate, AuthRequest, requireTenant, requirePermission } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/status', authenticate, requireTenant, (req: AuthRequest, res: Response) => {
+// "Primeros pasos" es del administrador de la empresa: exige settings.general (el
+// permiso administrativo existente; owner/admin lo tienen, cobrador/investor/
+// oficial/cajero no). El staff de plataforma conserva su bypass tecnico.
+router.get('/status', authenticate, requireTenant, requirePermission('settings.general'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
     const tid = req.tenant.id;
