@@ -46,49 +46,54 @@ interface Plan {
   description: string
   collectors: string
   clients: string
+  activeLoans: string
   users: string
   features: string[]
   highlighted?: boolean
   ctaLabel?: string
 }
 
+// Precios mensuales vigentes (USD). El anual se calcula con computeAnnualPricing
+// (9 mensualidades, 3 meses gratis). Deben coincidir con plans.price_monthly
+// (backend/src/db/planCatalog.ts) y con el plan correspondiente en Whop.
 const buildPlans = (t: TFn): Plan[] => [
   {
-    name: t('lp.plan.starter'), slug: 'starter', price: 29.99,
+    name: t('lp.plan.starter'), slug: 'starter', price: 9.99,
     description: t('lp.plan.starter.d'),
-    collectors: t('lp.lim.col1'), clients: t('lp.lim.cli100'), users: t('lp.lim.usr3'),
+    clients: t('lp.lim.cliInf'), activeLoans: t('lp.lim.loans100'), users: t('lp.lim.usr3'), collectors: t('lp.lim.col1'),
     features: [
       t('lp.pf.clients_mgmt'), t('lp.pf.amort'), t('lp.pf.digital_pay'),
-      t('lp.pf.calc'), t('lp.pf.dash_basic'), t('lp.pf.email_support'),
+      t('lp.pf.calc'), t('lp.pf.dash_basic'), t('lp.pf.collections_basic'), t('lp.pf.email_support'),
     ],
   },
   {
-    name: t('lp.plan.basico'), slug: 'basico', price: 59.99,
+    name: t('lp.plan.basico'), slug: 'basico', price: 24.99,
     description: t('lp.plan.basico.d'),
-    collectors: t('lp.lim.col3'), clients: t('lp.lim.cli500'), users: t('lp.lim.usr8'),
+    clients: t('lp.lim.cliInf'), activeLoans: t('lp.lim.loans500'), users: t('lp.lim.usr8'), collectors: t('lp.lim.col3'),
     features: [
-      t('lp.pf.all_starter'), t('lp.pf.collections'), t('lp.pf.promises'),
-      t('lp.pf.contracts'), t('lp.pf.adv_reports'), t('lp.pf.whatsapp'), t('lp.pf.templates'),
+      t('lp.pf.all_starter'), t('lp.pf.collections'), t('lp.pf.promises'), t('lp.pf.tasks'),
+      t('lp.pf.contracts'), t('lp.pf.whatsapp'), t('lp.pf.templates'),
+      t('lp.pf.adv_reports'), t('lp.pf.income_mgmt'), t('lp.pf.csv_import'),
     ],
     highlighted: true,
     ctaLabel: t('lp.pricing.popular'),
   },
   {
-    name: t('lp.plan.profesional'), slug: 'profesional', price: 119.99,
+    name: t('lp.plan.profesional'), slug: 'profesional', price: 49.99,
     description: t('lp.plan.profesional.d'),
-    collectors: t('lp.lim.col10'), clients: t('lp.lim.cli2000'), users: t('lp.lim.usr20'),
+    clients: t('lp.lim.cliInf'), activeLoans: t('lp.lim.loans2000'), users: t('lp.lim.usr20'), collectors: t('lp.lim.col10'),
     features: [
       t('lp.pf.all_basico'), t('lp.pf.branches'), t('lp.pf.public_req'),
-      t('lp.pf.projections'), t('lp.pf.income_mgmt'), t('lp.pf.csv_import'), t('lp.pf.roles'), t('lp.pf.priority'),
+      t('lp.pf.investors'), t('lp.pf.projections'), t('lp.pf.assisted_migration'), t('lp.pf.priority'),
     ],
   },
   {
-    name: t('lp.plan.enterprise'), slug: 'enterprise', price: 249.99,
+    name: t('lp.plan.enterprise'), slug: 'enterprise', price: 99.99,
     description: t('lp.plan.enterprise.d'),
-    collectors: t('lp.lim.colInf'), clients: t('lp.lim.cliInf'), users: t('lp.lim.usrInf'),
+    clients: t('lp.lim.cliInf'), activeLoans: t('lp.lim.loansInf'), users: t('lp.lim.usrInf'), collectors: t('lp.lim.colInf'),
     features: [
-      t('lp.pf.all_pro'), t('lp.pf.no_limits'), t('lp.pf.multi_bank'),
-      t('lp.pf.api'), t('lp.pf.onboarding'), t('lp.pf.support_247'), t('lp.pf.sla'),
+      t('lp.pf.all_pro'), t('lp.pf.no_limits'), t('lp.pf.datacredito'),
+      t('lp.pf.onboarding'), t('lp.pf.support_247'), t('lp.pf.sla'),
     ],
   },
 ]
@@ -564,15 +569,19 @@ const LandingPage: React.FC = () => {
                 <div className="mt-6 space-y-2 text-sm text-slate-700 border-y border-slate-100 py-4">
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-slate-400" />
-                    {plan.collectors}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-slate-400" />
                     {plan.clients}
                   </div>
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-slate-400" />
+                    {plan.activeLoans}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-slate-400" />
                     {plan.users}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-slate-400" />
+                    {plan.collectors}
                   </div>
                 </div>
 
@@ -602,6 +611,9 @@ const LandingPage: React.FC = () => {
 
           <p className="mt-8 text-center text-sm text-slate-500">
             {t('lp.pricing.note')}
+          </p>
+          <p className="mt-2 text-center text-sm text-slate-500">
+            {t('lp.pricing.collectors_note')}
           </p>
         </div>
       </section>

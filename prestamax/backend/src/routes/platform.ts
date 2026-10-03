@@ -56,12 +56,13 @@ router.get('/plans', authenticate, requirePlatformAdmin, (req: AuthRequest, res:
 // ── POST /plans ────────────────────────────────────────────────────────────────
 router.post('/plans', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
-    const { name, slug, price_monthly, max_clients, max_users, max_collectors } = req.body;
+    const { name, slug, price_monthly, max_clients, max_users, max_collectors, max_active_loans } = req.body;
     const db = getDb();
     const id = uuid();
-    db.prepare(`INSERT INTO plans (id,name,slug,price_monthly,max_clients,max_users,max_collectors,is_active,created_at)
-      VALUES (?,?,?,?,?,?,?,1,datetime('now'))`)
-      .run(id, name, slug.toLowerCase(), parseFloat(price_monthly), max_clients || -1, max_users || -1, max_collectors || -1);
+    // -1 = ilimitado; 0 es un valor válido y NO se convierte en ilimitado (?? en vez de ||).
+    db.prepare(`INSERT INTO plans (id,name,slug,price_monthly,max_clients,max_users,max_collectors,max_active_loans,is_active,created_at)
+      VALUES (?,?,?,?,?,?,?,?,1,datetime('now'))`)
+      .run(id, name, slug.toLowerCase(), parseFloat(price_monthly), max_clients ?? -1, max_users ?? -1, max_collectors ?? -1, max_active_loans ?? -1);
     res.status(201).json(db.prepare('SELECT * FROM plans WHERE id=?').get(id));
   } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });

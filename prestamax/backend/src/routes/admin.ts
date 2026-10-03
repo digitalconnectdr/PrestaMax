@@ -7,6 +7,8 @@ import path from 'path';
 import fs from 'fs';
 import { seedDemo } from '../db/seed_demo';
 import { validatePlanFeatures } from '../lib/permissions';
+import { checkMembershipLimits, membershipDelta, countActiveLoans } from '../lib/planLimits';
+import { PLAN_CATALOG } from '../db/planCatalog';
 import { PRICING_FUNNEL_STEPS, ALL_FUNNEL_EVENTS, computeSequentialFunnel, computeGlobalCounts, computeSignupSources, FunnelEventRow } from '../lib/analyticsFunnel';
 
 // Helper: valida el campo `features` de un plan (string JSON o array) contra
@@ -23,6 +25,31 @@ function checkPlanFeatures(raw: any): string | null {
   const { invalid } = validatePlanFeatures(arr);
   if (invalid.length > 0) return `Permisos inválidos en features: ${invalid.join(', ')}`;
   return null;
+}
+
+// Límites numéricos de un plan (collectors/clients/users/active loans).
+// Semántica: -1 = ilimitado; 0 es un valor válido (cero permitido), NUNCA se
+// interpreta como ilimitado (antes `value || -1` convertía 0 en ilimitado).
+// `missing` es el valor cuando el campo no viene en el body (-1 al crear,
+// null = "sin cambio" al actualizar). Acepta snake_case y camelCase.
+const PLAN_LIMIT_FIELDS: Array<[string, string]> = [
+  ['max_collectors', 'maxCollectors'], ['max_clients', 'maxClients'],
+  ['max_users', 'maxUsers'], ['max_active_loans', 'maxActiveLoans'],
+];
+function parsePlanLimits(d: any, missing: number | null):
+  | { error: string }
+  | { max_collectors: number | null; max_clients: number | null; max_users: number | null; max_active_loans: number | null } {
+  const out: any = {};
+  for (const [snake, camel] of PLAN_LIMIT_FIELDS) {
+    const raw = d[snake] !== undefined ? d[snake] : d[camel];
+    if (raw === undefined || raw === null || raw === '') { out[snake] = missing; continue; }
+    const n = typeof raw === 'number' ? raw : Number(String(raw).trim());
+    if (!Number.isInteger(n) || n < -1) {
+      return { error: `${snake} debe ser un entero >= 0, o -1 para ilimitado` };
+    }
+    out[snake] = n;
+  }
+  return out;
 }
 
 const router = Router();
@@ -190,7 +217,7 @@ router.get('/tenants', authenticate, requirePlatformAdmin, (req: AuthRequest, re
     const tenants = db.prepare(`
       SELECT t.*,
         p.name as plan_name, p.price_monthly,
-        p.max_collectors, p.max_clients, p.max_users,
+        p.max_collectors, p.max_clients, p.max_users, p.max_active_loans,
         COUNT(DISTINCT tm.user_id) as member_count,
         COUNT(DISTINCT l.id) as loan_count,
         COUNT(DISTINCT c.id) as client_count
@@ -336,15 +363,10 @@ router.get('/plans', authenticate, requirePlatformAdmin, (req: AuthRequest, res:
 router.post('/plans/seed-defaults', authenticate, requirePlatformAdmin, (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    const defaultPlans = [
-      { id: 'plan-starter', name: 'Starter', slug: 'starter', price: 29.99, collectors: 1, clients: 100, users: 3 },
-      { id: 'plan-basico', name: 'Básico', slug: 'basico', price: 59.99, collectors: 3, clients: 500, users: 8 },
-      { id: 'plan-profesional', name: 'Profesional', slug: 'profesional', price: 119.99, collectors: 10, clients: 2000, users: 20 },
-      { id: 'plan-enterprise', name: 'Enterprise', slug: 'enterprise', price: 249.99, collectors: -1, clients: -1, users: -1 },
-    ];
-    const insertPlan = db.prepare(`INSERT OR IGNORE INTO plans (id, name, slug, price_monthly, max_collectors, max_clients, max_users, trial_days) VALUES (?,?,?,?,?,?,?,?)`);
-    for (const p of defaultPlans) {
-      insertPlan.run(p.id, p.name, p.slug, p.price, p.collectors, p.clients, p.users, 10);
+    // Valores comerciales vigentes (fuente única: db/planCatalog.ts)
+    const insertPlan = db.prepare(`INSERT OR IGNORE INTO plans (id, name, slug, price_monthly, max_collectors, max_clients, max_users, max_active_loans, trial_days) VALUES (?,?,?,?,?,?,?,?,?)`);
+    for (const p of PLAN_CATALOG) {
+      insertPlan.run(p.id, p.name, p.slug, p.price, p.maxCollectors, p.maxClients, p.maxUsers, p.maxActiveLoans, 10);
     }
     // Ensure trial_days = 10 for these plans even if they already existed
     db.prepare(`UPDATE plans SET trial_days = 10 WHERE id IN ('plan-starter','plan-basico','plan-profesional','plan-enterprise')`).run();
@@ -359,14 +381,17 @@ router.post('/plans', authenticate, requirePlatformAdmin, (req: AuthRequest, res
     if (!d.name || !d.slug) return res.status(400).json({ error: 'Nombre y slug son requeridos' });
     const featErr = checkPlanFeatures(d.features);
     if (featErr) return res.status(400).json({ error: featErr });
+    // Límites: -1 = ilimitado; 0 es un valor válido (NO se convierte en ilimitado).
+    const lim = parsePlanLimits(d, -1);
+    if ('error' in lim) return res.status(400).json({ error: lim.error });
     // If marking as trial default, first clear any existing trial default
     if (d.is_trial_default) {
       db.prepare('UPDATE plans SET is_trial_default=0 WHERE is_trial_default=1').run();
     }
-    db.prepare(`INSERT INTO plans (id,name,slug,price_monthly,max_collectors,max_clients,max_users,trial_days,features,description,is_active,is_trial_default)
-      VALUES (?,?,?,?,?,?,?,?,?,?,1,?)`).run(
-        id, d.name, d.slug, d.price_monthly||0, d.max_collectors||-1, d.max_clients||-1, d.max_users||-1,
-        d.trial_days||10, d.features||'[]', d.description||null, d.is_trial_default?1:0
+    db.prepare(`INSERT INTO plans (id,name,slug,price_monthly,max_collectors,max_clients,max_users,max_active_loans,trial_days,features,description,is_active,is_trial_default)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?)`).run(
+        id, d.name, d.slug, d.price_monthly??0, lim.max_collectors, lim.max_clients, lim.max_users, lim.max_active_loans,
+        d.trial_days??10, d.features||'[]', d.description||null, d.is_trial_default?1:0
       );
     res.status(201).json(db.prepare('SELECT * FROM plans WHERE id=?').get(id));
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
@@ -378,6 +403,9 @@ router.put('/plans/:id', authenticate, requirePlatformAdmin, (req: AuthRequest, 
     const db = getDb(); const d = req.body;
     const featErr = checkPlanFeatures(d.features);
     if (featErr) return res.status(400).json({ error: featErr });
+    // Límites: omitido = sin cambio; 0 es válido; -1 = ilimitado.
+    const lim = parsePlanLimits(d, null);
+    if ('error' in lim) return res.status(400).json({ error: lim.error });
     // If marking as trial default, first clear any existing trial default (except this plan)
     if (d.is_trial_default) {
       db.prepare('UPDATE plans SET is_trial_default=0 WHERE is_trial_default=1 AND id!=?').run(req.params.id);
@@ -385,12 +413,13 @@ router.put('/plans/:id', authenticate, requirePlatformAdmin, (req: AuthRequest, 
     db.prepare(`UPDATE plans SET
       name=COALESCE(?,name), price_monthly=COALESCE(?,price_monthly),
       max_collectors=COALESCE(?,max_collectors), max_clients=COALESCE(?,max_clients),
-      max_users=COALESCE(?,max_users), is_active=COALESCE(?,is_active),
+      max_users=COALESCE(?,max_users), max_active_loans=COALESCE(?,max_active_loans),
+      is_active=COALESCE(?,is_active),
       trial_days=COALESCE(?,trial_days), features=COALESCE(?,features), description=COALESCE(?,description),
       is_trial_default=COALESCE(?,is_trial_default)
     WHERE id=?`).run(
-      d.name||null, d.price_monthly??null, d.max_collectors??null, d.max_clients??null,
-      d.max_users??null, d.is_active!==undefined?(d.is_active?1:0):null,
+      d.name||null, d.price_monthly??null, lim.max_collectors, lim.max_clients,
+      lim.max_users, lim.max_active_loans, d.is_active!==undefined?(d.is_active?1:0):null,
       d.trial_days??null, d.features||null, d.description||null,
       d.is_trial_default!==undefined?(d.is_trial_default?1:0):null, req.params.id
     );
@@ -960,7 +989,7 @@ router.get('/my-subscription', authenticate, (req: AuthRequest, res: Response) =
     }
     const tenant = db.prepare(`
       SELECT t.*, p.name as plan_name, p.slug as plan_slug, p.price_monthly, p.max_collectors,
-        p.max_clients, p.max_users, p.trial_days, p.features, p.description as plan_description
+        p.max_clients, p.max_users, p.max_active_loans, p.trial_days, p.features, p.description as plan_description
       FROM tenants t LEFT JOIN plans p ON p.id=t.plan_id
       WHERE t.id=?
     `).get(tenantId) as any;
@@ -996,11 +1025,13 @@ router.get('/my-subscription', authenticate, (req: AuthRequest, res: Response) =
       memberCount,
       clientCount,
       collectorCount,
+      activeLoanCount: countActiveLoans(db, tenantId),
       features,
       planLimits: {
         maxUsers: tenant.max_users ?? -1,
         maxCollectors: tenant.max_collectors ?? -1,
         maxClients: tenant.max_clients ?? -1,
+        maxActiveLoans: tenant.max_active_loans ?? -1,
       }
     });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
@@ -1082,9 +1113,21 @@ router.put('/users/:id/memberships/:tenantId/role', authenticate, requirePlatfor
     const validRoles = ['tenant_owner', 'admin', 'official', 'loan_officer', 'prestamista', 'cashier', 'cobrador', 'collector'];
     if (!validRoles.includes(roles)) return res.status(400).json({ error: 'Rol no valido' });
     const membership = db.prepare(
-      'SELECT id FROM tenant_memberships WHERE user_id=? AND tenant_id=?'
+      'SELECT id, roles, is_active FROM tenant_memberships WHERE user_id=? AND tenant_id=?'
     ).get(req.params.id, req.params.tenantId) as any;
     if (!membership) return res.status(404).json({ error: 'Membresia no encontrada' });
+    // Límite de cobradores del plan: pasar a cobrador suma un cobrador activo.
+    {
+      const before: string[] = (() => { try { return JSON.parse(membership.roles || '[]') } catch { return [] } })();
+      const delta = membershipDelta(
+        { isActive: membership.is_active === 1, roles: before },
+        { isActive: membership.is_active === 1, roles: [roles] },
+      );
+      if (delta.addsUser || delta.addsCollector) {
+        const violation = checkMembershipLimits(db, req.params.tenantId, delta);
+        if (violation) return res.status(403).json({ error: violation.error, code: violation.code });
+      }
+    }
     db.prepare('UPDATE tenant_memberships SET roles=? WHERE id=?').run(JSON.stringify([roles]), membership.id);
     res.json({ success: true });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }

@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
+import { PLAN_CATALOG, TRIAL_PLAN, PRICING_V2_MIGRATION_KEY } from './planCatalog';
 
 // DB path: env variable > local prestamax.db next to backend folder > Linux sandbox path
 export const DB_PATH = process.env.DATABASE_PATH ||
@@ -702,6 +703,14 @@ export function initializeDatabase(): void {
   try { db.exec(`ALTER TABLE plans ADD COLUMN is_trial_default INTEGER NOT NULL DEFAULT 0`); } catch(_) {}
   // Partial unique index: ensures at most one plan has is_trial_default=1
   try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_trial_default ON plans(is_trial_default) WHERE is_trial_default=1`); } catch(_) {}
+  // Límite comercial de préstamos ACTIVOS por plan (-1 = ilimitado). Aditivo e
+  // idempotente: los planes existentes/personalizados quedan en -1 (sin límite)
+  // hasta que la migración de pricing o el Admin les asigne un valor.
+  try { db.exec(`ALTER TABLE plans ADD COLUMN max_active_loans INTEGER NOT NULL DEFAULT -1`); } catch(_) {}
+  // Conteo de préstamos activos por tenant (lib/planLimits.ts countActiveLoans).
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_loans_tenant_status ON loans(tenant_id, status)`); } catch(_) {}
+  // Registro de migraciones de datos de una sola vez (idempotente por clave).
+  try { db.exec(`CREATE TABLE IF NOT EXISTS app_migrations (key TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))`); } catch(_) {}
 
   // -- Cargo de Prorroga: fixed extension fee per loan --
   try { db.exec(`ALTER TABLE loans ADD COLUMN prorroga_fee REAL NOT NULL DEFAULT 0`); } catch(_) {}
@@ -1316,26 +1325,8 @@ export function initializeDatabase(): void {
     }
   } catch(e: any) { console.error('Error seeding default loan products:', e?.message); }
 
-  // Always ensure the 4 default subscription plans exist (INSERT OR IGNORE = safe to run every boot)
-  // FIX P2 (Jun 2026): Starter incluía collections.tasks (ver agenda) pero NO
-  // collections.tasks.manage (crear/asignar) → un operador solo podía ver una
-  // agenda vacía sin poder crear tareas. Se agrega manage para que sea funcional.
-  const starterFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "collections.tasks.manage", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "requests.view", "requests.approve", "requests.reject", "requests.convert"]);
-  // FIX P0 (Jun 2026): "settings.templates" NO es un permiso valido (no existe
-  // en PERM_DEFS) — era un typo. Las rutas PUT/DELETE de plantillas exigen
-  // templates.edit y templates.delete, que ningun plan incluia → editar/eliminar
-  // plantillas estaba roto para TODOS los tenants. Se reemplaza por las claves
-  // correctas. La migracion mas abajo (UPDATE plans SET features=...) propaga
-  // el fix a los tenants existentes.
-  const basicFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "templates.edit", "templates.delete", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections"]);
-  const proFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "templates.edit", "templates.delete", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "investors.view", "investors.create", "investors.edit", "investors.delete", "investors.assign", "investors.payouts", "investors.portal", "loans.approve_high_value", "loans.consolidate"]);
-  const enterpriseFeatures = JSON.stringify(["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "collections.tasks.manage", "templates.create", "templates.edit", "templates.delete", "contracts.view", "contracts.create", "contracts.sign", "contracts.delete", "whatsapp.view", "whatsapp.send", "whatsapp.templates", "settings.branches", "income.view", "income.create", "income.edit", "income.delete", "requests.view", "requests.approve", "requests.reject", "requests.convert", "reports.collections", "reports.advanced", "reports.income", "reports.projection", "loans.write_off", "loans.import", "payments.edit", "reports.datacredito", "investors.view", "investors.create", "investors.edit", "investors.delete", "investors.assign", "investors.payouts", "investors.portal", "loans.approve_high_value", "loans.consolidate"]);
-  const defaultPlans = [
-    { id: 'plan-starter', name: 'Starter', slug: 'starter', price: 29.99, collectors: 1, clients: 100, users: 3, trial: 14, features: starterFeatures, desc: 'Ideal para iniciar. Funciones básicas de préstamos.' },
-    { id: 'plan-basico', name: 'Básico', slug: 'basico', price: 59.99, collectors: 3, clients: 500, users: 8, trial: 14, features: basicFeatures, desc: 'Para prestamistas en crecimiento con WhatsApp y sucursales.' },
-    { id: 'plan-profesional', name: 'Profesional', slug: 'profesional', price: 119.99, collectors: 10, clients: 2000, users: 20, trial: 14, features: proFeatures, desc: 'Para equipos medianos con reportes avanzados y firmas digitales.' },
-    { id: 'plan-enterprise', name: 'Enterprise', slug: 'enterprise', price: 249.99, collectors: -1, clients: -1, users: -1, trial: 14, features: enterpriseFeatures, desc: 'Sin límites. Todas las funciones incluyendo API y soporte prioritario.' },
-  ];
+  // ── Planes comerciales ────────────────────────────────────────────────────
+  // Precios, límites y features viven en db/planCatalog.ts (fuente única).
   // Migrate all existing plans: set trial_days = 10 for any plan still at 30
   try { db.exec(`UPDATE plans SET trial_days = 10 WHERE trial_days = 30`); } catch(_) {}
   // FIX (jun 2026): landing/registro anuncian 14 dias de prueba pero los
@@ -1344,34 +1335,68 @@ export function initializeDatabase(): void {
   try { db.exec(`UPDATE plans SET trial_days = 14 WHERE trial_days = 10`); } catch(_) {}
 
   // INSERT OR IGNORE: only creates plans on first run — never overwrites admin changes
-  const insertPlan = db.prepare(`INSERT OR IGNORE INTO plans (id, name, slug, price_monthly, max_collectors, max_clients, max_users, trial_days, features, description) VALUES (?,?,?,?,?,?,?,?,?,?)`);
-  for (const p of defaultPlans) {
-    insertPlan.run(p.id, p.name, p.slug, p.price, p.collectors, p.clients, p.users, p.trial, p.features, p.desc);
+  const insertPlan = db.prepare(`INSERT OR IGNORE INTO plans (id, name, slug, price_monthly, max_collectors, max_clients, max_users, max_active_loans, trial_days, features, description) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+  for (const p of PLAN_CATALOG) {
+    insertPlan.run(p.id, p.name, p.slug, p.price, p.maxCollectors, p.maxClients, p.maxUsers, p.maxActiveLoans, 14, JSON.stringify(p.features), p.description);
   }
-  // Seed the Plan Trial (inserted only if not present — INSERT OR IGNORE)
-  const insertTrialPlan = db.prepare(`INSERT OR IGNORE INTO plans (id, name, slug, price_monthly, max_collectors, max_clients, max_users, trial_days, features, description, is_trial_default) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
-  insertTrialPlan.run('plan-trial', 'Plan Trial', 'trial', 0, 1, 50, 2, 14, '["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "collections.tasks.manage", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "requests.view", "requests.approve", "requests.reject", "requests.convert"]', 'Plan de prueba gratuito para nuevos prestamistas. Configurable desde Admin.', 1);
+  // Seed the Plan Trial (inserted only if not present — INSERT OR IGNORE).
+  // El trial refleja Starter: clientes ilimitados, 100 préstamos activos, 3 usuarios, 1 cobrador.
+  const insertTrialPlan = db.prepare(`INSERT OR IGNORE INTO plans (id, name, slug, price_monthly, max_collectors, max_clients, max_users, max_active_loans, trial_days, features, description, is_trial_default) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+  insertTrialPlan.run(TRIAL_PLAN.id, 'Plan Trial', 'trial', 0, TRIAL_PLAN.maxCollectors, TRIAL_PLAN.maxClients, TRIAL_PLAN.maxUsers, TRIAL_PLAN.maxActiveLoans, 14, JSON.stringify(TRIAL_PLAN.features), 'Plan de prueba gratuito para nuevos prestamistas (equivalente a Starter). Configurable desde Admin.', 1);
   // Patch existing trial plan features in case this DB already had the row
-  db.prepare(`UPDATE plans SET features=? WHERE id='plan-trial' AND is_trial_default=1`).run('["clients.view", "clients.create", "clients.edit", "clients.delete", "loans.view", "loans.create", "loans.edit", "loans.approve", "loans.reject", "loans.disburse", "loans.void", "payments.view", "payments.create", "payments.void", "receipts.view", "receipts.reprint", "reports.dashboard", "reports.portfolio", "reports.mora", "calculator.use", "collections.view", "collections.notes", "collections.promises", "collections.manage", "collections.tasks", "collections.tasks.manage", "templates.view", "settings.general", "settings.users", "settings.products", "settings.bank_accounts", "requests.view", "requests.approve", "requests.reject", "requests.convert"]');
+  db.prepare(`UPDATE plans SET features=? WHERE id='plan-trial' AND is_trial_default=1`).run(JSON.stringify(TRIAL_PLAN.features));
 
-  // ── MIGRACION: actualizar features de planes existentes (incluye collections.tasks, etc.) ──
-  // Sin esto, tenants creados antes de esta version siguen con la lista vieja sin agenda.
-  // FIX (Sep 2026): esta migracion solo hacia match por id='plan-x'. Pero en
-  // instalaciones mas viejas los planes "Basico/Profesional/Empresarial" ya
-  // existian con id=UUID aleatorio (creados antes de que estos ids fijos
-  // existieran) y solo coinciden por slug -- el UPDATE por id nunca los
-  // tocaba, asi que CADA feature nueva agregada a estos planes (incluyendo
-  // loans.approve_high_value y loans.consolidate de esta misma migracion)
-  // jamas llegaba a esos tenants reales. Se hace match por id O por slug.
-  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-starter' OR slug='starter'`).run(starterFeatures); } catch(_) {}
-  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-basico' OR slug='basico'`).run(basicFeatures); } catch(_) {}
-  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-profesional' OR slug='profesional'`).run(proFeatures); } catch(_) {}
-  try { db.prepare(`UPDATE plans SET features=? WHERE id='plan-enterprise' OR slug='enterprise' OR slug='empresarial'`).run(enterpriseFeatures); } catch(_) {}
+  // ── MIGRACION: features de planes existentes (corre en cada arranque) ──
+  // Sin esto, tenants creados antes de esta version siguen con la lista vieja.
+  // Se hace match por id O por slug: en instalaciones mas viejas los planes
+  // "Basico/Profesional/Empresarial" existian con id=UUID aleatorio y solo
+  // coinciden por slug -- el UPDATE por id nunca los tocaba.
+  for (const p of PLAN_CATALOG) {
+    const aliasSql = p.slug === 'enterprise' ? " OR slug='empresarial'" : '';
+    try { db.prepare(`UPDATE plans SET features=? WHERE id=? OR slug=?${aliasSql}`).run(JSON.stringify(p.features), p.id, p.slug); } catch(_) {}
+  }
+
+  // ── MIGRACION UNICA: nuevo pricing + limites (pricing v2) ──
+  applyPricingV2Migration(db);
 
   const planCount = (db.prepare('SELECT COUNT(*) as c FROM plans').get() as any).c;
   console.log(`✅ Plans table: ${planCount} plans available`);
 
   console.log('✅ Database schema initialized');
+}
+
+// Migración ÚNICA de pricing v2 (precios, límites y descripción de los 4 planes
+// comerciales + plan-trial). Idempotente: se registra en app_migrations y no se
+// repite, así el Admin puede seguir editando los planes después. Hace match por
+// SLUG además de por id (planes legacy con id distinto). Solo UPDATE de planes:
+// no borra registros, no toca tenants ni suscripciones ni plan_id.
+export function applyPricingV2Migration(db: any): { applied: boolean } {
+  try {
+    const done = db.prepare('SELECT 1 FROM app_migrations WHERE key = ?').get(PRICING_V2_MIGRATION_KEY);
+    if (done) return { applied: false };
+    db.exec('BEGIN');
+    try {
+      const upd = db.prepare(`UPDATE plans SET price_monthly=?, max_clients=?, max_active_loans=?, max_users=?, max_collectors=?, features=?, description=? WHERE id=? OR slug=?`);
+      const updAlias = db.prepare(`UPDATE plans SET price_monthly=?, max_clients=?, max_active_loans=?, max_users=?, max_collectors=?, features=?, description=? WHERE slug='empresarial'`);
+      for (const p of PLAN_CATALOG) {
+        const args = [p.price, p.maxClients, p.maxActiveLoans, p.maxUsers, p.maxCollectors, JSON.stringify(p.features), p.description];
+        upd.run(...args, p.id, p.slug);
+        if (p.slug === 'enterprise') updAlias.run(...args);
+      }
+      db.prepare(`UPDATE plans SET max_clients=?, max_active_loans=?, max_users=?, max_collectors=?, features=? WHERE id=?`)
+        .run(TRIAL_PLAN.maxClients, TRIAL_PLAN.maxActiveLoans, TRIAL_PLAN.maxUsers, TRIAL_PLAN.maxCollectors, JSON.stringify(TRIAL_PLAN.features), TRIAL_PLAN.id);
+      db.prepare('INSERT INTO app_migrations (key) VALUES (?)').run(PRICING_V2_MIGRATION_KEY);
+      db.exec('COMMIT');
+      console.log('✅ Migración pricing v2 aplicada (precios, límites y features de planes)');
+      return { applied: true };
+    } catch (e) {
+      try { db.exec('ROLLBACK'); } catch (_) {}
+      throw e;
+    }
+  } catch (e: any) {
+    console.error('Error en migración pricing v2 (se reintentará en el próximo arranque):', e?.message);
+    return { applied: false };
+  }
 }
 
 // Crea los productos de prestamo de ejemplo de un tenant (uno normal, uno

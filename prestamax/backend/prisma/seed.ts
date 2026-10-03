@@ -8,10 +8,10 @@ async function main() {
 
   // Plans
   const plans = await Promise.all([
-    prisma.plan.upsert({ where: { slug: 'basico' }, update: {}, create: { name: 'Basico', slug: 'basico', price_monthly: 29, max_collectors: 1, max_clients: 50, max_users: 3 } }),
-    prisma.plan.upsert({ where: { slug: 'profesional' }, update: {}, create: { name: 'Profesional', slug: 'profesional', price_monthly: 79, max_collectors: 5, max_clients: 500, max_users: 10 } }),
-    prisma.plan.upsert({ where: { slug: 'empresarial' }, update: {}, create: { name: 'Empresarial', slug: 'empresarial', price_monthly: 199, max_collectors: 20, max_clients: 5000, max_users: 50 } }),
-    prisma.plan.upsert({ where: { slug: 'premium' }, update: {}, create: { name: 'Premium', slug: 'premium', price_monthly: 499, max_collectors: -1, max_clients: -1, max_users: -1 } }),
+    prisma.plan.upsert({ where: { slug: 'starter' }, update: {}, create: { name: 'Starter', slug: 'starter', price_monthly: 9.99, max_collectors: 1, max_clients: -1, max_users: 3 } }),
+    prisma.plan.upsert({ where: { slug: 'basico' }, update: {}, create: { name: 'Basico', slug: 'basico', price_monthly: 24.99, max_collectors: 3, max_clients: -1, max_users: 8 } }),
+    prisma.plan.upsert({ where: { slug: 'profesional' }, update: {}, create: { name: 'Profesional', slug: 'profesional', price_monthly: 49.99, max_collectors: 10, max_clients: -1, max_users: 20 } }),
+    prisma.plan.upsert({ where: { slug: 'enterprise' }, update: {}, create: { name: 'Enterprise', slug: 'enterprise', price_monthly: 99.99, max_collectors: -1, max_clients: -1, max_users: -1 } }),
   ]);
   console.log('Plans created');
 
@@ -28,7 +28,7 @@ async function main() {
   const tenant1 = await prisma.tenant.upsert({
     where: { slug: 'prestamos-garcia' },
     update: {},
-    create: { name: 'Prestamos Garcia & Asociados', slug: 'prestamos-garcia', email: 'info@garcia.com', phone: '809-555-1000', currency: 'DOP', plan_id: plans[1].id, is_active: true }
+    create: { name: 'Prestamos Garcia & Asociados', slug: 'prestamos-garcia', email: 'info@garcia.com', phone: '809-555-1000', currency: 'DOP', plan_id: plans[2].id, is_active: true }
   });
   await prisma.tenantSettings.upsert({
     where: { tenant_id: tenant1.id },

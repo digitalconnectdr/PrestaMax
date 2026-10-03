@@ -1977,9 +1977,11 @@ const SettingsPage: React.FC = () => {
                       ${sub.priceMonthly || sub.price_monthly || '0'}<span className="text-sm font-normal text-slate-500">{tGen('set.per_month')}</span>
                     </div>
                     <div className="space-y-2">
-                      <div className="flex justify-between text-sm"><span className="text-slate-600">{tGen('set.collectors')}</span><strong>{(sub.maxCollectors || sub.max_collectors) === -1 ? tGen('set.unlimited') : sub.maxCollectors || sub.max_collectors || '—'}</strong></div>
-                      <div className="flex justify-between text-sm"><span className="text-slate-600">{tGen('set.clients')}</span><strong>{(sub.maxClients || sub.max_clients) === -1 ? tGen('set.unlimited') : sub.maxClients || sub.max_clients || '—'}</strong></div>
-                      <div className="flex justify-between text-sm"><span className="text-slate-600">{tGen('set.users')}</span><strong>{(sub.maxUsers || sub.max_users) === -1 ? tGen('set.unlimited') : sub.maxUsers || sub.max_users || '—'}</strong></div>
+                      <div className="flex justify-between text-sm"><span className="text-slate-600">{tGen('set.clients')}</span><strong>{(sub.maxClients ?? sub.max_clients) < 0 ? tGen('set.unlimited') : (sub.maxClients ?? sub.max_clients ?? '—')}</strong></div>
+                      <div className="flex justify-between text-sm"><span className="text-slate-600">{tGen('set.active_loans')}</span><strong>{(sub.maxActiveLoans ?? sub.max_active_loans ?? -1) < 0 ? `${sub.activeLoanCount ?? 0} · ${tGen('set.unlimited')}` : `${sub.activeLoanCount ?? 0} / ${sub.maxActiveLoans ?? sub.max_active_loans}`}</strong></div>
+                      <div className="flex justify-between text-sm"><span className="text-slate-600">{tGen('set.users')}</span><strong>{(sub.maxUsers ?? sub.max_users) < 0 ? tGen('set.unlimited') : (sub.maxUsers ?? sub.max_users ?? '—')}</strong></div>
+                      <div className="flex justify-between text-sm"><span className="text-slate-600">{tGen('set.collectors')}</span><strong>{(sub.maxCollectors ?? sub.max_collectors) < 0 ? tGen('set.unlimited') : (sub.maxCollectors ?? sub.max_collectors ?? '—')}</strong></div>
+                      <p className="text-xs text-slate-400 pt-1">{tGen('set.collectors_note')}</p>
                     </div>
                   </Card>
 

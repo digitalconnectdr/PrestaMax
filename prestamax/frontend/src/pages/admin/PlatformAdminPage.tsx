@@ -68,6 +68,7 @@ interface Plan {
   maxCollectors: number
   maxClients: number
   maxUsers: number
+  maxActiveLoans?: number
   isActive: number
   trialDays: number
   features: string   // JSON array string
@@ -149,6 +150,13 @@ interface PlatformUser {
   createdAt: string
 }
 
+// Límite numérico de un plan: -1 = ilimitado; 0 es un valor válido (no ilimitado).
+// Vacío / no numérico => -1.
+const parseLimit = (s: string): number => {
+  const n = parseInt(s, 10)
+  return Number.isNaN(n) ? -1 : n
+}
+
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -197,9 +205,9 @@ const PlatformAdminPage: React.FC = () => {
   const [isBackingUp, setIsBackingUp] = useState(false)
   const [isDeletingBackup, setIsDeletingBackup] = useState<string | null>(null)
   const [showPlanForm, setShowPlanForm] = useState(false)
-  const [planForm, setPlanForm] = useState({ name: '', slug: '', priceMonthly: '', maxCollectors: '-1', maxClients: '-1', maxUsers: '-1', trialDays: '10', description: '', features: [] as PermKey[], isTrialDefault: false })
+  const [planForm, setPlanForm] = useState({ name: '', slug: '', priceMonthly: '', maxCollectors: '-1', maxClients: '-1', maxUsers: '-1', maxActiveLoans: '-1', trialDays: '10', description: '', features: [] as PermKey[], isTrialDefault: false })
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
-  const [planEditForm, setPlanEditForm] = useState({ name: '', slug: '', priceMonthly: '', maxCollectors: '-1', maxClients: '-1', maxUsers: '-1', trialDays: '10', description: '', features: [] as PermKey[], isActive: true, isTrialDefault: false })
+  const [planEditForm, setPlanEditForm] = useState({ name: '', slug: '', priceMonthly: '', maxCollectors: '-1', maxClients: '-1', maxUsers: '-1', maxActiveLoans: '-1', trialDays: '10', description: '', features: [] as PermKey[], isActive: true, isTrialDefault: false })
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [isBootstrapping, setIsBootstrapping] = useState(false)
   const [expandedTenant, setExpandedTenant] = useState<string | null>(null)
@@ -466,9 +474,11 @@ const PlatformAdminPage: React.FC = () => {
       await api.post('/admin/plans', {
         name: planForm.name, slug: planForm.slug,
         price_monthly: parseFloat(planForm.priceMonthly) || 0,
-        max_collectors: parseInt(planForm.maxCollectors) || -1,
-        max_clients: parseInt(planForm.maxClients) || -1,
-        max_users: parseInt(planForm.maxUsers) || -1,
+        // -1 = ilimitado; 0 es válido y NO se convierte en ilimitado.
+        max_collectors: parseLimit(planForm.maxCollectors),
+        max_clients: parseLimit(planForm.maxClients),
+        max_users: parseLimit(planForm.maxUsers),
+        max_active_loans: parseLimit(planForm.maxActiveLoans),
         trial_days: parseInt(planForm.trialDays) || 10,
         description: planForm.description,
         features: JSON.stringify(planForm.features),
@@ -476,7 +486,7 @@ const PlatformAdminPage: React.FC = () => {
       })
       toast.success('Plan creado')
       setShowPlanForm(false)
-      setPlanForm({ name: '', slug: '', priceMonthly: '', maxCollectors: '-1', maxClients: '-1', maxUsers: '-1', trialDays: '10', description: '', features: [], isTrialDefault: false })
+      setPlanForm({ name: '', slug: '', priceMonthly: '', maxCollectors: '-1', maxClients: '-1', maxUsers: '-1', maxActiveLoans: '-1', trialDays: '10', description: '', features: [], isTrialDefault: false })
       loadData('plans')
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Error al crear plan')
@@ -502,6 +512,7 @@ const PlatformAdminPage: React.FC = () => {
       maxCollectors: String(plan.maxCollectors),
       maxClients: String(plan.maxClients),
       maxUsers: String(plan.maxUsers),
+      maxActiveLoans: String(plan.maxActiveLoans ?? -1),
       trialDays: String(plan.trialDays ?? 10),
       description: plan.description || '',
       features,
@@ -517,9 +528,10 @@ const PlatformAdminPage: React.FC = () => {
       await api.put(`/admin/plans/${editingPlan.id}`, {
         name: planEditForm.name,
         price_monthly: parseFloat(planEditForm.priceMonthly) || 0,
-        max_collectors: parseInt(planEditForm.maxCollectors),
-        max_clients: parseInt(planEditForm.maxClients),
-        max_users: parseInt(planEditForm.maxUsers),
+        max_collectors: parseLimit(planEditForm.maxCollectors),
+        max_clients: parseLimit(planEditForm.maxClients),
+        max_users: parseLimit(planEditForm.maxUsers),
+        max_active_loans: parseLimit(planEditForm.maxActiveLoans),
         trial_days: parseInt(planEditForm.trialDays) || 10,
         description: planEditForm.description,
         features: JSON.stringify(planEditForm.features),
@@ -1346,10 +1358,11 @@ const PlatformAdminPage: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Nombre *</label><input value={planForm.name} onChange={e=>setPlanForm(p=>({...p,name:e.target.value}))} placeholder="Plan Básico" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Slug (URL) *</label><input value={planForm.slug} onChange={e=>setPlanForm(p=>({...p,slug:e.target.value}))} placeholder="basico" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
-                    <div><label className="block text-xs font-medium text-slate-700 mb-1">Precio/mes (USD)</label><input type="number" value={planForm.priceMonthly} onChange={e=>setPlanForm(p=>({...p,priceMonthly:e.target.value}))} placeholder="29.99" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
+                    <div><label className="block text-xs font-medium text-slate-700 mb-1">Precio/mes (USD)</label><input type="number" value={planForm.priceMonthly} onChange={e=>setPlanForm(p=>({...p,priceMonthly:e.target.value}))} placeholder="9.99" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Máx. Cobradores (-1=∞)</label><input type="number" value={planForm.maxCollectors} onChange={e=>setPlanForm(p=>({...p,maxCollectors:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Máx. Clientes (-1=∞)</label><input type="number" value={planForm.maxClients} onChange={e=>setPlanForm(p=>({...p,maxClients:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Máx. Usuarios (-1=∞)</label><input type="number" value={planForm.maxUsers} onChange={e=>setPlanForm(p=>({...p,maxUsers:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
+                    <div><label className="block text-xs font-medium text-slate-700 mb-1">Máx. Préstamos activos (-1=∞)</label><input type="number" value={planForm.maxActiveLoans} onChange={e=>setPlanForm(p=>({...p,maxActiveLoans:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Días de Prueba</label><input type="number" value={planForm.trialDays} onChange={e=>setPlanForm(p=>({...p,trialDays:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div className="md:col-span-2"><label className="block text-xs font-medium text-slate-700 mb-1">Descripción</label><input value={planForm.description} onChange={e=>setPlanForm(p=>({...p,description:e.target.value}))} placeholder="Ideal para..." className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div className="md:col-span-2 flex items-center gap-2 pt-1">
@@ -1405,6 +1418,7 @@ const PlatformAdminPage: React.FC = () => {
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Máx. Cobradores</label><input type="number" value={planEditForm.maxCollectors} onChange={e=>setPlanEditForm(p=>({...p,maxCollectors:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Máx. Clientes</label><input type="number" value={planEditForm.maxClients} onChange={e=>setPlanEditForm(p=>({...p,maxClients:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div><label className="block text-xs font-medium text-slate-700 mb-1">Máx. Usuarios</label><input type="number" value={planEditForm.maxUsers} onChange={e=>setPlanEditForm(p=>({...p,maxUsers:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
+                    <div><label className="block text-xs font-medium text-slate-700 mb-1">Máx. Préstamos activos (-1=∞)</label><input type="number" value={planEditForm.maxActiveLoans} onChange={e=>setPlanEditForm(p=>({...p,maxActiveLoans:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div className="md:col-span-2"><label className="block text-xs font-medium text-slate-700 mb-1">Descripción</label><input value={planEditForm.description} onChange={e=>setPlanEditForm(p=>({...p,description:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"/></div>
                     <div className="flex items-end">
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -1489,6 +1503,7 @@ const PlatformAdminPage: React.FC = () => {
                           <p>👥 Cobradores: <strong>{plan.maxCollectors === -1 ? '∞ Ilimitado' : plan.maxCollectors}</strong></p>
                           <p>👤 Clientes: <strong>{plan.maxClients === -1 ? '∞ Ilimitado' : plan.maxClients}</strong></p>
                           <p>🔑 Usuarios: <strong>{plan.maxUsers === -1 ? '∞ Ilimitado' : plan.maxUsers}</strong></p>
+                          <p>💳 Préstamos activos: <strong>{(plan.maxActiveLoans ?? -1) === -1 ? '∞ Ilimitado' : plan.maxActiveLoans}</strong></p>
                           <p>⏱️ Prueba gratis: <strong>{plan.trialDays ?? 10} días</strong></p>
                         </div>
                         {features.length > 0 && (

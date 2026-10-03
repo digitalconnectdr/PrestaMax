@@ -42,10 +42,10 @@ interface Stats {
 
 const PLAN_LABELS: Record<string, string> = {
   trial:        'Trial (14d gratis)',
-  starter:      'Starter ($29.99)',
-  basico:       'Básico ($59.99)',
-  profesional:  'Profesional ($119.99)',
-  enterprise:   'Enterprise ($249.99)',
+  starter:      'Starter ($9.99)',
+  basico:       'Básico ($24.99)',
+  profesional:  'Profesional ($49.99)',
+  enterprise:   'Enterprise ($99.99)',
   unsure:       'Quiere asesoramiento',
 }
 

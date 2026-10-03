@@ -5,8 +5,22 @@ import { getClientIp, geolocateIp } from '../services/geoService';
 import { notifyTenantAdmins } from '../lib/notify';
 import { ALLOWED_EVENT_NAMES, normalizeSignupErrorType } from '../lib/analyticsHelpers';
 import { readTrackingContext, insertAnalyticsEvent } from '../lib/analyticsServer';
+import { tenantPlanIncludes, tenantSubscriptionIsValid } from '../lib/planLimits';
 
 const router = Router();
+
+// Las solicitudes públicas (enlace /apply/:token) son una feature de plan
+// (requests.*, Profesional+). Esta ruta no tiene sesión, así que no pasa por
+// requirePermission: se valida aquí que el tenant tenga suscripción/trial
+// vigente Y el entitlement. Un enlace viejo de un plan sin el entitlement no
+// puede saltarse el plan.
+function publicRequestsAvailable(db: any, tenant: any): boolean {
+  return tenantSubscriptionIsValid(tenant) && tenantPlanIncludes(db, tenant.id, 'requests.view');
+}
+const PUBLIC_REQUESTS_UNAVAILABLE = {
+  error: 'Este enlace de solicitudes no está disponible actualmente.',
+  code: 'PUBLIC_REQUESTS_UNAVAILABLE',
+};
 
 // Trackea una visita al landing page (para el mapa de "visitantes" en Admin Panel).
 // Publico, sin auth. Geolocaliza por IP; no guarda ningun dato personal aparte de eso.
@@ -66,12 +80,14 @@ router.get('/apply/:token', (req: Request, res: Response) => {
     const db = getDb();
     const tenant = db.prepare(`
       SELECT t.id, t.name, t.email, t.phone, t.address, t.public_token,
+        t.subscription_status, t.subscription_end,
         p.name as plan_name, p.features
       FROM tenants t
       LEFT JOIN plans p ON p.id = t.plan_id
       WHERE t.public_token = ? AND t.is_active = 1
     `).get(req.params.token) as any;
     if (!tenant) return res.status(404).json({ error: 'Enlace no válido o empresa inactiva' });
+    if (!publicRequestsAvailable(db, tenant)) return res.status(403).json(PUBLIC_REQUESTS_UNAVAILABLE);
     res.json({
       id: tenant.id,
       name: tenant.name,
@@ -85,8 +101,9 @@ router.get('/apply/:token', (req: Request, res: Response) => {
 router.post('/apply/:token', (req: Request, res: Response) => {
   try {
     const db = getDb();
-    const tenant = db.prepare(`SELECT id, is_active FROM tenants WHERE public_token=? AND is_active=1`).get(req.params.token) as any;
+    const tenant = db.prepare(`SELECT id, is_active, subscription_status, subscription_end FROM tenants WHERE public_token=? AND is_active=1`).get(req.params.token) as any;
     if (!tenant) return res.status(404).json({ error: 'Enlace no válido o empresa inactiva' });
+    if (!publicRequestsAvailable(db, tenant)) return res.status(403).json(PUBLIC_REQUESTS_UNAVAILABLE);
 
     const {
       clientName, clientEmail, clientPhone, clientAddress, idNumber,
@@ -160,7 +177,7 @@ router.get('/plans', (_req: Request, res: Response) => {
     const db = getDb();
     const plans = db.prepare(
       `SELECT id, name, slug, price_monthly, trial_days, max_clients,
-              max_users, max_collectors, description
+              max_users, max_collectors, max_active_loans, description
        FROM plans
        WHERE is_active = 1 AND is_trial_default = 0
        ORDER BY price_monthly ASC`

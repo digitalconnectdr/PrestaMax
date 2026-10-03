@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { getDb, uuid, now, r2 } from '../db/database';
 import { logAudit } from '../lib/audit';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { checkMembershipLimits, membershipDelta } from '../lib/planLimits';
 
 const router = Router();
 
@@ -575,6 +576,19 @@ router.post('/:id/grant-portal-access', authenticate, requireTenant, requirePerm
 
     // Asegurar membership en este tenant con rol 'investor'
     const existing = db.prepare('SELECT * FROM tenant_memberships WHERE user_id=? AND tenant_id=?').get(userId, req.tenant.id) as any;
+    // Límite de usuarios del plan: el inversionista consume un asiento de usuario
+    // cuando la membresía es nueva o se reactiva. Si ya está activa no suma nada.
+    {
+      const existingRoles: string[] = existing ? (() => { try { return JSON.parse(existing.roles || '[]') } catch { return [] } })() : [];
+      const delta = membershipDelta(
+        existing ? { isActive: existing.is_active === 1, roles: existingRoles } : null,
+        { isActive: true, roles: existing ? [...new Set([...existingRoles, 'investor'])] : ['investor'] },
+      );
+      if (delta.addsUser || delta.addsCollector) {
+        const violation = checkMembershipLimits(db, req.tenant.id, delta);
+        if (violation) return res.status(403).json({ error: violation.error, code: violation.code });
+      }
+    }
     if (!existing) {
       db.prepare(`INSERT INTO tenant_memberships (id, user_id, tenant_id, branch_id, roles, is_active, created_at, updated_at)
         VALUES (?, ?, ?, NULL, ?, 1, ?, ?)`)

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { PERM_DEFS, ROLE_DEFAULTS, computePermissions } from '../lib/permissions';
+import { checkMembershipLimits, membershipDelta, rolesHaveCollector } from '../lib/planLimits';
 const router = Router();
 
 // ─── Role hierarchy helpers ─────────────────────────────────────────────────
@@ -251,6 +252,21 @@ router.put('/users/:membershipId', authenticate, requireTenant, requirePermissio
         return res.status(403).json({ error: 'No tienes permisos para modificar a un usuario con rol igual o superior al tuyo' });
       }
     }
+    // Límites de plan: reactivar una membresía o convertirla en cobrador SUMA
+    // un usuario/cobrador activo. Solo se bloquea lo que aumenta el conteo;
+    // nunca se desactiva nada existente (política de exceso por downgrade).
+    {
+      const afterRoles: string[] = Array.isArray(roles) ? roles : currentRoles;
+      const afterActive = is_active !== undefined ? !!is_active : membership.is_active === 1;
+      const delta = membershipDelta(
+        { isActive: membership.is_active === 1, roles: currentRoles },
+        { isActive: afterActive, roles: afterRoles },
+      );
+      if (delta.addsUser || delta.addsCollector) {
+        const violation = checkMembershipLimits(db, req.tenant.id, delta);
+        if (violation) return res.status(403).json({ error: violation.error, code: violation.code });
+      }
+    }
     db.prepare(`UPDATE tenant_memberships SET
       roles=COALESCE(?,roles),
       is_active=COALESCE(?,is_active),
@@ -346,39 +362,15 @@ router.post('/users/invite', authenticate, requireTenant, requirePermission('set
       return res.status(403).json({ error: 'No puedes crear un usuario con un rol igual o superior al tuyo.' });
     }
 
-    // ── Plan limit check ──────────────────────────────────────────────────────
-    const plan = db.prepare(`
-      SELECT p.max_users, p.max_collectors
-      FROM tenants t LEFT JOIN plans p ON p.id=t.plan_id
-      WHERE t.id=?`).get(req.tenant.id) as any;
-
-    const currentMembers = (db.prepare(
-      'SELECT COUNT(*) as c FROM tenant_memberships WHERE tenant_id=? AND is_active=1'
-    ).get(req.tenant.id) as any).c;
-
-    if (plan?.max_users !== -1 && plan?.max_users != null && currentMembers >= plan.max_users) {
-      return res.status(403).json({
-        error: `Tu plan permite un máximo de ${plan.max_users} usuario(s). Actualiza tu plan para agregar más.`,
-        code: 'PLAN_LIMIT_USERS'
-      });
-    }
-
-    // FIX P2 (Jun 2026): 'cobrador' y 'collector' son alias del MISMO rol
-    // (ambos en ROLE_DEFAULTS con permisos de cobrador). Antes el conteo solo
-    // miraba 'cobrador', así que invitar con rol 'collector' evadía max_collectors.
-    const isCollector = roles.includes('cobrador') || roles.includes('collector');
-    if (isCollector) {
-      const currentCollectors = (db.prepare(`
-        SELECT COUNT(*) as c FROM tenant_memberships
-        WHERE tenant_id=? AND is_active=1 AND (roles LIKE '%cobrador%' OR roles LIKE '%collector%')
-      `).get(req.tenant.id) as any).c;
-
-      if (plan?.max_collectors !== -1 && plan?.max_collectors != null && currentCollectors >= plan.max_collectors) {
-        return res.status(403).json({
-          error: `Tu plan permite un máximo de ${plan.max_collectors} cobrador(es). Actualiza tu plan para agregar más.`,
-          code: 'PLAN_LIMIT_COLLECTORS'
-        });
-      }
+    // ── Plan limit check (helper único en lib/planLimits.ts) ──────────────────
+    // 'cobrador' y 'collector' son alias del MISMO rol; un cobrador consume un
+    // asiento de usuario Y un cupo de cobrador.
+    const violation = checkMembershipLimits(db, req.tenant.id, {
+      addsUser: true,
+      addsCollector: rolesHaveCollector(roles),
+    });
+    if (violation) {
+      return res.status(403).json({ error: violation.error, code: violation.code });
     }
     // ─────────────────────────────────────────────────────────────────────────
 

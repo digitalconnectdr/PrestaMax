@@ -19,10 +19,12 @@ Prestamistas individuales, financieras, cooperativas de ahorro y crédito, casas
 
 ## Planes y precios
 
-- **Starter** — US$29.99/mes
-- **Básico** — US$59.99/mes
-- **Profesional** — US$119.99/mes
-- **Enterprise** — US$249.99/mes
+- **Starter** — US$9.99/mes: clientes ilimitados, hasta 100 préstamos activos, hasta 3 usuarios (hasta 1 cobrador)
+- **Básico** — US$24.99/mes: clientes ilimitados, hasta 500 préstamos activos, hasta 8 usuarios (hasta 3 cobradores)
+- **Profesional** — US$49.99/mes: clientes ilimitados, hasta 2,000 préstamos activos, hasta 20 usuarios (hasta 10 cobradores)
+- **Enterprise** — US$99.99/mes: clientes, préstamos activos, usuarios y cobradores ilimitados
+- Los cobradores están incluidos dentro del total de usuarios de cada plan.
+- Pago anual: 3 meses gratis (se pagan 9 mensualidades).
 - Prueba gratis de hasta 14 días, sin tarjeta de crédito. Cancelación en cualquier momento.
 
 ## Características clave

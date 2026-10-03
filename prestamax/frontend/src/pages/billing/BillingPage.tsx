@@ -16,6 +16,7 @@ interface Plan {
   maxCollectors: number;
   maxClients: number;
   maxUsers: number;
+  maxActiveLoans?: number;
   features: string[];
   description: string;
   stripePriceId: string;
@@ -44,7 +45,13 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   suspended: { label: 'Suspendida', color: 'bg-yellow-100 text-yellow-800' },
 };
 
-const formatLimit = (n: number) => (n < 0 ? 'Sin limite' : n.toString());
+// Textos de límites del plan. -1 (o ausente) = ilimitado. Los cobradores están
+// incluidos dentro del total de usuarios (no se suman a él).
+const fmtNum = (n: number) => n.toLocaleString('en-US');
+const clientsLabel = (n: number) => (n < 0 ? 'Clientes ilimitados' : `Hasta ${fmtNum(n)} clientes`);
+const activeLoansLabel = (n: number | undefined) => (n === undefined || n === null || n < 0 ? 'Préstamos activos ilimitados' : `Hasta ${fmtNum(n)} préstamos activos`);
+const usersLabel = (n: number) => (n < 0 ? 'Usuarios ilimitados' : `Hasta ${fmtNum(n)} usuarios`);
+const collectorsLabel = (n: number) => (n < 0 ? 'Cobradores ilimitados' : `Hasta ${fmtNum(n)} ${n === 1 ? 'cobrador' : 'cobradores'}`);
 
 const BillingPage: React.FC = () => {
   const [params] = useSearchParams();
@@ -161,6 +168,13 @@ const BillingPage: React.FC = () => {
           'Para cambiar de plan usa "Administrar suscripcion" — evita cobros duplicados.',
           { icon: 'ℹ️', duration: 6000 }
         );
+      } else if (code === 'ACTIVE_SUBSCRIPTION') {
+        // Ya hay una suscripción vigente: el cambio de plan es manual (sin cobro doble).
+        const target = plans.find(p => p.slug === planSlug);
+        toast('Ya tienes una suscripción activa. Envía una solicitud de cambio de plan y la procesamos sin cobros duplicados.', { icon: 'ℹ️', duration: 7000 });
+        if (target) { setRequestModal({ planSlug: target.slug, planName: target.name }); setRequestNote(''); }
+      } else if (code === 'PLAN_NOT_CONFIGURED' || code === 'PLAN_NOT_AVAILABLE') {
+        toast.error('Este plan no está disponible para pago en línea en este momento. Solicítalo y te contactamos.', { duration: 6000 });
       } else if (code === 'ANNUAL_NOT_CONFIGURED') {
         toast.error('El pago anual de este plan aún no está disponible. Selecciona mensual, o solicítalo y te contactamos.', { duration: 6000 });
       } else {
@@ -346,15 +360,19 @@ const BillingPage: React.FC = () => {
                   <ul className="space-y-2 mb-6 flex-1">
                     <li className="flex items-start gap-2 text-sm text-gray-700">
                       <Check className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                      <span>{formatLimit(plan.maxCollectors)} cobradores</span>
+                      <span>{clientsLabel(plan.maxClients)}</span>
                     </li>
                     <li className="flex items-start gap-2 text-sm text-gray-700">
                       <Check className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                      <span>{formatLimit(plan.maxClients)} clientes</span>
+                      <span>{activeLoansLabel(plan.maxActiveLoans)}</span>
                     </li>
                     <li className="flex items-start gap-2 text-sm text-gray-700">
                       <Check className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                      <span>{formatLimit(plan.maxUsers)} usuarios</span>
+                      <span>{usersLabel(plan.maxUsers)}</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm text-gray-700">
+                      <Check className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                      <span>{collectorsLabel(plan.maxCollectors)}</span>
                     </li>
                     {Array.isArray(plan.features) && plan.features.slice(0, 5).map((f: string) => (
                       <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
@@ -385,6 +403,7 @@ const BillingPage: React.FC = () => {
             })}
           </div>
         )}
+        <p className="mt-3 text-xs text-gray-500">Los cobradores están incluidos dentro del total de usuarios.</p>
       </div>
 
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">

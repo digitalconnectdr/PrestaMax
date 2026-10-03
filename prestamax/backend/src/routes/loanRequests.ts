@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now, nextDocNumber } from '../db/database';
 import { authenticate, requireTenant, AuthRequest, requirePermission } from '../middleware/auth';
+import { checkActiveLoanLimit } from '../lib/planLimits';
 
 const router = Router();
 
@@ -101,6 +102,12 @@ router.put('/:id/convert', authenticate, requireTenant, requirePermission('reque
 
     const finalAmount = request.loan_amount || req.body.amount;
     if (!finalAmount) return res.status(400).json({ error: 'Monto del préstamo requerido' });
+
+    // Límite comercial de préstamos activos: convertir una solicitud crea el
+    // préstamo directamente en 'active'. Se valida ANTES de crear el cliente
+    // para no dejar un cliente huérfano si el límite bloquea la conversión.
+    const activeLimit = checkActiveLoanLimit(db, req.tenant.id, 1);
+    if (activeLimit) return res.status(403).json({ error: activeLimit.error, code: activeLimit.code, limit: activeLimit.limit, current: activeLimit.current });
 
     const finalRate = rate || request.rate || product.rate || 0;
     const finalTerm = term || request.loan_term || 12;

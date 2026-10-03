@@ -17,10 +17,10 @@ interface Props {
 const PLANS: { value: string; labelKey?: string; name?: string; price?: string; priceKey?: string }[] = [
   { value: 'unsure',      labelKey: 'piq.plan_unsure' },
   { value: 'trial',       labelKey: 'piq.plan_trial',   priceKey: 'piq.plan_trial_price' },
-  { value: 'starter',     name: 'Starter',      price: '$29.99' },
-  { value: 'basico',      labelKey: 'piq.plan_basico', price: '$59.99' },
-  { value: 'profesional', name: 'Profesional',  price: '$119.99' },
-  { value: 'enterprise',  name: 'Enterprise',   price: '$249.99' },
+  { value: 'starter',     name: 'Starter',      price: '$9.99' },
+  { value: 'basico',      labelKey: 'piq.plan_basico', price: '$24.99' },
+  { value: 'profesional', name: 'Profesional',  price: '$49.99' },
+  { value: 'enterprise',  name: 'Enterprise',   price: '$99.99' },
 ]
 
 const COUNTRIES = [

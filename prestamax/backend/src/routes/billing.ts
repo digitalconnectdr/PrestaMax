@@ -16,7 +16,11 @@ import {
   isWhopConfigured,
   getWhopPlanIdForSlug,
   isWhopAnnualConfigured,
+  isWhopPlanConfigured,
+  whopPlanEnvName,
+  WHOP_PLAN_SLUGS,
   getSlugForWhopPlanId,
+  computeSubscriptionEnd,
   createWhopCheckout,
   verifyWhopWebhook,
 } from '../services/whopService';
@@ -94,7 +98,7 @@ router.get('/plans', (req: Request, res: Response) => {
   try {
     const db = getDb();
     const plans = db.prepare(`
-      SELECT id, name, slug, price_monthly, max_collectors, max_clients, max_users, trial_days, features, description
+      SELECT id, name, slug, price_monthly, max_collectors, max_clients, max_users, max_active_loans, trial_days, features, description
       FROM plans WHERE is_active=1 AND is_trial_default=0 ORDER BY price_monthly ASC
     `).all() as any[];
     // Devolver TODOS los planes activos. Si no hay Stripe configurado, el
@@ -532,11 +536,24 @@ router.get('/my-pending-request', authenticate, requireTenant, (req: AuthRequest
 // recién al intentar el checkout.
 router.get('/whop-config', (_req: Request, res: Response) => {
   const annualBySlug: Record<string, boolean> = {};
-  for (const slug of ['starter', 'basico', 'profesional', 'enterprise']) {
+  const monthlyBySlug: Record<string, boolean> = {};
+  for (const slug of WHOP_PLAN_SLUGS) {
     annualBySlug[slug] = isWhopAnnualConfigured(slug);
+    monthlyBySlug[slug] = isWhopPlanConfigured(slug, 'monthly');
   }
-  res.json({ enabled: isWhopConfigured(), annualAvailable: annualBySlug });
+  res.json({ enabled: isWhopConfigured(), annualAvailable: annualBySlug, monthlyAvailable: monthlyBySlug });
 });
+
+// ¿El tenant ya tiene una suscripción de pago vigente (Whop o Stripe)? Mientras
+// no exista un flujo real de upgrade/downgrade automático, un segundo checkout
+// crearía una membresía duplicada (doble cobro). 'active' y 'past_due' (en
+// periodo de gracia) con membresía/suscripción registrada y periodo vigente.
+function hasActivePaidSubscription(t: any): boolean {
+  if (!t) return false;
+  if (!['active', 'past_due'].includes(t.subscription_status)) return false;
+  if (!t.whop_membership_id && !t.stripe_subscription_id) return false;
+  return !t.subscription_end || new Date(t.subscription_end) > new Date();
+}
 
 // POST /api/billing/whop-checkout — crea una checkout configuration en Whop con
 // metadata {tenant_id, plan_slug, billing_period, visitor_id, session_id} y
@@ -547,13 +564,38 @@ router.post('/whop-checkout', authenticate, requireTenant, async (req: AuthReque
     return res.status(503).json({ error: 'Pagos no están disponibles en este momento' });
   }
   try {
-    const { plan_slug, billing_period, visitor_id, session_id } = req.body || {};
+    const { billing_period, visitor_id, session_id } = req.body || {};
+    const plan_slug = typeof req.body?.plan_slug === 'string' ? req.body.plan_slug.trim().toLowerCase() : '';
     if (!plan_slug) return res.status(400).json({ error: 'plan_slug es requerido' });
     const billingPeriod = normalizeBillingPeriod(billing_period);
 
-    // No simular: si se pide anual y el plan_id anual no existe en Whop
-    // (todavía no se creó/configuró en el dashboard de Whop), se rechaza
-    // explícitamente en vez de cobrar el precio mensual por error.
+    // A. No confiar en el frontend: el plan debe ser un slug comercial permitido,
+    //    existir en la BD y estar ACTIVO (y no ser el plan trial).
+    const db = getDb();
+    const planRow = WHOP_PLAN_SLUGS.includes(plan_slug)
+      ? db.prepare('SELECT id, slug FROM plans WHERE slug=? AND is_active=1 AND is_trial_default=0').get(plan_slug) as any
+      : null;
+    if (!planRow) {
+      return res.status(400).json({
+        error: `El plan "${plan_slug}" no existe o no está disponible para suscripción.`,
+        code: 'PLAN_NOT_AVAILABLE',
+      });
+    }
+
+    // B. Doble suscripción: no crear una segunda compra silenciosa. El cambio de
+    //    plan sigue siendo manual (POST /billing/request-plan-change).
+    const tenantRow = db.prepare(`SELECT subscription_status, subscription_end, whop_membership_id, stripe_subscription_id
+      FROM tenants WHERE id=?`).get(req.tenant.id) as any;
+    if (hasActivePaidSubscription(tenantRow)) {
+      return res.status(409).json({
+        error: 'Ya tienes una suscripción activa. Para cambiar de plan, solicítalo desde Suscripción y lo procesamos sin cobros duplicados.',
+        code: 'ACTIVE_SUBSCRIPTION',
+      });
+    }
+
+    // No simular ni usar fallbacks: si el plan_id de Whop de ese plan/periodo no
+    // está configurado (env var ausente), se falla de forma explícita en vez de
+    // cobrar otro plan o un precio viejo.
     if (billingPeriod === 'annual' && !isWhopAnnualConfigured(plan_slug)) {
       return res.status(400).json({
         error: `El plan "${plan_slug}" aún no tiene un precio anual configurado en Whop. Selecciona mensual, o contacta a soporte.`,
@@ -561,7 +603,13 @@ router.post('/whop-checkout', authenticate, requireTenant, async (req: AuthReque
       });
     }
     const whopPlanId = getWhopPlanIdForSlug(plan_slug, billingPeriod);
-    if (!whopPlanId) return res.status(400).json({ error: `Plan "${plan_slug}" no está disponible para suscripción` });
+    if (!whopPlanId) {
+      console.error(`[Whop] Falta la env var ${whopPlanEnvName(plan_slug, billingPeriod)} — checkout bloqueado para ${plan_slug}/${billingPeriod}`);
+      return res.status(503).json({
+        error: `El plan "${plan_slug}" no está disponible para suscripción en este momento.`,
+        code: 'PLAN_NOT_CONFIGURED',
+      });
+    }
 
     const tenantId = req.tenant.id;
     const redirectUrl = `${FRONTEND()}/dashboard?whop=success`;
@@ -612,8 +660,12 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
   // distingue mensual/anual porque son plan_ids distintos en Whop).
   const whopPlanId = data.plan_id || data.plan?.id || data.membership?.plan_id || null;
   const resolvedByPlanId = whopPlanId ? getSlugForWhopPlanId(whopPlanId) : null;
-  const planSlug: string | null = meta.plan_slug || resolvedByPlanId?.slug || null;
-  const billingPeriod: 'monthly' | 'annual' = normalizeBillingPeriod(meta.billing_period || resolvedByPlanId?.billingPeriod);
+  // El plan_id REAL de Whop (lo que se cobró) manda sobre la metadata; la
+  // metadata es el respaldo (p. ej. memberships viejas cuyo plan_id ya no está
+  // en las env vars). Solo se aceptan slugs comerciales.
+  const rawSlug: string | null = resolvedByPlanId?.slug || (meta.plan_slug ? String(meta.plan_slug).toLowerCase() : null);
+  const planSlug: string | null = rawSlug && WHOP_PLAN_SLUGS.includes(rawSlug) ? rawSlug : null;
+  const billingPeriod: 'monthly' | 'annual' = normalizeBillingPeriod(resolvedByPlanId?.billingPeriod || meta.billing_period);
 
   console.log(`[Whop] Evento: ${rawType} | tenant=${tenantId || '?'} | plan=${planSlug || '?'} | periodo=${billingPeriod}`);
 
@@ -622,6 +674,12 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
     const isDeactivation = rawType.includes('membership_deactivated') || rawType.includes('went_invalid');
     const isPaymentFailed = rawType === 'payment_failed';
 
+    // ID de la MEMBRESÍA del evento. En eventos de pago, data.id es el id del
+    // PAGO (no de la membresía): la membresía viene anidada.
+    const eventMembershipId: string | null = rawType.startsWith('payment')
+      ? (data.membership?.id || data.membership_id || null)
+      : (data.id || data.membership?.id || data.membership_id || null);
+
     if (isActivation && tenantId) {
       // Resolver el plan interno de CredyTek
       let newPlanId: string | null = null;
@@ -629,23 +687,23 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
         const planRow = db.prepare('SELECT id FROM plans WHERE slug=?').get(planSlug) as any;
         newPlanId = planRow?.id || null;
       }
-      // Fecha de fin: renovación del membership si viene; si no, +31 días.
+      // Fecha de fin: SIEMPRE la fecha real de Whop si viene. Respaldo según
+      // periodo: mensual +31 días, anual +365 (nunca +31 para una compra anual).
       const renewalTs = data.renewal_period_end || data.expires_at || data.membership?.renewal_period_end || null;
-      const subEnd = renewalTs
-        ? new Date(typeof renewalTs === 'number' ? renewalTs * 1000 : renewalTs).toISOString()
-        : new Date(Date.now() + 31 * 86400000).toISOString();
-      const membershipId = data.id || data.membership?.id || null;
+      const subEnd = computeSubscriptionEnd(renewalTs, billingPeriod);
+      const membershipId = eventMembershipId;
 
+      // COALESCE: un evento sin id de membresía no borra el id ya registrado.
       if (newPlanId) {
         db.prepare(`UPDATE tenants
-          SET whop_membership_id=?, whop_plan_id=?, subscription_status='active',
+          SET whop_membership_id=COALESCE(?, whop_membership_id), whop_plan_id=COALESCE(?, whop_plan_id), subscription_status='active',
               plan_id=?, billing_cycle=?, subscription_start=datetime('now'), subscription_end=?, updated_at=datetime('now')
           WHERE id=?`)
           .run(membershipId, whopPlanId, newPlanId, billingPeriod, subEnd, tenantId);
         applyPlanChange(db, tenantId, newPlanId);
       } else {
         db.prepare(`UPDATE tenants
-          SET whop_membership_id=?, subscription_status='active',
+          SET whop_membership_id=COALESCE(?, whop_membership_id), subscription_status='active',
               billing_cycle=?, subscription_start=datetime('now'), subscription_end=?, updated_at=datetime('now')
           WHERE id=?`)
           .run(membershipId, billingPeriod, subEnd, tenantId);
@@ -662,11 +720,14 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
       console.log(`[Whop] Tenant ${tenantId} suscripción ACTIVADA (plan: ${newPlanId || 'sin cambio'}, periodo: ${billingPeriod}, hasta ${subEnd})`);
     } else if (isDeactivation) {
       // Localizar tenant por metadata o por whop_membership_id
-      const membershipId = data.id || data.membership?.id || null;
+      const membershipId = eventMembershipId;
       const t = tenantId
-        ? { id: tenantId }
-        : (membershipId ? db.prepare('SELECT id FROM tenants WHERE whop_membership_id=?').get(membershipId) as any : null);
-      if (t?.id) {
+        ? db.prepare('SELECT id, whop_membership_id FROM tenants WHERE id=?').get(tenantId) as any
+        : (membershipId ? db.prepare('SELECT id, whop_membership_id FROM tenants WHERE whop_membership_id=?').get(membershipId) as any : null);
+      // Una desactivación SOLO cancela al tenant si la membresía del evento es
+      // la membresía ACTUAL registrada del tenant. Una membresía vieja (p. ej.
+      // reemplazada por una compra nueva) nunca puede cancelar la vigente.
+      if (t?.id && membershipId && t.whop_membership_id === membershipId) {
         const trialPlan = db.prepare('SELECT id FROM plans WHERE is_trial_default=1 LIMIT 1').get() as any;
         if (trialPlan?.id) {
           db.prepare(`UPDATE tenants SET subscription_status='cancelled', plan_id=?, updated_at=datetime('now') WHERE id=?`)
@@ -676,15 +737,22 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
           db.prepare(`UPDATE tenants SET subscription_status='cancelled', updated_at=datetime('now') WHERE id=?`).run(t.id);
         }
         console.log(`[Whop] Tenant ${t.id} suscripción CANCELADA -> plan trial`);
+      } else if (t?.id) {
+        console.log(`[Whop] Desactivación IGNORADA para tenant ${t.id}: la membresía del evento (${membershipId || 'sin id'}) no es la actual (${t.whop_membership_id || 'ninguna'})`);
       }
     } else if (isPaymentFailed) {
-      const membershipId = data.membership?.id || data.membership_id || null;
+      const membershipId = eventMembershipId;
       const t = tenantId
-        ? { id: tenantId }
-        : (membershipId ? db.prepare('SELECT id FROM tenants WHERE whop_membership_id=?').get(membershipId) as any : null);
-      if (t?.id) {
+        ? db.prepare('SELECT id, whop_membership_id FROM tenants WHERE id=?').get(tenantId) as any
+        : (membershipId ? db.prepare('SELECT id, whop_membership_id FROM tenants WHERE whop_membership_id=?').get(membershipId) as any : null);
+      // Un pago fallido de una membresía distinta de la actual no pone en
+      // gracia a la suscripción vigente.
+      const isStale = !!(t && membershipId && t.whop_membership_id && t.whop_membership_id !== membershipId);
+      if (t?.id && !isStale) {
         applyPastDueGrace(db, t.id);
         console.log(`[Whop] Tenant ${t.id} pago fallido -> periodo de gracia ${PAST_DUE_GRACE_DAYS}d`);
+      } else if (t?.id) {
+        console.log(`[Whop] Pago fallido IGNORADO para tenant ${t.id}: membresía distinta de la actual`);
       }
     } else {
       console.log(`[Whop] Evento no accionado: ${rawType}`);

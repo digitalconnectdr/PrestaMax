@@ -30,10 +30,10 @@ interface InquiryPayload {
 
 const PLAN_LABELS: Record<string, string> = {
   trial:        'Trial (14 dias gratis)',
-  starter:      'Starter ($29.99/mes)',
-  basico:       'Basico ($59.99/mes)',
-  profesional:  'Profesional ($119.99/mes)',
-  enterprise:   'Enterprise ($249.99/mes)',
+  starter:      'Starter ($9.99/mes)',
+  basico:       'Basico ($24.99/mes)',
+  profesional:  'Profesional ($49.99/mes)',
+  enterprise:   'Enterprise ($99.99/mes)',
   unsure:       'No esta seguro - quiere asesoramiento',
 };
 

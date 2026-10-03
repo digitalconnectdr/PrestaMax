@@ -8,7 +8,7 @@
 // Contenido verificado contra funcionalidades reales de CredyTek (Fases 1-3):
 // clientes, préstamos (amortización francesa/cuota fija/tasas configurables),
 // pagos y recibos, cobranza (promesas de pago, mora), reportes, importación
-// CSV (planes Profesional/Enterprise), multimoneda. No se citan cifras,
+// CSV (planes Básico, Profesional y Enterprise), multimoneda. No se citan cifras,
 // clientes ni resultados no verificables.
 
 export interface ArticleSubsection {

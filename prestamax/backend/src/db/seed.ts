@@ -10,16 +10,10 @@ async function seed() {
   const db = getDb();
   console.log('🌱 Seeding PestaMax...');
 
-  // Plans
-  const plans = [
-    { id: uuid(), name: 'Básico', slug: 'basico', price_monthly: 29, max_collectors: 1, max_clients: 50 },
-    { id: uuid(), name: 'Profesional', slug: 'profesional', price_monthly: 79, max_collectors: 5, max_clients: 500 },
-    { id: uuid(), name: 'Empresarial', slug: 'empresarial', price_monthly: 199, max_collectors: 20, max_clients: 5000 },
-    { id: uuid(), name: 'Premium', slug: 'premium', price_monthly: 499, max_collectors: -1, max_clients: -1 },
-  ];
-  const insertPlan = db.prepare('INSERT OR IGNORE INTO plans (id,name,slug,price_monthly,max_collectors,max_clients) VALUES (?,?,?,?,?,?)');
-  for (const p of plans) insertPlan.run(p.id,p.name,p.slug,p.price_monthly,p.max_collectors,p.max_clients);
-  console.log('✅ Plans');
+  // Plans: los planes comerciales vigentes (Starter/Básico/Profesional/Enterprise
+  // + Plan Trial) ya los siembra initializeDatabase() desde db/planCatalog.ts,
+  // así que este seed de demo NO inserta planes con precios propios/legacy.
+  console.log('✅ Plans (catálogo vigente de planCatalog.ts)');
 
   // Admin user
   const adminHash = await bcrypt.hash('Admin123!', 12);

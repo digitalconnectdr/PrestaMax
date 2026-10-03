@@ -6,7 +6,7 @@
 //
 // Todo lo afirmado abajo está verificado contra funcionalidad real (Fases 1-3
 // de este proyecto): módulos de clientes/préstamos/pagos/recibos/cobranza/
-// reportes, importación CSV (planes Profesional/Enterprise), multimoneda (12
+// reportes, importación CSV (planes Básico, Profesional y Enterprise), multimoneda (12
 // monedas incl. DOP), 4 planes (Starter a Enterprise), trial de 14 días sin
 // tarjeta. No se citan clientes, cifras de mercado, rankings ni ahorros.
 
@@ -139,7 +139,7 @@ export const SEO_PAGES: SeoPage[] = [
       { title: 'Un solo lugar, un solo dato', description: 'Clientes, préstamos y pagos centralizados — no hay copias distintas por persona.' },
       { title: 'Cálculos automáticos', description: 'Cuotas, intereses y mora calculados por el sistema, no por fórmulas mantenidas a mano.' },
       { title: 'Recibos automáticos', description: 'Cada pago genera su recibo, sin armarlo aparte.' },
-      { title: 'Importación desde CSV', description: 'En los planes Profesional y Enterprise, puedes importar tu cartera actual desde un archivo CSV con la plantilla que CredyTek provee, en vez de capturar todo de nuevo a mano.' },
+      { title: 'Importación desde CSV', description: 'En los planes Básico, Profesional y Enterprise, puedes importar tu cartera actual desde un archivo CSV con la plantilla que CredyTek provee, en vez de capturar todo de nuevo a mano.' },
     ],
     ctaFinalTitle: 'No tienes que empezar de cero',
     ctaFinalText: 'Registra tu cartera actual directamente, o impórtala desde un CSV si tu plan lo incluye, y sigue gestionándola desde CredyTek.',

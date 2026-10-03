@@ -11,6 +11,7 @@ import { generateSchedule as libGenerateSchedule, getInstallmentCount, getNextDa
 import { computePermissions, PermKey } from '../lib/permissions';
 import { sendReport, ExportColumn } from '../lib/exportHelpers';
 import { checkAndMarkActivation } from '../lib/activation';
+import { checkActiveLoanLimit, ACTIVE_LOAN_STATUSES, PLAN_LIMIT_ACTIVE_LOANS } from '../lib/planLimits';
 
 const router = Router();
 
@@ -236,6 +237,14 @@ router.post('/consolidate', authenticate, requireTenant, requirePermission('loan
       return res.status(403).json({ error: `El cliente "${client.full_name}" está desactivado. Reactívalo antes de consolidar sus préstamos.` });
     }
 
+    // Límite comercial de préstamos activos: se crea 1 préstamo activo nuevo y los
+    // consolidados (todos active/in_mora, validado arriba) salen del conjunto
+    // activo. El efecto neto es <= -1, así que consolidar nunca aumenta el
+    // conteo; se evalúa el delta igualmente para que la regla sea única.
+    const oldActiveCount = oldLoans.filter(l => (ACTIVE_LOAN_STATUSES as readonly string[]).includes(l.status)).length;
+    const activeLimit = checkActiveLoanLimit(db, req.tenant.id, 1 - oldActiveCount);
+    if (activeLimit) return res.status(403).json({ error: activeLimit.error, code: activeLimit.code, limit: activeLimit.limit, current: activeLimit.current });
+
     const totalAmount = r2(oldLoans.reduce((s, l) => {
       const balance = l.total_balance != null
         ? parseFloat(l.total_balance)
@@ -425,6 +434,11 @@ router.post('/:id/disburse', authenticate, requireTenant, requirePermission('loa
     const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
     if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
     if (loan.status!=='approved') return res.status(400).json({ error: 'El préstamo debe estar aprobado' });
+
+    // Límite comercial de préstamos activos: el desembolso mueve el préstamo al
+    // conjunto activo. Solo se bloquea esta nueva activación; nada se borra.
+    const activeLimit = checkActiveLoanLimit(db, req.tenant.id, 1);
+    if (activeLimit) return res.status(403).json({ error: activeLimit.error, code: activeLimit.code, limit: activeLimit.limit, current: activeLimit.current });
 
     const disbAmount = parseFloat(req.body.disbursed_amount) || loan.approved_amount || loan.requested_amount;
 
@@ -953,7 +967,8 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
   const rows: any[] = req.body.loans || [];
   if (!rows.length) return res.status(400).json({ error: 'No se recibieron registros' });
 
-  const results: { row: number; status: 'created' | 'error'; loanNumber?: string; clientName?: string; error?: string }[] = [];
+  const results: { row: number; status: 'created' | 'error'; loanNumber?: string; clientName?: string; error?: string; code?: string }[] = [];
+  let activeLimitHit: ReturnType<typeof checkActiveLoanLimit> = null;
 
   // Find or create a generic migration product for this tenant
   const ensureProduct = (type: string, rate: number, rateType: string, freq: string, amorType: string): string => {
@@ -975,6 +990,16 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
     const clientName = (row.client_name || '').trim();
     if (!clientName) { results.push({ row: i+1, status:'error', error:'Nombre de cliente requerido' }); continue; }
     if (!row.loan_amount || isNaN(parseFloat(row.loan_amount))) { results.push({ row: i+1, status:'error', clientName, error:'Monto de préstamo inválido' }); continue; }
+
+    // Límite comercial de préstamos activos: cada fila crea un préstamo 'active'.
+    // Se re-cuenta por fila (las anteriores ya están confirmadas), así que el
+    // lote se corta exactamente en el límite; las filas que no caben se
+    // reportan con PLAN_LIMIT_ACTIVE_LOANS y NO se importan. Nada se borra.
+    activeLimitHit = checkActiveLoanLimit(db, req.tenant.id, 1);
+    if (activeLimitHit) {
+      results.push({ row: i+1, status:'error', clientName, code: activeLimitHit.code, error: activeLimitHit.error });
+      continue;
+    }
 
     db.exec('BEGIN');
     try {
@@ -1091,7 +1116,17 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
 
   const created = results.filter(r => r.status === 'created').length;
   const errors = results.filter(r => r.status === 'error').length;
-  res.json({ summary: { total: rows.length, created, errors }, results });
+  const limitReached = results.some(r => r.code === PLAN_LIMIT_ACTIVE_LOANS);
+  // Si el límite bloqueó el lote completo (no se importó nada), error estable 403.
+  if (limitReached && created === 0) {
+    return res.status(403).json({
+      error: results.find(r => r.code === PLAN_LIMIT_ACTIVE_LOANS)!.error,
+      code: PLAN_LIMIT_ACTIVE_LOANS,
+      summary: { total: rows.length, created, errors, limit_reached: true },
+      results,
+    });
+  }
+  res.json({ summary: { total: rows.length, created, errors, limit_reached: limitReached }, results });
 });
 
 router.get('/:id/schedule', authenticate, requireTenant, requirePermission('loans.view'), (req: AuthRequest, res: Response) => {
