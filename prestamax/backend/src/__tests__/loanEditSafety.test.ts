@@ -74,8 +74,8 @@ async function closedLoan(status: string): Promise<string> {
 describe('clasificación de estados y campos (lib)', () => {
   it('estados: pre-desembolso / post-desembolso / cerrados', () => {
     for (const s of ['draft', 'under_review', 'pending_manager_approval', 'approved']) expect(loanEditPhase(s)).toBe('pre');
-    for (const s of ['disbursed', 'active', 'in_mora', 'restructured', 'algo_desconocido']) expect(loanEditPhase(s)).toBe('post');
-    for (const s of ['rejected', 'cancelled', 'voided', 'written_off', 'liquidated', 'paid']) expect(loanEditPhase(s)).toBe('terminal');
+    for (const s of ['disbursed', 'active', 'in_mora', 'algo_desconocido']) expect(loanEditPhase(s)).toBe('post');
+    for (const s of ['rejected', 'cancelled', 'voided', 'written_off', 'liquidated', 'paid', 'restructured']) expect(loanEditPhase(s)).toBe('terminal');
   });
   it('solo los campos que definen el calendario lo regeneran', () => {
     for (const f of ['requested_amount', 'approved_amount', 'rate', 'rate_type', 'term', 'term_unit', 'payment_frequency', 'amortization_type', 'first_payment_date'])
@@ -95,7 +95,8 @@ describe('clasificación de estados y campos (lib)', () => {
     expect(checkLoanEditAllowed('terminal', ['notes'], true)).toBeNull();
     expect(checkLoanEditAllowed('terminal', ['notes', 'purpose'], true)?.code).toBe('LOAN_CLOSED_LOCKED');
     expect(checkLoanEditAllowed('terminal', ['notes', 'mora_base'], true)?.code).toBe('LOAN_CLOSED_LOCKED');
-    expect(checkLoanEditAllowed('post', ['collector_id', 'purpose', 'notes'], true)).toBeNull();
+    expect(checkLoanEditAllowed('post', ['collector_id', 'notes'], true)).toBeNull();
+    expect(checkLoanEditAllowed('post', ['purpose'], false)?.code).toBe('LOAN_TERMS_LOCKED');          // propósito declarado: dato de originación
     for (const f of ['mora_base', 'mora_start_date', 'prorroga_fee', 'application_date', 'approval_date', 'disbursement_date', 'first_payment_date'])
       expect(checkLoanEditAllowed('post', [f], false)?.code, f).toBe('LOAN_TERMS_LOCKED');
     for (const ph of ['pre', 'post', 'terminal'] as const) expect(checkLoanEditAllowed(ph, ['maturity_date'], false)?.code, ph).toBe('LOAN_MATURITY_DERIVED');
@@ -185,7 +186,7 @@ describe('post-desembolso y préstamos con pagos', () => {
     app.db.prepare("UPDATE installments SET deferred_due_date='2031-01-01' WHERE loan_id=? AND installment_number=3").run(id);
     const before = snap(id);
     const collector = app.addMember(tenant.tenantId, ['cobrador']).userId;
-    for (const body of [{ purpose: 'p0' }, { collector_id: collector }, { notes: 'x' }, fullPayload(id, { purpose: 'p' })]) {
+    for (const body of [{ notes: 'p0' }, { collector_id: collector }, { notes: 'x' }, fullPayload(id, { notes: 'p' })]) {
       const r = await call('PUT', `/api/loans/${id}`, body);
       expect(r.status).toBe(200);
       expect(snap(id)).toEqual(before);
@@ -217,12 +218,13 @@ describe('post-desembolso y préstamos con pagos', () => {
     const l1 = loanRow(id);
     for (const k of ['rate', 'term', 'requested_amount', 'notes', 'updated_at', 'maturity_date']) expect(l1[k], k).toBe(l0[k]);
   });
-  it('in_mora / disbursed / restructured también bloquean términos y mora, y permiten notas/propósito', async () => {
-    for (const st of ['in_mora', 'disbursed', 'restructured']) {
+  it('in_mora / disbursed también bloquean términos, mora y propósito, y permiten notas', async () => {
+    for (const st of ['in_mora', 'disbursed']) {
       const id = await activeLoanWithPayment();
       setStatus(id, st);
       expect((await call('PUT', `/api/loans/${id}`, { term: 12 })).status, st).toBe(409);
-      expect((await call('PUT', `/api/loans/${id}`, { notes: 'ok', purpose: 'p' })).status, st).toBe(200);
+      expect((await call('PUT', `/api/loans/${id}`, { notes: 'ok' })).status, st).toBe(200);
+      expect((await call('PUT', `/api/loans/${id}`, { purpose: 'p' })).status, st).toBe(409);
       expect((await call('PUT', `/api/loans/${id}`, { mora_grace_days: 5 })).status, st).toBe(409);
     }
   });
@@ -388,8 +390,8 @@ describe('lifecycle: el contrato queda fijado después del desembolso', () => {
     expect(ids(id)).toBe(idsBefore);
   });
 
-  it('active / in_mora / restructured / disbursed -> modificar CUALQUIER campo de mora = 409 LOAN_TERMS_LOCKED, sin cambios', async () => {
-    for (const st of ['active', 'in_mora', 'restructured', 'disbursed']) {
+  it('active / in_mora / disbursed -> modificar CUALQUIER campo de mora = 409 LOAN_TERMS_LOCKED, sin cambios (restructured es cerrado: ver su bloque)', async () => {
+    for (const st of ['active', 'in_mora', 'disbursed']) {
       const id = await activeLoanWithPayment();
       setStatus(id, st);
       const before = snap(id); const l0 = loanRow(id);
@@ -424,12 +426,12 @@ describe('lifecycle: el contrato queda fijado después del desembolso', () => {
     expect(snap(id)).toEqual(before);
     for (const k of ['application_date', 'approval_date', 'disbursement_date', 'first_payment_date']) expect(loanRow(id)[k], k).toBe(l0[k]);
   });
-  it('active -> notes / collector / purpose = 200 sin tocar cuotas (ids, estados, deferred_due_date)', async () => {
+  it('active -> notes / collector = 200 sin tocar cuotas (ids, estados, deferred_due_date); purpose = 409', async () => {
     const id = await activeLoanWithPayment();
     app.db.prepare("UPDATE installments SET deferred_due_date='2031-02-02' WHERE loan_id=? AND installment_number=4").run(id);
     const before = snap(id);
     const collector = app.addMember(tenant.tenantId, ['cobrador']).userId;
-    for (const body of [{ notes: 'nota activa' }, { collector_id: collector }, { purpose: 'capital de trabajo' }]) {
+    for (const body of [{ notes: 'nota activa' }, { collector_id: collector }]) {
       const r = await call('PUT', `/api/loans/${id}`, body);
       expect(r.status, JSON.stringify(body).slice(0, 60)).toBe(200);
       expect(snap(id)).toEqual(before);
@@ -438,7 +440,9 @@ describe('lifecycle: el contrato queda fijado después del desembolso', () => {
     expect(rFull.status).toBe(200);
     expect(snap(id)).toEqual(before);
     const l = loanRow(id);
-    expect([l.notes, l.collector_id, l.purpose]).toEqual(['otra nota', collector, 'capital de trabajo']);
+    expect([l.notes, l.collector_id, l.purpose]).toEqual(['otra nota', collector, null]);
+    expect((await call('PUT', `/api/loans/${id}`, { purpose: 'capital de trabajo' })).status).toBe(409);
+    expect(snap(id)).toEqual(before);
     expect(actions(id)).not.toContain('loan_restructured');
     expect(actions(id)).not.toContain('loan_schedule_regenerated');
   });
@@ -514,6 +518,262 @@ describe('maturity_date: derivada del calendario', () => {
   });
 });
 
+describe("'restructured' = préstamo viejo sustituido por una consolidación: cerrado, solo notas", () => {
+  async function consolidate() {
+    const clientId = app.createClient(tenant.tenantId);
+    const [a, b] = app.fillLoans(tenant.tenantId, 2, 'active', clientId);
+    for (const id of [a, b]) app.db.prepare('UPDATE loans SET principal_balance=1000, total_balance=1000 WHERE id=?').run(id);
+    const r = await call('POST', '/api/loans/consolidate', { loan_ids: [a, b], product_id: productId, rate: 5, term: 6 });
+    expect(r.status).toBe(201);
+    return { olds: [a, b], newId: r.body.id as string };
+  }
+  it('la única acción que lo escribe es consolidar: los préstamos viejos quedan restructured y apuntan al nuevo (que nace active)', async () => {
+    const { olds, newId } = await consolidate();
+    for (const id of olds) {
+      const l = loanRow(id);
+      expect(l.status).toBe('restructured');
+      expect(l.consolidated_into_loan_id).toBe(newId);
+    }
+    expect(loanRow(newId).status).toBe('active');
+    // el código fuente solo escribe 'restructured' en la consolidación
+    const src = fs.readFileSync(path.resolve(__dirname, '..', 'routes', 'loans.ts'), 'utf8');
+    expect((src.match(/SET status='restructured'/g) || []).length).toBe(1);
+  });
+  it('restructured: solo notas; cobrador, propósito, mora, prórroga, términos y fechas = 409 LOAN_CLOSED_LOCKED', async () => {
+    const { olds } = await consolidate();
+    const id = olds[0];
+    expect((await call('PUT', `/api/loans/${id}`, { notes: 'sustituido por consolidación' })).status).toBe(200);
+    expect(loanRow(id).notes).toBe('sustituido por consolidación');
+    const bodies = [{ collector_id: 'x' }, { purpose: 'p' }, { mora_grace_days: 9 }, { mora_rate_daily: 0.01 }, { prorroga_fee: 5 }, { rate: 30 }, { term: 3 }, { first_payment_date: '2035-01-01' }, { application_date: '2020-01-01' }];
+    for (const body of bodies) {
+      const r = await call('PUT', `/api/loans/${id}`, body);
+      expect(r.status, JSON.stringify(body)).toBe(409);
+      expect(r.body.code).toBe('LOAN_CLOSED_LOCKED');
+    }
+  });
+  it('el préstamo NUEVO de la consolidación se edita como un activo (notas/cobrador sí; mora/términos no)', async () => {
+    const { newId } = await consolidate();
+    expect((await call('PUT', `/api/loans/${newId}`, { notes: 'ok' })).status).toBe(200);
+    expect((await call('PUT', `/api/loans/${newId}`, { mora_grace_days: 9 })).status).toBe(409);
+    expect((await call('PUT', `/api/loans/${newId}`, { rate: 30 })).status).toBe(409);
+  });
+  it('front y back clasifican igual: restructured es cerrado', () => {
+    expect(loanEditPhase('restructured')).toBe('terminal');
+    expect(fePhase('restructured')).toBe('terminal');
+    expect(loanEditLocks('restructured', false).reason).toBe('closed');
+    expect([...loanEditLocks('restructured', false).locked].includes('collectorId')).toBe(true);
+    expect([...loanEditLocks('restructured', false).locked].includes('notes')).toBe(false);
+  });
+});
+
+describe('purpose: propósito declarado del crédito (dato de originación)', () => {
+  it('nace de la solicitud / alta del préstamo y se copia al convertir una solicitud', async () => {
+    const reqId = 'req-purpose-' + Math.random().toString(36).slice(2, 8);
+    app.db.prepare(`INSERT INTO loan_requests (id,tenant_id,client_name,client_phone,id_number,loan_amount,loan_term,loan_purpose,status) VALUES (?,?,?,?,?,?,?,?, 'approved')`)
+      .run(reqId, tenant.tenantId, 'Solicitante P', '809-555-0000', 'REQ-P-' + reqId.slice(-4), 3000, 6, 'Negocio / Comercio');
+    const r = await call('PUT', `/api/loan-requests/${reqId}/convert`, { product_id: productId, rate: 5, term: 6 });
+    expect(r.status).toBeLessThan(300);
+    const loan = app.db.prepare("SELECT purpose FROM loans WHERE tenant_id=? AND purpose='Negocio / Comercio' ORDER BY created_at DESC LIMIT 1").get(tenant.tenantId) as any;
+    expect(loan?.purpose).toBe('Negocio / Comercio');
+  });
+  it('no lo consume ningún contrato, reporte, servicio ni scoring (solo se muestra en la UI): su bloqueo no afecta cálculos', () => {
+    const root = path.resolve(__dirname, '..');
+    for (const rel of ['routes/contracts.ts', 'routes/reports.ts', 'lib/calculations.ts', 'services/loanStatusSync.ts', 'services/whatsappService.ts']) {
+      expect(fs.readFileSync(path.join(root, rel), 'utf8'), rel).not.toMatch(/\bpurpose\b/);
+    }
+  });
+  it('pre-desembolso: editable. Post-desembolso y cerrados: 409 (se conserva el propósito original); el cobrador y las notas siguen editables', async () => {
+    const pre = await newLoan();
+    expect((await call('PUT', `/api/loans/${pre}`, { purpose: 'capital de trabajo' })).status).toBe(200);
+    const act = await activeLoanWithPayment();
+    await call('PUT', `/api/loans/${pre}`, {});
+    const r = await call('PUT', `/api/loans/${act}`, { purpose: 'otro propósito' });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('LOAN_TERMS_LOCKED');
+    expect(r.body.locked_fields).toEqual(['purpose']);
+    expect(loanRow(act).purpose).toBeNull();
+    const collector = app.addMember(tenant.tenantId, ['cobrador']).userId;
+    expect((await call('PUT', `/api/loans/${act}`, { notes: 'n', collector_id: collector })).status).toBe(200);
+    const closed = await closedLoan('liquidated');
+    expect((await call('PUT', `/api/loans/${closed}`, { purpose: 'x' })).status).toBe(409);
+  });
+});
+
+describe('mora_start_date: metadata de la cartera migrada (flujo específico, no el PUT ordinario)', () => {
+  const ago = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);   // la fecha no puede estar en el futuro
+  /** Préstamo desembolsado SIN pagos (ventana de migración). */
+  async function disbursedNoPayments(): Promise<string> {
+    const id = await newLoan();
+    setStatus(id, 'approved');
+    expect((await call('POST', `/api/loans/${id}/disburse`, {})).status).toBe(200);
+    return id;
+  }
+  const startOf = (id: string) => loanRow(id).mora_start_date;
+
+  it('consumidores: solo el motor de mora (calcMoraDetails: mora cuenta desde max(vencimiento, mora_start_date)); se escribe solo por PUT/seed, no por CSV ni Migrar Historial', () => {
+    const root = path.resolve(__dirname, '..');
+    const writers: string[] = [];
+    const readers: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) { if (e.name !== '__tests__') walk(p); continue; }
+        if (!p.endsWith('.ts')) continue;
+        const s = fs.readFileSync(p, 'utf8');
+        if (!s.includes('mora_start_date')) continue;
+        (/mora_start_date\s*=|SET mora_start_date|mora_start_date:\s*'date'/.test(s) ? writers : readers).push(path.relative(root, p).replace(/\\/g, '/'));
+      }
+    };
+    walk(root);
+    expect(readers).toContain('lib/calculations.ts');
+    // el único endpoint de producción que lo escribe (además del PUT ordinario bloqueado y el seed demo) es el de migración
+    expect(fs.readFileSync(path.join(root, 'routes/loans.ts'), 'utf8')).toContain("router.post('/:id/migration-mora-start'");
+    expect(writers.sort()).toEqual(expect.arrayContaining(['routes/loans.ts']));
+    const mig = fs.readFileSync(path.join(root, 'routes/loans.ts'), 'utf8');
+    const bulk = mig.slice(mig.indexOf("router.post('/bulk-import'"), mig.indexOf("router.get('/:id/schedule'"));
+    expect(bulk).not.toContain('mora_start_date');                       // la importación CSV no lo usa
+    const migrateHistory = mig.slice(mig.indexOf("router.post('/:id/migrate-history'"), mig.indexOf("router.post('/:id/migration-mora-start'"));
+    expect(migrateHistory).not.toMatch(/SET mora_start_date|mora_start_date\s*=/);   // Migrar Historial tampoco
+  });
+  it('PUT ordinario: pre-desembolso sí; post-desembolso 409 (condición de mora fijada)', async () => {
+    const pre = await newLoan();
+    expect((await call('PUT', `/api/loans/${pre}`, { mora_start_date: '2030-01-05' })).status).toBe(200);
+    const act = await disbursedNoPayments();
+    const r = await call('PUT', `/api/loans/${act}`, { mora_start_date: '2030-01-05' });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('LOAN_TERMS_LOCKED');
+    expect(startOf(act)).toBeNull();
+  });
+  it('flujo de migración: préstamo desembolsado sin pagos regulares -> se fija, queda auditado (old/new/changes) y no toca cuotas ni pagos', async () => {
+    const id = await disbursedNoPayments();
+    const before = snap(id);
+    const payCount = (app.db.prepare('SELECT COUNT(*) c FROM payments WHERE loan_id=?').get(id) as any).c;
+    const r = await call('POST', `/api/loans/${id}/migration-mora-start`, { mora_start_date: ago(10) });
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ mora_start_date: ago(10), changed: true });
+    expect(startOf(id)).toBe(ago(10));
+    expect(snap(id)).toEqual(before);
+    expect((app.db.prepare('SELECT COUNT(*) c FROM payments WHERE loan_id=?').get(id) as any).c).toBe(payCount);
+    const a = audits(id).find(x => x.action === 'loan_mora_start_set');
+    expect(JSON.parse(a.old_values)).toEqual({ mora_start_date: null });
+    expect(JSON.parse(a.new_values)).toEqual({ mora_start_date: ago(10) });
+    expect(JSON.parse(a.changes)).toEqual(['mora_start_date']);
+    // limpiar con null
+    expect((await call('POST', `/api/loans/${id}/migration-mora-start`, { mora_start_date: null })).status).toBe(200);
+    expect(startOf(id)).toBeNull();
+    // mismo valor = sin cambios ni audit nuevo
+    const n = audits(id).length;
+    const same = await call('POST', `/api/loans/${id}/migration-mora-start`, { mora_start_date: null });
+    expect(same.body.changed).toBe(false);
+    expect(audits(id)).toHaveLength(n);
+  });
+  it('un pago de MIGRACIÓN (Migrar Historial) no cierra la ventana; un pago regular sí (409 LOAN_MORA_START_LOCKED)', async () => {
+    const id = await disbursedNoPayments();
+    const first = snap(id)[0];
+    const mig = await call('POST', `/api/loans/${id}/migrate-history`, { total_paid: first.p + first.i, installments_paid: 1, payment_date: new Date().toISOString().slice(0, 10) });
+    expect(mig.status).toBe(201);
+    expect((await call('POST', `/api/loans/${id}/migration-mora-start`, { mora_start_date: ago(5) })).status).toBe(200);
+    expect(startOf(id)).toBe(ago(5));
+
+    const withRegular = await activeLoanWithPayment();
+    const r = await call('POST', `/api/loans/${withRegular}/migration-mora-start`, { mora_start_date: ago(5) });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('LOAN_MORA_START_LOCKED');
+    expect(startOf(withRegular)).toBeNull();
+  });
+  it('estados no desembolsados vigentes -> 409; fecha inválida / muy futura -> 400; admin -> 403; otro tenant -> 404', async () => {
+    const pre = await newLoan();
+    expect((await call('POST', `/api/loans/${pre}/migration-mora-start`, { mora_start_date: ago(10) })).status).toBe(409);
+    const closed = await closedLoan('liquidated');
+    expect((await call('POST', `/api/loans/${closed}/migration-mora-start`, { mora_start_date: ago(10) })).status).toBe(409);
+    const { olds } = await (async () => {
+      const clientId = app.createClient(tenant.tenantId);
+      const [a, b] = app.fillLoans(tenant.tenantId, 2, 'active', clientId);
+      for (const x of [a, b]) app.db.prepare('UPDATE loans SET principal_balance=1000, total_balance=1000 WHERE id=?').run(x);
+      await call('POST', '/api/loans/consolidate', { loan_ids: [a, b], product_id: productId, rate: 5, term: 6 });
+      return { olds: [a, b] };
+    })();
+    expect((await call('POST', `/api/loans/${olds[0]}/migration-mora-start`, { mora_start_date: ago(10) })).status).toBe(409);   // restructured
+    const act = await disbursedNoPayments();
+    expect((await call('POST', `/api/loans/${act}/migration-mora-start`, { mora_start_date: '10/01/2030' })).status).toBe(400);
+    expect((await call('POST', `/api/loans/${act}/migration-mora-start`, { mora_start_date: '2030-02-31' })).status).toBe(400);
+    expect((await call('POST', `/api/loans/${act}/migration-mora-start`, { mora_start_date: '2099-01-01' })).status).toBe(400);
+    const admin = app.addMember(tenant.tenantId, ['admin']);
+    expect((await app.req('POST', `/api/loans/${act}/migration-mora-start`, { token: admin.token, tenantId: tenant.tenantId, body: { mora_start_date: ago(10) } })).status).toBe(403);
+    const other = app.createTenant({ planSlug: 'enterprise' });
+    expect((await app.req('POST', `/api/loans/${act}/migration-mora-start`, { token: other.token, tenantId: other.tenantId, body: { mora_start_date: ago(10) } })).status).toBe(404);
+    expect(startOf(act)).toBeNull();
+  });
+  it('efecto: solo cambia el cálculo de mora (desde max(vencimiento, mora_start_date)); no altera cargos ya registrados', async () => {
+    const { calcMoraDetails } = await import('../lib/calculations');
+    const id = await disbursedNoPayments();
+    // cuotas vencidas hace 60/30 días (cartera migrada en atraso en el sistema anterior)
+    const insts = [
+      { id: 'a', status: 'overdue', due_date: ago(60), principal_amount: 800, interest_amount: 200, paid_total: 0, paid_principal: 0 },
+      { id: 'b', status: 'overdue', due_date: ago(30), principal_amount: 800, interest_amount: 200, paid_total: 0, paid_principal: 0 },
+    ];
+    const asOf = new Date();
+    const sinFecha = calcMoraDetails(loanRow(id), insts, asOf);
+    const r = await call('POST', `/api/loans/${id}/migration-mora-start`, { mora_start_date: ago(10) });
+    expect(r.status).toBe(200);
+    const conFecha = calcMoraDetails(loanRow(id), insts, asOf);
+    const total = (d: any) => Object.values(d).reduce((s: number, x: any) => s + x.amount, 0);
+    expect(total(conFecha)).toBeLessThan(total(sinFecha));          // la mora solo cuenta desde la fecha fijada
+    expect(snap(id).every(x => x.s === 'pending')).toBe(true);      // las cuotas guardadas no se tocan
+  });
+});
+
+describe('Migrar Historial / importación CSV: capacidad legítima de migración con el bloqueo del PUT', () => {
+  it('flujo manual completo: fechas históricas se fijan ANTES del desembolso (PUT + disburse con fechas pasadas) y después ya no se editan', async () => {
+    const id = await newLoan();
+    expect((await call('PUT', `/api/loans/${id}`, { application_date: '2025-01-10', approval_date: '2025-01-12' })).status).toBe(200);
+    setStatus(id, 'approved');
+    const d = await call('POST', `/api/loans/${id}/disburse`, { disbursement_date: '2025-02-01', first_payment_date: '2025-03-01' });
+    expect(d.status).toBe(200);
+    const l = loanRow(id);
+    expect(String(l.disbursement_date).slice(0, 10)).toBe('2025-02-01');
+    expect(String(l.first_payment_date).slice(0, 10)).toBe('2025-03-01');
+    expect(String(l.application_date).slice(0, 10)).toBe('2025-01-10');
+    expect(String(l.approval_date).slice(0, 10)).toBe('2025-01-12');
+    expect(String(snap(id)[0].d).slice(0, 10)).toBe('2025-03-01');
+    expect(String(l.maturity_date).slice(0, 10)).toBe(String(snap(id)[snap(id).length - 1].d).slice(0, 10));
+    const first = snap(id).slice(0, 2);
+    const mig = await call('POST', `/api/loans/${id}/migrate-history`, { total_paid: first.reduce((s, x) => s + x.p + x.i, 0), installments_paid: 2, payment_date: '2025-04-15' });
+    expect(mig.status).toBe(201);
+    expect(snap(id).slice(0, 2).every(x => x.s === 'paid')).toBe(true);
+    // ya desembolsado y migrado: el PUT ordinario no reabre las fechas
+    for (const body of [{ application_date: '2020-01-01' }, { approval_date: '2020-01-01' }, { disbursement_date: '2020-01-01' }, { first_payment_date: '2020-01-01' }]) {
+      expect((await call('PUT', `/api/loans/${id}`, body)).status, JSON.stringify(body)).toBe(409);
+    }
+  });
+  it('importación CSV: start_date fija aprobación/desembolso, el primer pago se deriva y maturity_date sale del calendario', async () => {
+    const r = await call('POST', '/api/loans/bulk-import', { loans: [{
+      client_name: 'Migrado Uno', client_phone: '809-555-7777', client_id_number: 'MIG-1-' + Math.random().toString(36).slice(2, 7),
+      loan_amount: '12000', interest_rate: '3', term_months: '12', payment_frequency: 'monthly', start_date: '2025-01-15', amount_paid: '3000',
+    }] });
+    expect(r.body.summary.created).toBe(1);
+    const l = app.db.prepare("SELECT * FROM loans WHERE tenant_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1").get(tenant.tenantId) as any;
+    expect(String(l.approval_date).slice(0, 10)).toBe('2025-01-15');
+    expect(String(l.disbursement_date).slice(0, 10)).toBe('2025-01-15');
+    expect(String(l.application_date).slice(0, 10)).toBe(new Date().toISOString().slice(0, 10));   // la importación no fija application_date: queda la fecha de importación
+    const s = snap(l.id);
+    expect(String(l.first_payment_date).slice(0, 10)).toBe(String(s[0].d).slice(0, 10));
+    expect(String(l.maturity_date).slice(0, 10)).toBe(String(s[s.length - 1].d).slice(0, 10));
+    expect(l.mora_start_date).toBeNull();                                  // la importación no lo establece
+  });
+  it('cableado (fuente): el modal fija "Cobrar mora desde" por el endpoint de migración y la página le indica cuándo aplica', () => {
+    const FRONT = path.resolve(__dirname, '..', '..', '..', 'frontend', 'src');
+    const modal = fs.readFileSync(path.join(FRONT, 'pages', 'loans', 'EditLoanModal.tsx'), 'utf8');
+    const detail = fs.readFileSync(path.join(FRONT, 'pages', 'loans', 'LoanDetailPage.tsx'), 'utf8');
+    expect(modal).toContain('/migration-mora-start');
+    expect(modal).toContain('moraStartViaMigration');
+    expect(detail).toContain('canSetMoraStart=');
+    expect(detail).toContain("p.type === 'migration'");
+    // el PUT ordinario nunca envía moraStartDate tras el desembolso: sigue en el set de bloqueados
+    expect([...loanEditLocks('active', false).locked]).toContain('moraStartDate');
+  });
+});
+
 describe('frontend: el modal envía solo campos modificados', () => {
   const initial: LoanEditForm = {
     requestedAmount: '6000', approvedAmount: '6000', rate: '12', rateType: 'monthly', term: '6', termUnit: 'months', paymentFrequency: 'monthly', amortizationType: 'fixed_installment',
@@ -555,7 +815,7 @@ describe('frontend: el modal envía solo campos modificados', () => {
     for (const f of ['moraRateDaily', 'moraGraceDays', 'moraBase', 'moraFixedEnabled', 'moraFixedAmount', 'moraStartDate', 'prorrogaFee', 'applicationDate', 'approvalDate', 'disbursementDate', 'firstPaymentDate', 'maturityDate'])
       expect(loanEditLocks('active', false).locked.has(f as any), f).toBe(true);
     expect(loanEditLocks('active', false).locked.has('collectorId')).toBe(false);
-    expect(loanEditLocks('active', false).locked.has('purpose')).toBe(false);
+    expect(loanEditLocks('active', false).locked.has('purpose')).toBe(true);          // propósito declarado: fijado tras el desembolso
     expect(loanEditLocks('active', false).locked.has('notes')).toBe(false);
     expect(loanEditLocks('written_off', false).reason).toBe('closed');
     expect(loanEditLocks('written_off', false).locked.has('notes')).toBe(false);

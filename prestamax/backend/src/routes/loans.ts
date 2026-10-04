@@ -731,6 +731,57 @@ router.post('/:id/migrate-history', authenticate, requireTenant, requirePermissi
   }
 });
 
+// ─── POST /loans/:id/migration-mora-start ────────────────────────────────────
+// "Cobrar mora desde": metadata de la CARTERA MIGRADA (préstamos que ya venían en curso y al día). La mora se calcula
+// desde max(vencimiento, mora_start_date); no altera cargos ya registrados (los pagos conservan su aplicación), solo el
+// cálculo vigente/futuro de la mora. Como puede reducir la mora cobrable, NO es editable por el PUT ordinario (la mora es
+// una condición contractual fijada tras el desembolso) y solo se admite aquí: propietario/plataforma, préstamo
+// desembolsado y SIN pagos regulares todavía (ventana de migración; los pagos 'migration' no cuentan). Con audit.
+router.post('/:id/migration-mora-start', authenticate, requireTenant, requirePermission('loans.edit'), (req: AuthRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const isPlatform = ['platform_owner','platform_admin'].includes(req.user?.platform_role || '');
+    const memberRoles: string[] = (() => { try { return JSON.parse(req.membership?.roles || '[]'); } catch(_) { return []; } })();
+    if (!isPlatform && !memberRoles.includes('tenant_owner')) {
+      return res.status(403).json({ error: 'Solo el dueño del tenant puede fijar la fecha de inicio de mora de una cartera migrada.' });
+    }
+    const loan = db.prepare('SELECT id, loan_number, status, mora_start_date FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
+    if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
+    if (!['active', 'in_mora', 'disbursed'].includes(loan.status)) {
+      return res.status(409).json({ error: `El préstamo está en estado '${loan.status}': la fecha de inicio de mora solo se fija en préstamos desembolsados vigentes.`, code: 'LOAN_MORA_START_LOCKED' });
+    }
+    const raw = req.body?.mora_start_date;
+    let next: string | null = null;
+    if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+      const s = String(raw).trim();
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00Z') : null;
+      if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) {
+        return res.status(400).json({ error: 'Fecha inválida: usa el formato AAAA-MM-DD.', code: 'LOAN_EDIT_INVALID' });
+      }
+      if (d.getTime() > Date.now() + 3 * 86400000) {
+        return res.status(400).json({ error: 'La fecha de inicio de mora no puede ser mayor a 3 días en el futuro.', code: 'LOAN_EDIT_INVALID' });
+      }
+      next = s;
+    }
+    const prev = loan.mora_start_date ? String(loan.mora_start_date).slice(0, 10) : null;
+    if (prev === next) return res.json({ mora_start_date: prev, changed: false });
+    const regular = (db.prepare("SELECT COUNT(*) c FROM payments WHERE loan_id=? AND COALESCE(is_voided,0)=0 AND COALESCE(type,'regular') <> 'migration'").get(req.params.id) as any).c;
+    if (regular > 0) {
+      return res.status(409).json({ error: 'Este préstamo ya tiene pagos registrados: la fecha de inicio de mora solo se fija durante la migración, antes de la operación normal.', code: 'LOAN_MORA_START_LOCKED' });
+    }
+    db.prepare('UPDATE loans SET mora_start_date=?, updated_at=? WHERE id=? AND tenant_id=?').run(next, now(), req.params.id, req.tenant.id);
+    db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,old_values,new_values,changes) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
+      uuid(), req.tenant.id, req.user.id, req.user.full_name, 'loan_mora_start_set', 'loan', req.params.id,
+      `Fijó la fecha de inicio de mora del préstamo ${loan.loan_number} (cartera migrada): ${prev ?? 'sin fecha'} → ${next ?? 'sin fecha'}`,
+      JSON.stringify({ mora_start_date: prev }), JSON.stringify({ mora_start_date: next }), JSON.stringify(['mora_start_date'])
+    );
+    res.json({ mora_start_date: next, changed: true });
+  } catch (e: any) {
+    console.error('migration-mora-start error:', e);
+    res.status(500).json({ error: 'Failed: ' + e.message });
+  }
+});
+
 // ─── POST /loans/:id/fix-migrated-paid-at ────────────────────────────────────
 // Repara cuotas marcadas como pagadas por una migracion anterior donde paid_at
 // quedo con la fecha de migracion (hoy) en vez de la fecha de vencimiento real.

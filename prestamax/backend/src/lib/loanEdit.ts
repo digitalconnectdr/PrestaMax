@@ -4,11 +4,13 @@
 //  - PRE-desembolso (draft, under_review, pending_manager_approval, approved): las condiciones del contrato se pueden
 //    configurar y corregir (monto, tasa, plazo, frecuencia, amortización, fechas, mora y cargo de prórroga). El
 //    calendario se regenera solo si cambia un campo que lo define.
-//  - POST-desembolso (disbursed, active, in_mora, restructured): las condiciones acordadas (incluida la mora, el cargo
-//    de prórroga y las fechas históricas) quedan FIJADAS. Solo se editan campos operativos que no tocan el contrato ni
-//    el calendario: cobrador, propósito y notas. Cambiar condiciones requerirá un flujo formal de reestructuración o
-//    modificación contractual (no existe todavía).
-//  - CERRADOS (rejected, cancelled, voided, written_off, liquidated, paid): solo notas.
+//  - POST-desembolso (disbursed, active, in_mora): las condiciones acordadas (incluida la mora, el cargo de prórroga,
+//    las fechas históricas y el propósito declarado) quedan FIJADAS. Solo se editan campos operativos que no tocan el
+//    contrato ni el calendario: cobrador y notas. Cambiar condiciones requerirá un flujo formal de reestructuración o
+//    modificación contractual (no existe todavía). La fecha de inicio de mora de la CARTERA MIGRADA se fija por el
+//    flujo específico de migración (POST /loans/:id/migration-mora-start), no por este PUT.
+//  - CERRADOS (rejected, cancelled, voided, written_off, liquidated, paid, restructured): solo notas. 'restructured' es el
+//    préstamo VIEJO sustituido por una consolidación (la obligación pasó al préstamo nuevo): está cerrado.
 //  - maturity_date NO se edita nunca: se deriva del último vencimiento del calendario.
 //
 // Causa raíz del defecto anterior: el modal enviaba el formulario COMPLETO y el backend regeneraba el calendario
@@ -17,9 +19,12 @@ import { validateMoraInput, normalizeMoraBase } from './moraConfig';
 
 /** Estados previos al desembolso: aún se pueden modificar las condiciones (y regenerar el calendario). */
 export const PRE_DISBURSEMENT_STATUSES = ['draft', 'under_review', 'pending_manager_approval', 'approved'] as const;
-/** Estados cerrados: protegidos contra cualquier cambio financiero; solo notas y propósito. */
-export const TERMINAL_STATUSES = ['rejected', 'cancelled', 'voided', 'written_off', 'liquidated', 'paid'] as const;
-/** Cualquier otro estado (disbursed, active, in_mora, restructured, o desconocido) = post-desembolso. */
+/**
+ * Estados cerrados: solo notas. 'restructured' = préstamo sustituido por una consolidación (consolidated_into_loan_id):
+ * su obligación ya vive en el préstamo nuevo.
+ */
+export const TERMINAL_STATUSES = ['rejected', 'cancelled', 'voided', 'written_off', 'liquidated', 'paid', 'restructured'] as const;
+/** Cualquier otro estado (disbursed, active, in_mora, o desconocido) = post-desembolso. */
 export type LoanEditPhase = 'pre' | 'post' | 'terminal';
 
 export function loanEditPhase(status: string): LoanEditPhase {
@@ -41,16 +46,18 @@ export const ECONOMIC_TERM_FIELDS = [
 ] as const;
 /** Fechas históricas del contrato (solicitud, aprobación, desembolso). */
 export const CONTRACT_DATE_FIELDS = ['application_date', 'approval_date', 'disbursement_date'] as const;
+/** Propósito DECLARADO del crédito (viene de la solicitud / alta del préstamo): dato de originación, no una nota operativa. */
+export const ORIGINATION_FIELDS = ['purpose'] as const;
 /**
- * Condiciones contractuales: editables solo PRE-desembolso; fijadas después del desembolso y en estados cerrados.
- * (maturity_date no está aquí: no es editable en ningún estado.)
+ * Condiciones contractuales y datos de originación: editables solo PRE-desembolso; fijados después del desembolso y
+ * en estados cerrados. (maturity_date no está aquí: no es editable en ningún estado.)
  */
-export const CONTRACT_FIELDS = [...SCHEDULE_FIELDS, ...CONTRACT_DATE_FIELDS, ...ECONOMIC_TERM_FIELDS] as const;
+export const CONTRACT_FIELDS = [...SCHEDULE_FIELDS, ...CONTRACT_DATE_FIELDS, ...ECONOMIC_TERM_FIELDS, ...ORIGINATION_FIELDS] as const;
 /** Bloqueados además cuando el préstamo ya tiene pagos aunque siga pre-desembolso: lo que reescribiría el calendario. */
 export const HISTORY_LOCKED_FIELDS = [...SCHEDULE_FIELDS, 'disbursement_date'] as const;
 /** Campos operativos: no modifican el contrato ni el calendario; editables post-desembolso. */
-export const OPERATIONAL_FIELDS = ['collector_id', 'purpose', 'notes'] as const;
-/** En estados cerrados solo se admiten notas (el propósito es la finalidad original declarada del préstamo). */
+export const OPERATIONAL_FIELDS = ['collector_id', 'notes'] as const;
+/** En estados cerrados solo se admiten notas. */
 export const TERMINAL_EDITABLE_FIELDS = ['notes'] as const;
 
 type Kind = 'money' | 'rate' | 'int' | 'flag' | 'amount0' | 'text' | 'nulltext' | 'date' | 'moraBase';
@@ -157,7 +164,7 @@ export function checkLoanEditAllowed(phase: LoanEditPhase, changedFields: string
     const blocked = changedFields.filter(f => (CONTRACT_FIELDS as readonly string[]).includes(f));
     if (blocked.length) return {
       code: 'LOAN_TERMS_LOCKED', locked_fields: blocked,
-      error: 'Las condiciones acordadas de un préstamo desembolsado (monto, tasa, plazo, frecuencia, amortización, fechas, mora y cargo de prórroga) quedan fijadas y no se editan directamente. Solo se pueden editar el cobrador, el propósito y las notas.',
+      error: 'Las condiciones acordadas de un préstamo desembolsado (monto, tasa, plazo, frecuencia, amortización, fechas, mora, cargo de prórroga y propósito) quedan fijadas y no se editan directamente. Solo se pueden editar el cobrador y las notas.',
     };
     return null;
   }

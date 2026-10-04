@@ -15,7 +15,8 @@ export interface LoanEditForm {
 export type LoanEditField = keyof LoanEditForm
 
 export const PRE_DISBURSEMENT_STATUSES = ['draft', 'under_review', 'pending_manager_approval', 'approved']
-export const TERMINAL_STATUSES = ['rejected', 'cancelled', 'voided', 'written_off', 'liquidated', 'paid']
+// 'restructured' = préstamo viejo sustituido por una consolidación: su obligación pasó al préstamo nuevo (cerrado).
+export const TERMINAL_STATUSES = ['rejected', 'cancelled', 'voided', 'written_off', 'liquidated', 'paid', 'restructured']
 export type LoanEditPhase = 'pre' | 'post' | 'terminal'
 
 export function loanEditPhase(status: string): LoanEditPhase {
@@ -32,13 +33,14 @@ const SCHEDULE_FIELDS: LoanEditField[] = [
 export const CONTRACT_FIELDS: LoanEditField[] = [
   ...SCHEDULE_FIELDS, 'applicationDate', 'approvalDate', 'disbursementDate',
   'moraRateDaily', 'moraGraceDays', 'moraBase', 'moraFixedEnabled', 'moraFixedAmount', 'moraStartDate', 'prorrogaFee',
+  'purpose',   // propósito declarado del crédito: dato de originación
 ]
 /** Con pagos registrados (aunque siga pre-desembolso) se bloquea lo que reescribiría el calendario. */
 const HISTORY_LOCKED: LoanEditField[] = [...SCHEDULE_FIELDS, 'disbursementDate']
 /** Derivada del calendario: nunca editable. */
 const DERIVED: LoanEditField[] = ['maturityDate']
 const TERMINAL_EDITABLE: LoanEditField[] = ['notes']
-const ALL_FIELDS: LoanEditField[] = [...CONTRACT_FIELDS, ...DERIVED, 'collectorId', 'purpose', 'notes']
+const ALL_FIELDS: LoanEditField[] = [...CONTRACT_FIELDS, ...DERIVED, 'collectorId', 'notes']
 
 export type LoanLockReason = 'none' | 'closed' | 'disbursed' | 'has_payments'
 

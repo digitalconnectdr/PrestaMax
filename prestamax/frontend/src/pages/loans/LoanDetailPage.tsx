@@ -1683,6 +1683,7 @@ const LoanDetailPage: React.FC = () => {
       {showEditModal && (
         <EditLoanModal
           loan={loan}
+          canSetMoraStart={['active', 'in_mora', 'disbursed'].includes(loan.status) && loanPayments.every((p: any) => p.type === 'migration' || p.status === 'voided')}
           onClose={() => setShowEditModal(false)}
           onSaved={async () => {
             // Full refetch to get all computed fields (mora, installments, etc.)

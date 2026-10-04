@@ -12,6 +12,8 @@ interface EditLoanModalProps {
   loan: any
   onClose: () => void
   onSaved: () => void
+  /** Cartera migrada: el préstamo está desembolsado y aún no tiene pagos regulares -> se puede fijar "Cobrar mora desde" por el flujo de migración. */
+  canSetMoraStart?: boolean
 }
 
 const FREQ_OPTIONS = [
@@ -33,11 +35,13 @@ const RATE_TYPE_OPTIONS = [
 
 type Tab = 'terminos' | 'fechas' | 'mora' | 'otros'
 
-const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved }) => {
+const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved, canSetMoraStart }) => {
   const t = useT()
   // Bloqueos por estado / historial (espejo de las reglas del backend): condiciones financieras solo pre-desembolso y sin pagos.
   const { locked, reason: lockReason } = loanEditLocks(loan.status, installmentsHavePayments(loan.installments))
   const ro = (f: LoanEditField) => locked.has(f)
+  // "Cobrar mora desde" (cartera migrada): tras el desembolso NO va por el PUT ordinario sino por el endpoint de migración.
+  const moraStartViaMigration = lockReason === 'disbursed' && !!canSetMoraStart
   const [activeTab, setActiveTab] = useState<Tab>('terminos')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
@@ -88,10 +92,12 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
     // Solo se envía lo que realmente cambió (nunca el formulario completo); los campos bloqueados no se envían.
     const { payload, changed, invalid } = buildLoanEditPayload(initialForm, form, locked)
     if (invalid.length) { toast.error(t('elm.invalid_values')); return }
-    if (!changed.length) { toast(t('elm.no_changes')); return }
+    const moraStartChanged = moraStartViaMigration && form.moraStartDate !== initialForm.moraStartDate
+    if (!changed.length && !moraStartChanged) { toast(t('elm.no_changes')); return }
     setIsSubmitting(true)
     try {
-      await api.put(`/loans/${loan.id}`, payload)
+      if (changed.length) await api.put(`/loans/${loan.id}`, payload)
+      if (moraStartChanged) await api.post(`/loans/${loan.id}/migration-mora-start`, { moraStartDate: form.moraStartDate || null })
       toast.success(t('elm.updated_ok'))
       onSaved()
       onClose()
@@ -365,10 +371,10 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   type="date"
                   value={form.moraStartDate}
                   onChange={e => set('moraStartDate', e.target.value)}
-                  className={(moraRo ? disabledInputCls : inputCls) + ' flex-1'}
-                  disabled={moraRo}
+                  className={((moraRo && !moraStartViaMigration) ? disabledInputCls : inputCls) + ' flex-1'}
+                  disabled={moraRo && !moraStartViaMigration}
                 />
-                {form.moraStartDate && !moraRo ? (
+                {form.moraStartDate && (!moraRo || moraStartViaMigration) ? (
                   <button
                     type="button"
                     onClick={() => set('moraStartDate', '')}
@@ -376,7 +382,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   >
                     {t('elm.clear')}
                   </button>
-                ) : moraRo ? null : (
+                ) : (moraRo && !moraStartViaMigration) ? null : (
                   <button
                     type="button"
                     onClick={() => set('moraStartDate', new Date().toISOString().split('T')[0])}
@@ -386,6 +392,8 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   </button>
                 )}
               </div>
+              {moraRo && !moraStartViaMigration && <p className="text-xs text-slate-500 mt-1">{t('elm.mora_from_locked')}</p>}
+              {moraStartViaMigration && <p className="text-xs text-slate-500 mt-1">{t('elm.mora_from_migration')}</p>}
               <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-1">
                 <p><strong>{t('elm.mora_from_when')}</strong> {t('elm.mora_from_when_d')}</p>
                 <p>
