@@ -1338,7 +1338,9 @@ const SettingsPage: React.FC = () => {
                       </tr></thead>
                       <tbody>{products.map(p=>(
                         <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
-                          <td className="py-3 px-4 font-medium">{p.name}</td>
+                          <td className="py-3 px-4 font-medium">{p.name}
+                            <span className={`block mt-0.5 text-[11px] font-normal ${productIsCustom(p) ? 'text-blue-600' : 'text-slate-400'}`}>{productIsCustom(p) ? tGen('set.prod_mora_badge_custom') : tGen('set.prod_mora_badge_general')}</span>
+                          </td>
                           <td className="py-3 px-4 font-mono text-xs">{p.code}</td>
                           <td className="py-3 px-4 capitalize">
                             {p.type}

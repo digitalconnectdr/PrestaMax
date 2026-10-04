@@ -118,6 +118,7 @@ const LoanCreatePage: React.FC = () => {
   const navigate = useNavigate()
   const { can } = usePermission()
   const freqLabel = (f: string) => FREQ_KEYS[f] ? t(FREQ_KEYS[f]) : f
+  const graceLabel = (n: number) => n === 1 ? t('lc.c_mora_grace_1') : t('lc.c_mora_grace_n').replace('{n}', String(n))
   const typeLabel = (ty: string) => TYPE_KEYS[ty] ? t(TYPE_KEYS[ty]) : ty
   const unitLabel = (u: string) => ({ months: t('lc.unit.months'), biweekly: t('lc.unit.biweekly'), weeks: t('lc.unit.weeks'), days: t('lc.unit.days'), years: t('lc.unit.years') } as Record<string,string>)[u] || u
   const [step, setStep] = useState(1)
@@ -1006,8 +1007,8 @@ const LoanCreatePage: React.FC = () => {
                         <span className="text-slate-500">{t('lc.c_mora')}</span>
                         <span className="font-medium text-right">
                           {selectedProduct.effectiveMora.moraFixedEnabled
-                            ? t('lc.c_mora_fixed').replace('{amt}', formatCurrency(selectedProduct.effectiveMora.moraFixedAmount, form.currency)).replace('{grace}', String(selectedProduct.effectiveMora.moraGraceDays))
-                            : t('lc.c_mora_pct').replace('{rate}', pctFromFraction(selectedProduct.effectiveMora.moraRateDaily)).replace('{grace}', String(selectedProduct.effectiveMora.moraGraceDays))}
+                            ? t('lc.c_mora_fixed').replace('{amt}', formatCurrency(selectedProduct.effectiveMora.moraFixedAmount, form.currency)).replace('{grace}', graceLabel(selectedProduct.effectiveMora.moraGraceDays))
+                            : t('lc.c_mora_pct').replace('{rate}', pctFromFraction(selectedProduct.effectiveMora.moraRateDaily)).replace('{grace}', graceLabel(selectedProduct.effectiveMora.moraGraceDays))}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">{t('lc.c_mora_note')}</p>

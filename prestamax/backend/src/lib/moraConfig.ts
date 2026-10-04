@@ -162,3 +162,16 @@ export function resolveMoraConfig(db: any, tenantId: string, explicit?: any, pro
     sources,
   };
 }
+
+/**
+ * Política de mora COMPLETA para un producto PERSONALIZADO: se materializan siempre los cinco valores.
+ * Por campo: lo enviado > lo que el producto ya tenía (si ya era personalizado) > mora global vigente > sistema.
+ *  - Heredar -> Personalizar: sin valores enviados, se copia la mora global VIGENTE en ese momento.
+ *  - Cambiar solo la tasa de un producto personalizado conserva gracia, base y cargo propios.
+ * Después de guardar, el producto no depende de General: cambios posteriores en General no lo afectan.
+ * Llamar solo después de validateMoraInput(input).
+ */
+export function materializeProductMora(db: any, tenantId: string, input: any, existingProduct?: any): MoraSnapshot {
+  const { sources, ...values } = resolveMoraConfig(db, tenantId, input, existingProduct);
+  return values;
+}

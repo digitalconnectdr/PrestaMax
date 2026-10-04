@@ -147,12 +147,16 @@ describe('producto: heredar vs personalizar', () => {
     expect(m.base).toBe('cuota_vencida');
   });
 
-  it('un campo no definido en un producto personalizado cae a la global (campo por campo)', async () => {
+  it('personalizar con campos incompletos MATERIALIZA la política: los faltantes se copian de la global vigente al guardar', async () => {
     const t = newTenant();
     await setGlobal(t, GLOBAL);
     const p = await makeProduct(t, { mora_inherit_tenant: false, mora_rate_daily: 0.03 });
+    const row = app.db.prepare('SELECT * FROM loan_products WHERE id=?').get(p.id) as any;
+    expect(row.mora_inherit_tenant).toBe(0);
+    expect([row.mora_rate_daily, row.mora_grace_days, row.mora_base, row.mora_fixed_enabled, row.mora_fixed_amount]).toEqual([0.03, 7, 'capital_pendiente', 0, 0]);
     expect(moraOf(loanRow(await loanFor(t, p.id)))).toEqual({ ...G, rate: 0.03 });
-    expect(resolveMoraConfig(app.db, t.tenantId, undefined, p.id).sources.mora_grace_days).toBe('tenant');
+    const src = resolveMoraConfig(app.db, t.tenantId, undefined, p.id).sources;
+    expect(Object.values(src)).toEqual(['product', 'product', 'product', 'product', 'product']);   // sin herencia parcial
   });
 
   it('cambio de General: afecta futuros préstamos de producto heredado, NO a producto personalizado, NO a préstamos existentes', async () => {
@@ -282,6 +286,106 @@ describe('producto: heredar vs personalizar', () => {
   });
 });
 
+describe('producto personalizado = política COMPLETA (sin herencia parcial)', () => {
+  const ALL = ['mora_rate_daily', 'mora_grace_days', 'mora_base', 'mora_fixed_enabled', 'mora_fixed_amount'];
+  const prodRow = (id: string) => app.db.prepare('SELECT * FROM loan_products WHERE id=?').get(id) as any;
+  const NEW_GLOBAL = { mora_rate_daily: 0.01, mora_grace_days: 2, mora_base: 'cuota_vencida', mora_fixed_enabled: 1, mora_fixed_amount: 99 };
+
+  it('un producto personalizado conserva TODOS sus campos tras cambiar General (y sus préstamos nuevos también)', async () => {
+    const t = newTenant();
+    await setGlobal(t, GLOBAL);
+    const p = await makeProduct(t, CUSTOM);
+    const before = prodRow(p.id);
+    await setGlobal(t, NEW_GLOBAL);
+    const after = prodRow(p.id);
+    for (const k of ALL) expect(after[k], k).toBe(before[k]);
+    expect(after.mora_inherit_tenant).toBe(0);
+    expect(moraOf(loanRow(await loanFor(t, p.id)))).toEqual(C);
+  });
+
+  it('no existe herencia parcial: crear personalizado con solo 1 campo guarda los 5 (sin NULL) y ninguno depende de General después', async () => {
+    const t = newTenant();
+    await setGlobal(t, GLOBAL);
+    const p = await makeProduct(t, { mora_inherit_tenant: false, mora_grace_days: 5 });
+    const row = prodRow(p.id);
+    for (const k of ALL) expect(row[k], k).not.toBeNull();
+    expect(row.mora_grace_days).toBe(5);
+    await setGlobal(t, NEW_GLOBAL);
+    expect(moraOf(loanRow(await loanFor(t, p.id)))).toEqual({ ...G, grace: 5 });          // el resto quedó con la global de CUANDO se guardó
+    expect(Object.values(resolveMoraConfig(app.db, t.tenantId, undefined, p.id).sources).every(s => s === 'product')).toBe(true);
+  });
+
+  it('heredar -> personalizar sin valores: guarda la global vigente en ese momento y deja de seguirla', async () => {
+    const t = newTenant();
+    await setGlobal(t, GLOBAL);
+    const p = await makeProduct(t);                                    // hereda
+    const up = await call(t, 'PUT', `/api/products/${p.id}`, { mora_inherit_tenant: false });
+    expect(up.status).toBe(200);
+    const row = prodRow(p.id);
+    expect([row.mora_inherit_tenant, row.mora_rate_daily, row.mora_grace_days, row.mora_base, row.mora_fixed_enabled, row.mora_fixed_amount]).toEqual([0, 0.005, 7, 'capital_pendiente', 0, 0]);
+    await setGlobal(t, NEW_GLOBAL);
+    expect(moraOf(loanRow(await loanFor(t, p.id)))).toEqual(G);        // ya no sigue a General
+  });
+
+  it('cambiar SOLO la tasa de un producto personalizado no deja gracia/base/cargo dependientes de General', async () => {
+    const t = newTenant();
+    await setGlobal(t, GLOBAL);
+    const p = await makeProduct(t, CUSTOM);
+    // con flag y un solo campo
+    expect((await call(t, 'PUT', `/api/products/${p.id}`, { mora_inherit_tenant: false, mora_rate_daily: 0.07 })).status).toBe(200);
+    // sin flag (producto ya personalizado) y un solo campo
+    expect((await call(t, 'PUT', `/api/products/${p.id}`, { mora_grace_days: 4 })).status).toBe(200);
+    await setGlobal(t, NEW_GLOBAL);
+    const row = prodRow(p.id);
+    expect([row.mora_rate_daily, row.mora_grace_days, row.mora_base, row.mora_fixed_enabled, row.mora_fixed_amount]).toEqual([0.07, 4, 'capital_vencido', 1, 400]);
+    expect(moraOf(loanRow(await loanFor(t, p.id)))).toEqual({ rate: 0.07, grace: 4, base: 'capital_vencido', fixed: 1, amt: 400 });
+  });
+
+  it('volver a Heredar limpia la política propia: los futuros préstamos vuelven a seguir a General', async () => {
+    const t = newTenant();
+    await setGlobal(t, GLOBAL);
+    const p = await makeProduct(t, CUSTOM);
+    expect(moraOf(loanRow(await loanFor(t, p.id)))).toEqual(C);
+    expect((await call(t, 'PUT', `/api/products/${p.id}`, { mora_inherit_tenant: true })).status).toBe(200);
+    const row = prodRow(p.id);
+    expect(row.mora_inherit_tenant).toBe(1);
+    for (const k of ALL) expect(row[k], k).toBeNull();
+    await setGlobal(t, NEW_GLOBAL);
+    expect(moraOf(loanRow(await loanFor(t, p.id)))).toEqual({ rate: 0.01, grace: 2, base: 'cuota_vencida', fixed: 1, amt: 99 });
+  });
+
+  it('enviar campos de mora SIN flag a un producto que hereda no lo convierte en personalizado', async () => {
+    const t = newTenant();
+    await setGlobal(t, GLOBAL);
+    const p = await makeProduct(t);
+    expect((await call(t, 'PUT', `/api/products/${p.id}`, { mora_rate_daily: 0.5, mora_grace_days: 30 })).status).toBe(200);
+    const row = prodRow(p.id);
+    expect(row.mora_inherit_tenant).toBe(1);
+    expect(row.mora_rate_daily).toBeNull();
+    expect(moraOf(loanRow(await loanFor(t, p.id)))).toEqual(G);
+  });
+
+  it('fallback DEFENSIVO (no es el funcionamiento normal): personalizado corrupto/legacy con NULL -> Global -> constante', async () => {
+    const t = newTenant();
+    await setGlobal(t, GLOBAL);
+    const productId = app.createProduct(t.tenantId);
+    app.db.prepare('UPDATE loan_products SET mora_inherit_tenant=0, mora_rate_daily=0.04, mora_grace_days=NULL, mora_base=NULL, mora_fixed_enabled=NULL, mora_fixed_amount=NULL WHERE id=?').run(productId);
+    const r = resolveMoraConfig(app.db, t.tenantId, undefined, productId);
+    expect(r.mora_rate_daily).toBe(0.04);
+    expect(r.sources.mora_rate_daily).toBe('product');
+    expect(r.mora_grace_days).toBe(7);                                  // NULL -> Global
+    expect(r.sources.mora_grace_days).toBe('tenant');
+    app.db.prepare('UPDATE tenant_settings SET mora_grace_days=-1 WHERE tenant_id=?').run(t.tenantId);
+    const r2 = resolveMoraConfig(app.db, t.tenantId, undefined, productId);
+    expect(r2.mora_grace_days).toBe(3);                                 // global inválida -> constante
+    expect(r2.sources.mora_grace_days).toBe('system');
+    // editar ese producto corrupto lo "cura": queda completo
+    await setGlobal(t, GLOBAL);
+    expect((await call(t, 'PUT', `/api/products/${productId}`, { mora_inherit_tenant: false, mora_rate_daily: 0.04 })).status).toBe(200);
+    const row = prodRow(productId);
+    for (const k of ALL) expect(row[k], k).not.toBeNull();
+  });
+});
 describe('los cuatro flujos de creación respetan Producto -> General -> constante', () => {
   it('creación manual: producto personalizado y producto heredado', async () => {
     const t = newTenant();
@@ -431,7 +535,7 @@ describe('frontend: cableado (fuente) de Productos, nuevo préstamo, guía e i18
   });
   it('i18n ES/EN/PT de todas las claves nuevas', () => {
     for (const k of ['set.prod_mora_title', 'set.prod_mora_inherit', 'set.prod_mora_inherit_note', 'set.prod_mora_custom', 'set.prod_mora_custom_note',
-      'set.prod_mora_current_global', 'set.prod_mora_invalid', 'lc.c_mora', 'lc.c_mora_pct', 'lc.c_mora_fixed', 'lc.c_mora_note', 'set.mora_scope_note', 'elm.prec1_d', 'elm.prec3']) {
+      'set.prod_mora_current_global', 'set.prod_mora_invalid', 'lc.c_mora', 'lc.c_mora_pct', 'lc.c_mora_fixed', 'lc.c_mora_note', 'lc.c_mora_grace_n', 'lc.c_mora_grace_1', 'set.prod_mora_custom_info', 'set.prod_mora_badge_general', 'set.prod_mora_badge_custom', 'set.mora_scope_note', 'elm.prec1_d', 'elm.prec3']) {
       const i = i18n.indexOf(`'${k}'`);
       expect(i, k).toBeGreaterThan(-1);
       const line = i18n.slice(i, i18n.indexOf('\n', i));

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { getDb, uuid } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
-import { resolveMoraConfig, validateMoraInput, normalizeProductMoraFields, parseInheritFlag, productHasCustomMora } from '../lib/moraConfig';
+import { resolveMoraConfig, validateMoraInput, materializeProductMora, parseInheritFlag, productHasCustomMora } from '../lib/moraConfig';
 
 const router = Router();
 
@@ -47,14 +47,15 @@ router.post('/', authenticate, requireTenant, requirePermission('settings.produc
     const minTerm   = d.min_term   ?? d.minTerm   ?? null;
     const maxTerm   = d.max_term   ?? d.maxTerm   ?? null;
     if (rate === null || rate === undefined) return res.status(400).json({ error: 'La tasa de interes es requerida' });
-    // Mora del producto: por defecto HEREDA la configuración general. Solo si se pide explícitamente
-    // personalizarla (mora_inherit_tenant = false) se guardan valores propios (validados).
+    // Mora del producto: por defecto HEREDA la configuración general (sin valores propios). Solo si se pide
+    // explícitamente personalizarla (mora_inherit_tenant = false) se guarda una política COMPLETA: los cinco
+    // valores se validan y se materializan (lo no enviado se toma de la mora general vigente en este momento).
     const custom = parseInheritFlag(d.mora_inherit_tenant) === false;
     if (custom) {
       const moraErr = validateMoraInput(d);
       if (moraErr) return res.status(400).json({ error: moraErr });
     }
-    const mora = custom ? normalizeProductMoraFields(d)
+    const mora = custom ? materializeProductMora(db, req.tenant.id, d)
       : { mora_rate_daily: null, mora_grace_days: null, mora_base: null, mora_fixed_enabled: null, mora_fixed_amount: null };
     const code = d.code ?? null;
     db.prepare(`INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
@@ -80,7 +81,7 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
   try {
     const d = req.body; const db = getDb();
     // Verificar que el producto pertenezca al tenant
-    const existing = db.prepare('SELECT id FROM loan_products WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
+    const existing = db.prepare('SELECT * FROM loan_products WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
     if (!existing) return res.status(404).json({ error: 'Producto no encontrado' });
 
     // Normalizar campos: aceptar camelCase y snake_case, convertir undefined a null
@@ -95,12 +96,21 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
     const amortType    = norm(d.amortization_type ?? d.amortizationType);
     const rateType     = norm(d.rate_type ?? d.rateType);
     const disbFee      = norm(d.disbursement_fee ?? d.disbursementFee);
-    // Mora del producto: SOLO si la petición indica mora_inherit_tenant se reemplaza el grupo completo.
-    //  - true  (Usar configuración general): se limpian los valores propios del producto.
-    //  - false (Personalizar): se guardan los valores enviados (ausentes = null -> caen a la global).
-    // Sin ese campo, la mora del producto no se toca. Se valida ANTES de escribir nada.
+    // Mora del producto: dos únicos estados.
+    //  - HEREDAR (mora_inherit_tenant = true): se limpian los valores propios; todo se resuelve desde General.
+    //  - PERSONALIZAR (mora_inherit_tenant = false): política COMPLETA. Se materializan y guardan los cinco valores
+    //    (enviado > lo que el producto ya tenía > mora general vigente): Heredar -> Personalizar copia la general
+    //    de ese momento; cambiar solo un campo conserva los demás propios. No hay herencia parcial.
+    // Sin el flag, la mora no se toca; salvo que el producto YA sea personalizado y se envíen campos de mora
+    // (se actualizan manteniendo la política completa). Se valida ANTES de escribir nada.
     const inheritReq = parseInheritFlag(d.mora_inherit_tenant);
-    if (inheritReq === false) {
+    const existingCustom = productHasCustomMora(existing);
+    const sendsMoraFields = ['mora_rate_daily', 'mora_grace_days', 'mora_base', 'mora_fixed_enabled', 'mora_fixed_amount'].some(k => d[k] !== undefined);
+    const moraMode: 'inherit' | 'custom' | 'none' =
+      inheritReq === true ? 'inherit'
+      : (inheritReq === false || (inheritReq === null && existingCustom && sendsMoraFields)) ? 'custom'
+      : 'none';
+    if (moraMode === 'custom') {
       const moraErr = validateMoraInput(d);
       if (moraErr) return res.status(400).json({ error: moraErr });
     }
@@ -141,13 +151,13 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
       isActive === undefined ? null : (isActive ? 1 : 0),
       req.params.id, req.tenant.id
     );
-    if (inheritReq !== null) {
-      const m = inheritReq
+    if (moraMode !== 'none') {
+      const m = moraMode === 'inherit'
         ? { mora_rate_daily: null, mora_grace_days: null, mora_base: null, mora_fixed_enabled: null, mora_fixed_amount: null }
-        : normalizeProductMoraFields(d);
+        : materializeProductMora(db, req.tenant.id, d, existing);
       db.prepare(`UPDATE loan_products SET mora_inherit_tenant=?, mora_rate_daily=?, mora_grace_days=?, mora_base=?,
         mora_fixed_enabled=?, mora_fixed_amount=? WHERE id=? AND tenant_id=?`).run(
-        inheritReq ? 1 : 0, m.mora_rate_daily, m.mora_grace_days, m.mora_base, m.mora_fixed_enabled, m.mora_fixed_amount,
+        moraMode === 'inherit' ? 1 : 0, m.mora_rate_daily, m.mora_grace_days, m.mora_base, m.mora_fixed_enabled, m.mora_fixed_amount,
         req.params.id, req.tenant.id);
     }
     db.exec('COMMIT');

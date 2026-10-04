@@ -63,6 +63,8 @@ const ProductMoraSection: React.FC<Props> = ({ value, onChange, globals }) => {
           <div><dt className="text-slate-500">{t('set.mora_fixed')}</dt><dd className="font-semibold text-slate-800">{g.moraFixedEnabled ? g.moraFixedAmount : t('set.disabled')}</dd></div>
         </dl>
       ) : (
+        <>
+        <p className="mt-3 text-xs text-slate-500">{t('set.prod_mora_custom_info')}</p>
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">{t('set.mora_apply_on')}</label>
@@ -86,6 +88,7 @@ const ProductMoraSection: React.FC<Props> = ({ value, onChange, globals }) => {
               onChange={e => set({ fixedAmount: e.target.value })} />
           )}
         </div>
+        </>
       )}
     </fieldset>
   )
