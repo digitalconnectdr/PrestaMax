@@ -332,3 +332,102 @@ describe('DataCrédito', () => {
     expect(loanRow(s.A).total_balance).toBe(60000);
   });
 });
+
+describe('acciones destructivas sobre restructured', () => {
+  it('no se puede castigar, anular ni eliminar: 409 LOAN_RESTRUCTURED y no cambia nada (estado, saldos, cuotas, pagos, banco)', async () => {
+    const s = await scenario();
+    const N = await consolidate(s);
+    const bank = () => app.db.prepare('SELECT COUNT(*) c, COALESCE(SUM(current_balance),0) b FROM bank_accounts WHERE tenant_id=?').get(s.tt.tenantId);
+    const before = { A: loanRow(s.A), i: instSnap(s.A), p: paySnap(s.A), bank: bank(), audit: (app.db.prepare('SELECT COUNT(*) c FROM audit_logs WHERE entity_id=?').get(s.A) as any).c };
+
+    const wo = await call('POST', `/api/loans/${s.A}/write-off`, s.tt, { reason: 'prueba', record_loss: true, loss_components: { capital: true } });
+    expect(wo.status).toBe(409);
+    expect(wo.body.code).toBe('LOAN_RESTRUCTURED');
+    expect(wo.body.consolidated_into_loan_id).toBe(N);
+
+    const vd = await call('POST', `/api/loans/${s.A}/void`, s.tt, { reason: 'prueba' });
+    expect(vd.status).toBe(409);
+    expect(vd.body.code).toBe('LOAN_RESTRUCTURED');
+
+    const del = await call('DELETE', `/api/loans/${s.A}`, s.tt);
+    expect(del.status).toBe(409);
+    expect(del.body.code).toBe('LOAN_RESTRUCTURED');
+
+    expect(loanRow(s.A)).toEqual(before.A);
+    expect(loanRow(s.A).status).toBe('restructured');
+    expect(instSnap(s.A)).toEqual(before.i);
+    expect(paySnap(s.A)).toEqual(before.p);
+    expect(bank()).toEqual(before.bank);
+    expect((app.db.prepare('SELECT COUNT(*) c FROM audit_logs WHERE entity_id=?').get(s.A) as any).c).toBe(before.audit);
+    expect((app.db.prepare("SELECT score FROM clients WHERE id=?").get(s.clientId) as any).score).not.toBe(1);   // castigar habría bajado el score
+  });
+
+  it('el consolidado sigue siendo operable (se puede castigar/anular como cualquier préstamo activo)', async () => {
+    const s = await scenario();
+    const N = await consolidate(s);
+    expect((await call('POST', `/api/loans/${N}/void`, s.tt, { reason: 'prueba' })).status).toBe(200);
+    expect(loanRow(N).status).toBe('voided');
+    expect(loanRow(s.A).status).toBe('restructured');               // el anulado no arrastra al viejo
+  });
+
+  it('frontend: castigar, anular y eliminar no se muestran habilitados para un restructured', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const src = fs.readFileSync(path.join(__dirname, '../../../frontend/src/pages/loans/LoanDetailPage.tsx'), 'utf8');
+    const line = (needle: string) => src.split('\n').find(l => l.includes(needle)) || '';
+    expect(line("can('loans.write_off') &&")).toContain("'restructured'");
+    expect(line("can('loans.void') && !")).toContain("'restructured'");
+    expect(line("can('loans.void') && loan.status")).toContain("!== 'restructured'");
+  });
+});
+
+describe('consolidar cierra la cobranza abierta de los préstamos origen', () => {
+  it('promesas pendientes -> broken (con nota) y tareas pending/in_progress -> cancelled; lo ya cerrado queda igual; no se mueven al consolidado; el historial sigue consultable', async () => {
+    const s = await scenario();
+    const mkPromise = async (loan_id: string) => (await call('POST', '/api/collections/promises', s.tt, { loan_id, promised_date: '2030-01-01', promised_amount: 100 })).body.id as string;
+    const pA = await mkPromise(s.A), pB = await mkPromise(s.B), pDone = await mkPromise(s.A);
+    expect((await call('PUT', `/api/collections/promises/${pDone}`, s.tt, { status: 'fulfilled' })).status).toBe(200);
+    const mkTask = async (loan_id: string) => (await call('POST', '/api/collection-tasks', s.tt, { title: 'Visita', assigned_to: s.collector, due_date: '2030-01-01', loan_id })).body.id as string;
+    const tPending = await mkTask(s.A), tProgress = await mkTask(s.B), tDone = await mkTask(s.A);
+    expect((await call('PATCH', `/api/collection-tasks/${tProgress}/status`, s.tt, { status: 'in_progress' })).status).toBe(200);
+    expect((await call('PATCH', `/api/collection-tasks/${tDone}/status`, s.tt, { status: 'completed', result_notes: 'ok' })).status).toBe(200);
+    const promise = (id: string) => app.db.prepare('SELECT * FROM payment_promises WHERE id=?').get(id) as any;
+    const task = (id: string) => app.db.prepare('SELECT * FROM collection_tasks WHERE id=?').get(id) as any;
+    const beforePromises = app.db.prepare('SELECT COUNT(*) c FROM payment_promises').get() as any;
+    const beforeTasks = app.db.prepare('SELECT COUNT(*) c FROM collection_tasks').get() as any;
+
+    const N = await consolidate(s);
+
+    for (const id of [pA, pB]) {
+      expect(promise(id).status).toBe('broken');
+      expect(promise(id).notes).toContain('consolidado');
+    }
+    expect(promise(pDone).status).toBe('fulfilled');                 // ya cerrada: intacta
+    expect(promise(pDone).notes ?? '').not.toContain('consolidado');
+    for (const id of [tPending, tProgress]) {
+      expect(task(id).status).toBe('cancelled');
+      expect(task(id).result_notes).toContain('consolidado');
+    }
+    expect(task(tDone).status).toBe('completed');                    // ya cerrada: intacta
+    expect(task(tDone).result_notes).toBe('ok');
+    // no se mueven al consolidado y no se borra nada
+    expect(promise(pA).loan_id).toBe(s.A);
+    expect(task(tPending).loan_id).toBe(s.A);
+    expect(app.db.prepare('SELECT COUNT(*) c FROM payment_promises').get()).toEqual(beforePromises);
+    expect(app.db.prepare('SELECT COUNT(*) c FROM collection_tasks').get()).toEqual(beforeTasks);
+    expect((app.db.prepare('SELECT COUNT(*) c FROM payment_promises WHERE loan_id=?').get(N) as any).c).toBe(0);
+    expect((app.db.prepare('SELECT COUNT(*) c FROM collection_tasks WHERE loan_id=?').get(N) as any).c).toBe(0);
+
+    // el historial sigue consultable por la API
+    const proms = await call('GET', '/api/collections/promises', s.tt);
+    expect(proms.body.filter((p: any) => [pA, pB, pDone].includes(p.id)).length).toBe(3);
+    const cancelled = await call('GET', '/api/collection-tasks?status=cancelled', s.tt);
+    expect(cancelled.body.tasks.map((t: any) => t.id).sort()).toEqual([tPending, tProgress].sort());
+    expect((await call('GET', `/api/loans/${s.A}`, s.tt)).body.promises.length).toBe(2);
+
+    // y el préstamo consolidado sigue operable: pago, promesa y tarea nuevos
+    expect((await call('POST', '/api/payments', s.tt, { loan_id: N, amount: 500, payment_method: 'cash' })).status).toBe(201);
+    expect((await call('POST', '/api/collections/promises', s.tt, { loan_id: N, promised_date: '2030-01-01', promised_amount: 100 })).status).toBe(201);
+    expect((await call('POST', '/api/collection-tasks', s.tt, { title: 'Nueva', assigned_to: s.collector, due_date: '2030-01-01', loan_id: N })).status).toBe(201);
+  });
+});

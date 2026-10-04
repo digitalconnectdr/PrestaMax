@@ -217,6 +217,16 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
 // con su propio plan de cuotas. Los prestamos viejos quedan en estado
 // 'restructured' (reutilizando el status ya existente en el sistema) y
 // apuntando a consolidated_into_loan_id.
+// Un préstamo 'restructured' es historial: su deuda pasó al consolidado (consolidated_into_loan_id). Castigarlo, anularlo
+// o eliminarlo revertiría el desembolso, cambiaría su estado financiero o duplicaría deuda.
+function restructuredBlockedError(loan: any, action: string) {
+  return {
+    error: `Un préstamo reestructurado (consolidado en otro préstamo) es histórico y no puede ${action}.`,
+    code: 'LOAN_RESTRUCTURED',
+    consolidated_into_loan_id: loan.consolidated_into_loan_id || null,
+  }
+}
+
 router.post('/consolidate', authenticate, requireTenant, requirePermission('loans.consolidate'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
@@ -313,6 +323,19 @@ router.post('/consolidate', authenticate, requireTenant, requirePermission('loan
 
     db.prepare(`UPDATE loans SET status='restructured', consolidated_into_loan_id=?, updated_at=? WHERE id IN (${placeholders}) AND tenant_id=?`)
       .run(newId, now(), ...loanIds, req.tenant.id);
+
+    // Cobranza abierta de los préstamos origen: ya no queda operativamente pendiente (no se mueve al consolidado).
+    // Se usan solo estados existentes y se conserva el registro: tareas -> 'cancelled'; promesas -> 'broken' (el único
+    // estado de cierre sin cumplimiento que tiene el sistema; la nota explica el motivo).
+    const closeNote = `Cerrada automáticamente: el préstamo fue consolidado en ${loan_number}.`;
+    db.prepare(`UPDATE collection_tasks SET status='cancelled', updated_at=?,
+      result_notes=CASE WHEN result_notes IS NULL OR result_notes='' THEN ? ELSE result_notes || ' | ' || ? END
+      WHERE tenant_id=? AND loan_id IN (${placeholders}) AND status IN ('pending','in_progress')`)
+      .run(now(), closeNote, closeNote, req.tenant.id, ...loanIds);
+    db.prepare(`UPDATE payment_promises SET status='broken',
+      notes=CASE WHEN notes IS NULL OR notes='' THEN ? ELSE notes || ' | ' || ? END
+      WHERE status='pending' AND loan_id IN (${placeholders})`)
+      .run(closeNote, closeNote, ...loanIds);
 
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
       uuid(), req.tenant.id, req.user.id, req.user.full_name, 'consolidated', 'loan', newId,
@@ -1283,6 +1306,7 @@ router.post('/:id/write-off', authenticate, requireTenant, requirePermission('lo
 
     const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant!.id) as any
     if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' })
+    if (loan.status === 'restructured') return res.status(409).json(restructuredBlockedError(loan, 'marcarse como incobrable'))
     if (['written_off', 'liquidated', 'cancelled', 'voided'].includes(loan.status)) {
       return res.status(400).json({ error: `El préstamo ya está en estado "${loan.status}"` })
     }
@@ -1341,6 +1365,7 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('loans.v
 
     const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant!.id) as any
     if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' })
+    if (loan.status === 'restructured') return res.status(409).json(restructuredBlockedError(loan, 'anularse'))
     if (['cancelled', 'paid', 'voided'].includes(loan.status)) {
       return res.status(400).json({ error: `El préstamo ya está en estado "${loan.status}"` })
     }
@@ -1420,6 +1445,7 @@ router.delete('/:id', authenticate, requireTenant, requirePermission('loans.void
     const db = getDb()
     const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant!.id) as any
     if (!loan) return res.status(404).json({ error: 'Prestamo no encontrado' })
+    if (loan.status === 'restructured') return res.status(409).json(restructuredBlockedError(loan, 'eliminarse'))
 
     // Validar que no tiene movimientos historicos
     const paymentCount  = (db.prepare('SELECT COUNT(*) as c FROM payments WHERE loan_id=? AND tenant_id=?').get(req.params.id, req.tenant!.id) as any).c
