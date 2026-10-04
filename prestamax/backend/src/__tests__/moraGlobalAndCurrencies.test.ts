@@ -167,7 +167,7 @@ describe('mora: creación manual', () => {
     expect(row).toEqual({ r: 0.005, g: 7 });
   });
 
-  it('los valores de loan_products.mora_* ya no participan (la global manda)', async () => {
+  it('valores legacy loan_products.mora_* SIN el flag de personalización no cuentan (la global manda)', async () => {
     const t = newTenant();
     await setMora(t, GLOBAL);
     const productId = app.createProduct(t.tenantId);
@@ -543,7 +543,7 @@ describe('frontend: cableado de SettingsPage y Guía (verificación sobre la fue
     expect(g).not.toContain('Guardar Monedas');
     expect(g).not.toContain('seis secciones');
     expect(g).toContain('Monedas de operación');
-    expect(g).toContain('punto de partida de los préstamos NUEVOS');
+    expect(g).toContain('política estándar de tu empresa');
     expect(g).toContain('NO modifica los préstamos que ya existen');
     expect(g).toContain('Editar préstamo');
   });

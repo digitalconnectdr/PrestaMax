@@ -1,19 +1,23 @@
-// Mora: configuración global del tenant -> instantánea por préstamo.
+// Mora: GLOBAL del tenant -> PRODUCTO -> instantánea por PRÉSTAMO.
 //
-// Modelo (dos niveles):
+// Modelo (tres niveles, mismo patrón que el resto de datos de un producto):
 //   1. Mora GLOBAL del tenant (Configuración > General > Mora y pagos, tabla
-//      tenant_settings): es el valor INICIAL de los préstamos NUEVOS.
-//   2. Mora del PRÉSTAMO (columnas mora_* de loans): instantánea tomada al crear
-//      el préstamo; editable por préstamo. Es lo ÚNICO que leen los cálculos,
-//      pagos, anulaciones, sync de estado y reportes. La mora global NO se
-//      consulta dinámicamente para préstamos existentes.
+//      tenant_settings): la política estándar de la empresa.
+//   2. Mora del PRODUCTO (loan_products): el producto puede "Usar la configuración
+//      general" (mora_inherit_tenant = 1, el valor por defecto) o "Personalizar para
+//      este producto" (mora_inherit_tenant = 0 + valores propios mora_*).
+//   3. Mora del PRÉSTAMO (columnas mora_* de loans): instantánea tomada al crear el
+//      préstamo; editable por préstamo. Es lo ÚNICO que leen los cálculos, pagos,
+//      anulaciones, sync de estado y reportes. Ni la mora global ni la del producto
+//      se consultan dinámicamente para préstamos existentes.
 //
 // Precedencia al CREAR un préstamo (por campo):
-//   valor explícito del préstamo > mora global válida del tenant > constante del sistema.
+//   valor explícito del préstamo > mora personalizada del producto (solo si
+//   mora_inherit_tenant = 0) > mora global válida del tenant > constante del sistema.
 //
-// Las columnas loan_products.mora_* ya NO participan en la precedencia (el
-// formulario de productos nunca las expuso; el nivel de producto queda como dato
-// heredado sin efecto).
+// Importante: los valores heredados de loan_products.mora_rate_daily/mora_grace_days
+// (p. ej. 0.001 / 3 que dejó el seed) NO cuentan como personalización: sin el flag
+// mora_inherit_tenant = 0 se ignoran. Antes no existía UI para configurarlos.
 
 export const SYSTEM_MORA_DEFAULTS = {
   mora_rate_daily: 0.001,        // fracción diaria (0.001 = 0.1 %)
@@ -35,7 +39,7 @@ export interface MoraSnapshot {
   mora_fixed_amount: number;
 }
 
-export type MoraSource = 'loan' | 'tenant' | 'system';
+export type MoraSource = 'loan' | 'product' | 'tenant' | 'system';
 export interface ResolvedMora extends MoraSnapshot {
   sources: Record<keyof MoraSnapshot, MoraSource>;
 }
@@ -88,20 +92,62 @@ export function validateMoraInput(input: any): string | null {
 }
 
 /**
- * Resuelve la mora de un préstamo NUEVO: explícito > global del tenant > sistema.
- * Cada campo se resuelve por separado; un valor global inválido (p. ej. negativo)
- * se ignora y cae a la constante del sistema. El resultado se guarda tal cual en
- * `loans` (instantánea) -- cambios posteriores en la mora global no lo afectan.
+ * Valores de mora ya validados/normalizados para GUARDAR en un producto personalizado.
+ * Los campos ausentes quedan en null (se resuelven desde la mora global al crear el préstamo).
+ * Llamar solo después de validateMoraInput().
  */
-export function resolveMoraConfig(db: any, tenantId: string, explicit?: any): ResolvedMora {
+export function normalizeProductMoraFields(input: any): {
+  mora_rate_daily: number | null; mora_grace_days: number | null; mora_base: string | null;
+  mora_fixed_enabled: 0 | 1 | null; mora_fixed_amount: number | null;
+} {
+  const i = input || {};
+  return {
+    mora_rate_daily: parseRate(i.mora_rate_daily),
+    mora_grace_days: parseGrace(i.mora_grace_days),
+    mora_base: normalizeMoraBase(i.mora_base),
+    mora_fixed_enabled: parseFlag(i.mora_fixed_enabled),
+    mora_fixed_amount: parseAmount(i.mora_fixed_amount),
+  };
+}
+
+/** Interpreta el flag de herencia de la API: true = hereda General, false = personalizado, null = no indicado/ inválido. */
+export function parseInheritFlag(v: any): boolean | null {
+  const f = parseFlag(v);
+  return f === null ? null : f === 1;
+}
+
+/** true si el producto tiene mora PERSONALIZADA (mora_inherit_tenant = 0). Sin el flag -> hereda. */
+export function productHasCustomMora(product: any): boolean {
+  return !!product && product.mora_inherit_tenant !== undefined && product.mora_inherit_tenant !== null
+    && Number(product.mora_inherit_tenant) === 0;
+}
+
+/**
+ * Resuelve la mora de un préstamo NUEVO: explícito > producto personalizado > global del tenant > sistema.
+ * Cada campo se resuelve por separado; un valor inválido (p. ej. negativo) se ignora y cae al siguiente nivel.
+ * `product` puede ser la fila de loan_products, su id, o nada (flujo sin producto: global > sistema).
+ * Un producto de OTRO tenant se ignora. El resultado se guarda tal cual en `loans` (instantánea): cambios
+ * posteriores en General o en el producto no lo afectan.
+ */
+export function resolveMoraConfig(db: any, tenantId: string, explicit?: any, product?: any): ResolvedMora {
   const row = db.prepare(
     'SELECT mora_rate_daily, mora_grace_days, mora_base, mora_fixed_enabled, mora_fixed_amount FROM tenant_settings WHERE tenant_id=?'
   ).get(tenantId) as any;
+  let prod: any = null;
+  if (product) {
+    prod = typeof product === 'string'
+      ? db.prepare('SELECT * FROM loan_products WHERE id=? AND tenant_id=?').get(product, tenantId)
+      : product;
+    if (prod && prod.tenant_id && prod.tenant_id !== tenantId) prod = null;
+  }
+  const prodCustom = productHasCustomMora(prod);
   const ex = explicit || {};
   const sources = {} as Record<keyof MoraSnapshot, MoraSource>;
   const pick = <T>(key: keyof MoraSnapshot, parse: (v: any) => T | null): T => {
     const e = parse(ex[key]);
     if (e !== null) { sources[key] = 'loan'; return e; }
+    const p = prodCustom ? parse(prod[key]) : null;
+    if (p !== null) { sources[key] = 'product'; return p; }
     const t = row ? parse(row[key]) : null;
     if (t !== null) { sources[key] = 'tenant'; return t; }
     sources[key] = 'system';

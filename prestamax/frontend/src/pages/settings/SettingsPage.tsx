@@ -25,13 +25,15 @@ import { AMORTIZATION_TYPES } from '@/lib/amortization'
 import { GeneralSectionId, parseGeneralSection, isLegacySectionAlias } from '@/lib/generalSections'
 import { normalizeSelection, toggleSelection, parseStoredCurrencies, deriveMultiCurrency } from '@/lib/currencyOptions'
 import CurrencyMultiSelect from '@/components/shared/CurrencyMultiSelect'
+import ProductMoraSection from '@/components/shared/ProductMoraSection'
+import { MoraValues, ProductMoraForm, formForProduct, productIsCustom, validateMoraForm, moraFormPayload, shouldSendMora } from '@/lib/productMora'
 
 // ─── Interfaces ───────────────────────────────────────────────────
 interface TenantData { name: string; email: string; phone: string; address: string; currency: string; scoreMode: string; signatureMode: string; rnc: string; representativeName: string; logoUrl: string; signatureUrl: string; city: string; notaryName: string; notaryCollegiateNumber: string; notaryOfficeAddress: string; acreedorIdNumber: string; testigo1Nombre: string; testigo1Id: string; testigo1Domicilio: string; testigo2Nombre: string; testigo2Id: string; testigo2Domicilio: string }
 interface SettingsData { moraRateDaily: number; moraGraceDays: number; rebateEnabled: number; rebateType: string; moraBase: string; moraFixedEnabled: number; moraFixedAmount: number }
 // Monedas de operación: el flag multimoneda no se edita; se deriva de la selección al guardar.
 interface CurrencySettings { enabledCurrencies: string[] }
-interface LoanProduct { id: string; name: string; code: string; type: string; rate: number; minTerm: number; maxTerm: number; isActive: number; paymentFrequency: string; amortizationType: string; minAmount: number; maxAmount: number; requiresGuarantee?: boolean | number }
+interface LoanProduct { id: string; name: string; code: string; type: string; rate: number; minTerm: number; maxTerm: number; isActive: number; paymentFrequency: string; amortizationType: string; minAmount: number; maxAmount: number; requiresGuarantee?: boolean | number; moraInheritTenant?: number; effectiveMora?: Partial<MoraValues> }
 interface Member { id: string; userId: string; fullName: string; email: string; roles: string; isActive: number; userActive: number; branchId: string | null; commissionPercent?: number; lastLogin: string | null }
 interface Branch { id: string; name: string; address: string; phone: string; isActive: number }
 interface BankAccount { id: string; bankName: string; accountNumber: string; accountType: string; accountHolder: string; currency: string; isActive: number; initialBalance: number; currentBalance: number; loanedBalance: number }
@@ -124,6 +126,9 @@ const SettingsPage: React.FC = () => {
   const [products, setProducts] = useState<LoanProduct[]>([])
   const [showProductForm, setShowProductForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<LoanProduct | null>(null)
+  // Mora del producto: por defecto hereda la configuración general (valores generales vigentes para mostrar y precargar)
+  const [productMora, setProductMora] = useState<ProductMoraForm>(() => formForProduct(null, null))
+  const [moraDefaults, setMoraDefaults] = useState<MoraValues | null>(null)
   const [newProduct, setNewProduct] = useState({ name:'', code:'', description:'', type:'personal', minAmount:'', maxAmount:'', minTerm:'', maxTerm:'', interestRate:'', paymentFrequency:'monthly', amortizationType:'fixed_installment', requiresGuarantee: false })
 
   // Users
@@ -222,8 +227,9 @@ const SettingsPage: React.FC = () => {
           setApprovalThreshold(threshold != null ? String(threshold) : '')
         }
       } else if (tab === 'products') {
-        const res = await api.get('/products')
+        const [res, defRes] = await Promise.all([api.get('/products'), api.get('/products/mora-defaults').catch(() => ({ data: null }))])
         setProducts(Array.isArray(res.data) ? res.data : [])
+        setMoraDefaults(defRes.data ?? null)
       } else if (tab === 'users') {
         const res = await api.get('/settings/users')
         setMembers(Array.isArray(res.data) ? res.data : [])
@@ -342,11 +348,15 @@ const SettingsPage: React.FC = () => {
       interestRate: String(p.rate), paymentFrequency: p.paymentFrequency,
       amortizationType: p.amortizationType, requiresGuarantee: !!p.requiresGuarantee,
     })
+    setProductMora(formForProduct(p, moraDefaults))
     setShowProductForm(true)
   }
 
   const handleAddProduct = async () => {
     if (!newProduct.name || !newProduct.code) return toast.error(tGen('set.prod_name_req'))
+    const moraErr = validateMoraForm(productMora)
+    if (moraErr) return toast.error(tGen(moraErr))
+    const wasCustom = productIsCustom(editingProduct)
     const payload = {
       name: newProduct.name, code: newProduct.code, description: newProduct.description || null,
       type: newProduct.type, minAmount: parseFloat(newProduct.minAmount)||0, maxAmount: parseFloat(newProduct.maxAmount)||0,
@@ -354,6 +364,8 @@ const SettingsPage: React.FC = () => {
       interestRate: parseFloat(newProduct.interestRate)||0,
       paymentFrequency: newProduct.paymentFrequency, amortizationType: newProduct.amortizationType,
       requiresGuarantee: newProduct.requiresGuarantee,
+      // Mora: solo se envía si cambia (un producto que ya heredaba y sigue heredando no se reescribe)
+      ...(shouldSendMora(wasCustom, productMora) ? moraFormPayload(productMora) : {}),
     }
     try {
       if (editingProduct) {
@@ -366,6 +378,7 @@ const SettingsPage: React.FC = () => {
       setShowProductForm(false)
       setEditingProduct(null)
       setNewProduct({ name:'', code:'', description:'', type:'personal', minAmount:'', maxAmount:'', minTerm:'', maxTerm:'', interestRate:'', paymentFrequency:'monthly', amortizationType:'fixed_installment', requiresGuarantee: false })
+      setProductMora(formForProduct(null, moraDefaults))
       loadTab('products')
     } catch (err: any) { toast.error(err?.response?.data?.error || tGen('set.prod_error')) }
   }
@@ -1253,7 +1266,7 @@ const SettingsPage: React.FC = () => {
                 <Card className="bg-slate-50">
                   <div className="flex justify-between items-center mb-4">
                     <h4 className="font-semibold">{editingProduct ? tGen('set.edit_product') : tGen('set.create_product')}</h4>
-                    <button onClick={()=>{setShowProductForm(false);setEditingProduct(null);setNewProduct({name:'',code:'',description:'',type:'personal',minAmount:'',maxAmount:'',minTerm:'',maxTerm:'',interestRate:'',paymentFrequency:'monthly',amortizationType:'fixed_installment',requiresGuarantee:false})}} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>
+                    <button onClick={()=>{setShowProductForm(false);setEditingProduct(null);setNewProduct({name:'',code:'',description:'',type:'personal',minAmount:'',maxAmount:'',minTerm:'',maxTerm:'',interestRate:'',paymentFrequency:'monthly',amortizationType:'fixed_installment',requiresGuarantee:false});setProductMora(formForProduct(null, moraDefaults))}} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <Input label={tGen('set.name_req')} value={newProduct.name} onChange={e=>setNewProduct(p=>({...p,name:e.target.value}))} />
@@ -1302,10 +1315,11 @@ const SettingsPage: React.FC = () => {
                         <span className="block text-xs text-slate-500 mt-0.5">{tGen('set.requires_guarantee_desc')}</span>
                       </span>
                     </label>
+                    <ProductMoraSection value={productMora} onChange={setProductMora} globals={moraDefaults} />
                   </div>
                   <div className="flex gap-2 mt-4">
                     <Button size="sm" onClick={handleAddProduct}>{editingProduct ? tGen('set.update') : tGen('set.create')}</Button>
-                    <Button size="sm" variant="ghost" onClick={()=>{setShowProductForm(false);setEditingProduct(null)}}>{tGen('common.cancel')}</Button>
+                    <Button size="sm" variant="ghost" onClick={()=>{setShowProductForm(false);setEditingProduct(null);setProductMora(formForProduct(null, moraDefaults))}}>{tGen('common.cancel')}</Button>
                   </div>
                 </Card>
               )}

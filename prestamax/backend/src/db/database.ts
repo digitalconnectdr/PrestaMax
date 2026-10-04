@@ -1029,6 +1029,16 @@ export function initializeDatabase(): void {
   // Consolidacion: a que prestamo nuevo quedo consolidado un prestamo viejo.
   try { db.exec(`ALTER TABLE loans ADD COLUMN consolidated_into_loan_id TEXT`); } catch(_) {}
 
+  // Mora por producto (Global -> Producto -> Prestamo). Migracion ADITIVA: solo agrega columnas,
+  // no reescribe ni borra datos. mora_inherit_tenant = 1 (por defecto, tambien para los productos
+  // que ya existen) significa "usar la configuracion general de la empresa": los valores historicos
+  // loan_products.mora_rate_daily / mora_grace_days (p. ej. 0.001 / 3 del seed, que nunca tuvieron UI)
+  // NO cuentan como personalizacion. Solo mora_inherit_tenant = 0 activa los valores propios del producto.
+  try { db.exec(`ALTER TABLE loan_products ADD COLUMN mora_inherit_tenant INTEGER NOT NULL DEFAULT 1`); } catch(_) {}
+  try { db.exec(`ALTER TABLE loan_products ADD COLUMN mora_base TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE loan_products ADD COLUMN mora_fixed_enabled INTEGER`); } catch(_) {}
+  try { db.exec(`ALTER TABLE loan_products ADD COLUMN mora_fixed_amount REAL`); } catch(_) {}
+
   // Habeas data / derecho al olvido: marca cuando un cliente pidio que se
   // borraran sus datos personales. Antes no existia ningun mecanismo para
   // esto -- se implementa como ANONIMIZACION (no borrado duro) para conservar
@@ -1473,7 +1483,7 @@ export function seedDefaultLoanProducts(db: any, tenantId: string): void {
       db.prepare(`INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
         min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,mora_rate_daily,mora_grace_days,
         requires_guarantee,requires_approval,allows_prepayment,rebate_policy,is_san_type,is_reditos)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0.001,3,0,0,1,'proportional',0,0)`).run(
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL,0,0,1,'proportional',0,0)`).run(
         crypto.randomUUID(), tenantId, 'Préstamo General', 'GENERAL', 'personal',
         'Producto de ejemplo creado automáticamente. Personalízalo o crea más productos desde Configuración → Productos.',
         1000, 50000, 10, 'monthly', 1, 12, 'months', 'monthly', 'fixed_installment'
@@ -1484,7 +1494,7 @@ export function seedDefaultLoanProducts(db: any, tenantId: string): void {
       db.prepare(`INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
         min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,mora_rate_daily,mora_grace_days,
         requires_guarantee,requires_approval,allows_prepayment,rebate_policy,is_san_type,is_reditos)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0.001,3,1,1,1,'proportional',0,0)`).run(
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,NULL,NULL,1,1,1,'proportional',0,0)`).run(
         crypto.randomUUID(), tenantId, 'Préstamo con Garantía', 'GARANTIA', 'personal',
         'Producto de ejemplo que exige registrar un bien en garantía (prenda) antes de aprobar el préstamo. Ideal para financiar vehículos, motocicletas, electrodomésticos u otros bienes de valor. Personalízalo o crea más productos desde Configuración → Productos.',
         5000, 150000, 10, 'monthly', 3, 24, 'months', 'monthly', 'fixed_installment'

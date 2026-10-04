@@ -170,10 +170,10 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
     // La moneda debe estar habilitada para el tenant (DOP siempre lo está). Solo aplica a
     // préstamos NUEVOS: los existentes conservan su moneda aunque luego se deshabilite.
     if (!isCurrencyEnabled(db, req.tenant.id, currency)) return res.status(400).json(currencyNotEnabledError(currency));
-    // Mora: valores explícitos del préstamo (si vienen) > mora global del tenant > sistema.
+    // Mora: valores explícitos del préstamo (si vienen) > producto personalizado > mora global del tenant > sistema.
     const moraErr = validateMoraInput(d);
     if (moraErr) return res.status(400).json({ error: moraErr });
-    const mora = resolveMoraConfig(db, req.tenant.id, d);
+    const mora = resolveMoraConfig(db, req.tenant.id, d, product);
     const exchange_rate_to_dop = currency === 'DOP' ? 1.0 : (parseFloat(d.exchange_rate_to_dop) || 1.0);
     // Validate bank account currency matches loan currency if provided
     if (d.disbursement_bank_account_id) {
@@ -268,10 +268,10 @@ router.post('/consolidate', authenticate, requireTenant, requirePermission('loan
     const product = db.prepare('SELECT * FROM loan_products WHERE id=?').get(d.product_id) as any;
     if (!product) return res.status(404).json({ error: 'Producto de préstamo no encontrado' });
 
-    // Mora del préstamo consolidado: mora global del tenant (o constantes del sistema) como
-    // instantánea. Moneda: hereda la de los préstamos consolidados (flujo histórico; no se
-    // bloquea por moneda deshabilitada para no impedir refinanciar deuda ya existente).
-    const moraCfg = resolveMoraConfig(db, req.tenant.id);
+    // Mora del préstamo consolidado: producto elegido (si es personalizado) > mora global del tenant
+    // > sistema, como instantánea. Moneda: hereda la de los préstamos consolidados (flujo histórico;
+    // no se bloquea por moneda deshabilitada para no impedir refinanciar deuda ya existente).
+    const moraCfg = resolveMoraConfig(db, req.tenant.id, undefined, product);
 
     const newId = uuid();
     const loan_number = nextDocNumber(db, 'loans', 'loan_number', req.tenant.id, `PRE-${new Date().getFullYear()}-`, 5);
@@ -998,8 +998,6 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
 
   const results: { row: number; status: 'created' | 'error'; loanNumber?: string; clientName?: string; error?: string; code?: string }[] = [];
   let activeLimitHit: ReturnType<typeof checkActiveLoanLimit> = null;
-  // Mora de los préstamos importados: mora global del tenant (o sistema) como instantánea.
-  const moraCfg = resolveMoraConfig(db, req.tenant.id);
 
   // Find or create a generic migration product for this tenant
   const ensureProduct = (type: string, rate: number, rateType: string, freq: string, amorType: string): string => {
@@ -1077,6 +1075,9 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
 
       // Find or create loan product
       const productId = ensureProduct(loanType, rate, rateType, freq, amorType);
+      // Mora de cada préstamo importado: producto "Migración" (hereda la configuración general salvo que el
+      // tenant lo haya personalizado) > mora global del tenant > sistema; se guarda como instantánea.
+      const moraCfg = resolveMoraConfig(db, req.tenant.id, undefined, productId);
 
       // Create loan
       const loanId = uuid();

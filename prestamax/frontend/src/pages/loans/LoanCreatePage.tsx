@@ -7,6 +7,7 @@ import Input from '@/components/ui/Input'
 import { PageLoadingState } from '@/components/ui/Loading'
 import { ArrowLeft, ArrowRight, Check, DollarSign, User, Settings, Globe } from 'lucide-react'
 import { formatCurrency, SUPPORTED_CURRENCIES } from '@/lib/utils'
+import { pctFromFraction } from '@/lib/productMora'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { AMORTIZATION_TYPES, AMORT_LABELS, DEFAULT_AMORTIZATION, getAmortLabel } from '@/lib/amortization'
@@ -46,6 +47,9 @@ interface LoanProduct {
   isSanType: boolean
   moraRateDaily: number
   moraGraceDays: number
+  // Mora con la que nacerá un préstamo de este producto (producto personalizado o configuración general).
+  // El backend la resuelve y la guarda como instantánea en el préstamo al crearlo.
+  effectiveMora?: { moraRateDaily: number; moraGraceDays: number; moraBase: string; moraFixedEnabled: number; moraFixedAmount: number }
 }
 
 // AMORT_LABELS movido a @/lib/amortization
@@ -996,6 +1000,19 @@ const LoanCreatePage: React.FC = () => {
                     <span className="text-slate-500">{t('lc.c_amort')}</span>
                     <span className="font-medium">{getAmortLabel(form.amortizationType)}</span>
                   </div>
+                  {selectedProduct.effectiveMora && (
+                    <div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-500">{t('lc.c_mora')}</span>
+                        <span className="font-medium text-right">
+                          {selectedProduct.effectiveMora.moraFixedEnabled
+                            ? t('lc.c_mora_fixed').replace('{amt}', formatCurrency(selectedProduct.effectiveMora.moraFixedAmount, form.currency)).replace('{grace}', String(selectedProduct.effectiveMora.moraGraceDays))
+                            : t('lc.c_mora_pct').replace('{rate}', pctFromFraction(selectedProduct.effectiveMora.moraRateDaily)).replace('{grace}', String(selectedProduct.effectiveMora.moraGraceDays))}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">{t('lc.c_mora_note')}</p>
+                    </div>
+                  )}
                 </div>
               </div>
               {form.purpose && (

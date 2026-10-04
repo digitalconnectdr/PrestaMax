@@ -1,13 +1,39 @@
 import { Router, Response } from 'express';
 import { getDb, uuid } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { resolveMoraConfig, validateMoraInput, normalizeProductMoraFields, parseInheritFlag, productHasCustomMora } from '../lib/moraConfig';
 
 const router = Router();
+
+// Mora efectiva con la que nacería un préstamo de este producto (producto personalizado, o la
+// mora global si el producto la hereda). El frontend la usa para mostrar/precargar; la fuente de
+// verdad al crear el préstamo sigue siendo resolveMoraConfig en el backend.
+const withEffectiveMora = (db: any, tenantId: string, p: any) => {
+  const custom = productHasCustomMora(p);
+  const { sources, ...values } = resolveMoraConfig(db, tenantId, undefined, p);
+  // Un producto que hereda no expone sus columnas mora_* históricas (0.001 / 3 del seed): no son suyas.
+  const base = custom ? p : { ...p, mora_rate_daily: null, mora_grace_days: null, mora_base: null, mora_fixed_enabled: null, mora_fixed_amount: null };
+  return {
+    ...base,
+    mora_inherit_tenant: custom ? 0 : 1,
+    effective_mora: { ...values, source: custom ? 'product' : 'tenant' },
+  };
+};
 
 router.get('/', authenticate, requireTenant, requirePermission('loans.view'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    res.json(db.prepare('SELECT * FROM loan_products WHERE tenant_id=? ORDER BY name').all(req.tenant.id));
+    const rows = db.prepare('SELECT * FROM loan_products WHERE tenant_id=? ORDER BY name').all(req.tenant.id) as any[];
+    res.json(rows.map(p => withEffectiveMora(db, req.tenant.id, p)));
+  } catch(e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// Mora GLOBAL vigente de la empresa (con constantes del sistema donde falte un valor válido): se muestra
+// en el formulario de productos como referencia y se precarga al elegir "Personalizar".
+router.get('/mora-defaults', authenticate, requireTenant, (req: AuthRequest, res: Response) => {
+  try {
+    const { sources, ...values } = resolveMoraConfig(getDb(), req.tenant.id);
+    res.json(values);
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
 
@@ -21,21 +47,32 @@ router.post('/', authenticate, requireTenant, requirePermission('settings.produc
     const minTerm   = d.min_term   ?? d.minTerm   ?? null;
     const maxTerm   = d.max_term   ?? d.maxTerm   ?? null;
     if (rate === null || rate === undefined) return res.status(400).json({ error: 'La tasa de interes es requerida' });
+    // Mora del producto: por defecto HEREDA la configuración general. Solo si se pide explícitamente
+    // personalizarla (mora_inherit_tenant = false) se guardan valores propios (validados).
+    const custom = parseInheritFlag(d.mora_inherit_tenant) === false;
+    if (custom) {
+      const moraErr = validateMoraInput(d);
+      if (moraErr) return res.status(400).json({ error: moraErr });
+    }
+    const mora = custom ? normalizeProductMoraFields(d)
+      : { mora_rate_daily: null, mora_grace_days: null, mora_base: null, mora_fixed_enabled: null, mora_fixed_amount: null };
     const code = d.code ?? null;
     db.prepare(`INSERT INTO loan_products (id,tenant_id,name,code,type,description,min_amount,max_amount,rate,rate_type,
-      min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,mora_rate_daily,mora_grace_days,
+      min_term,max_term,term_unit,payment_frequency,amortization_type,disbursement_fee,
+      mora_inherit_tenant,mora_rate_daily,mora_grace_days,mora_base,mora_fixed_enabled,mora_fixed_amount,
       requires_guarantee,requires_approval,allows_prepayment,rebate_policy,is_san_type,is_reditos) VALUES
-      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       id, req.tenant.id, d.name, code, d.type, d.description||null,
       minAmount, maxAmount, rate, d.rate_type||'monthly',
       minTerm, maxTerm, d.term_unit||'months', d.payment_frequency||'monthly',
       d.amortization_type||'fixed_installment',
-      d.disbursement_fee ?? 0, d.mora_rate_daily ?? null, d.mora_grace_days ?? null,
+      d.disbursement_fee ?? 0,
+      custom ? 0 : 1, mora.mora_rate_daily, mora.mora_grace_days, mora.mora_base, mora.mora_fixed_enabled, mora.mora_fixed_amount,
       d.requires_guarantee ? 1 : 0, d.requires_approval !== false ? 1 : 0,
       d.allows_prepayment !== false ? 1 : 0,
       d.rebate_policy||'proportional', d.is_san_type ? 1 : 0, d.is_reditos ? 1 : 0
     );
-    res.status(201).json(db.prepare('SELECT * FROM loan_products WHERE id=?').get(id));
+    res.status(201).json(withEffectiveMora(db, req.tenant.id, db.prepare('SELECT * FROM loan_products WHERE id=?').get(id)));
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed' }); }
 });
 
@@ -57,9 +94,16 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
     const paymentFreq  = norm(d.payment_frequency ?? d.paymentFrequency);
     const amortType    = norm(d.amortization_type ?? d.amortizationType);
     const rateType     = norm(d.rate_type ?? d.rateType);
-    const moraRate     = norm(d.mora_rate_daily ?? d.moraRateDaily);
-    const moraGrace    = norm(d.mora_grace_days ?? d.moraGraceDays);
     const disbFee      = norm(d.disbursement_fee ?? d.disbursementFee);
+    // Mora del producto: SOLO si la petición indica mora_inherit_tenant se reemplaza el grupo completo.
+    //  - true  (Usar configuración general): se limpian los valores propios del producto.
+    //  - false (Personalizar): se guardan los valores enviados (ausentes = null -> caen a la global).
+    // Sin ese campo, la mora del producto no se toca. Se valida ANTES de escribir nada.
+    const inheritReq = parseInheritFlag(d.mora_inherit_tenant);
+    if (inheritReq === false) {
+      const moraErr = validateMoraInput(d);
+      if (moraErr) return res.status(400).json({ error: moraErr });
+    }
     const reqGuar      = d.requires_guarantee ?? d.requiresGuarantee;
     const reqApp       = d.requires_approval ?? d.requiresApproval;
     const allowPre     = d.allows_prepayment ?? d.allowsPrepayment;
@@ -68,6 +112,8 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
     const isReditos    = d.is_reditos ?? d.isReditos;
     const isActive     = d.is_active ?? d.isActive;
 
+    db.exec('BEGIN');
+    try {
     db.prepare(`UPDATE loan_products SET
       name=COALESCE(?,name), code=COALESCE(?,code), type=COALESCE(?,type), description=COALESCE(?,description),
       min_amount=COALESCE(?,min_amount), max_amount=COALESCE(?,max_amount),
@@ -75,7 +121,6 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
       min_term=COALESCE(?,min_term), max_term=COALESCE(?,max_term),
       term_unit=COALESCE(?,term_unit), payment_frequency=COALESCE(?,payment_frequency),
       amortization_type=COALESCE(?,amortization_type), disbursement_fee=COALESCE(?,disbursement_fee),
-      mora_rate_daily=COALESCE(?,mora_rate_daily), mora_grace_days=COALESCE(?,mora_grace_days),
       requires_guarantee=COALESCE(?,requires_guarantee), requires_approval=COALESCE(?,requires_approval),
       allows_prepayment=COALESCE(?,allows_prepayment), rebate_policy=COALESCE(?,rebate_policy),
       is_san_type=COALESCE(?,is_san_type), is_reditos=COALESCE(?,is_reditos),
@@ -87,7 +132,6 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
       minTerm, maxTerm,
       termUnit, paymentFreq,
       amortType, disbFee,
-      moraRate, moraGrace,
       reqGuar === undefined ? null : (reqGuar ? 1 : 0),
       reqApp === undefined ? null : (reqApp ? 1 : 0),
       allowPre === undefined ? null : (allowPre ? 1 : 0),
@@ -97,7 +141,18 @@ router.put('/:id', authenticate, requireTenant, requirePermission('settings.prod
       isActive === undefined ? null : (isActive ? 1 : 0),
       req.params.id, req.tenant.id
     );
-    res.json(db.prepare('SELECT * FROM loan_products WHERE id=?').get(req.params.id));
+    if (inheritReq !== null) {
+      const m = inheritReq
+        ? { mora_rate_daily: null, mora_grace_days: null, mora_base: null, mora_fixed_enabled: null, mora_fixed_amount: null }
+        : normalizeProductMoraFields(d);
+      db.prepare(`UPDATE loan_products SET mora_inherit_tenant=?, mora_rate_daily=?, mora_grace_days=?, mora_base=?,
+        mora_fixed_enabled=?, mora_fixed_amount=? WHERE id=? AND tenant_id=?`).run(
+        inheritReq ? 1 : 0, m.mora_rate_daily, m.mora_grace_days, m.mora_base, m.mora_fixed_enabled, m.mora_fixed_amount,
+        req.params.id, req.tenant.id);
+    }
+    db.exec('COMMIT');
+    } catch (txErr) { try { db.exec('ROLLBACK'); } catch (_) { /* noop */ } throw txErr; }
+    res.json(withEffectiveMora(db, req.tenant.id, db.prepare('SELECT * FROM loan_products WHERE id=?').get(req.params.id)));
   } catch(e) {
     console.error('PUT /products/:id error:', e);
     res.status(500).json({ error: (e as any)?.message || 'Failed' });
