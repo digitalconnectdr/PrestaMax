@@ -5,17 +5,22 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string
   label?: string
   helperText?: string
+  /** Elemento junto a la etiqueta (p. ej. una ayuda ⓘ). */
+  labelAddon?: React.ReactNode
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, error, label, helperText, type = 'text', ...props }, ref) => {
+  ({ className, error, label, helperText, labelAddon, type = 'text', ...props }, ref) => {
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            {label}
-            {props.required && <span className="text-red-500">*</span>}
-          </label>
+          <div className="flex items-center gap-1.5 mb-1">
+            <label className="block text-sm font-medium text-slate-700">
+              {label}
+              {props.required && <span className="text-red-500">*</span>}
+            </label>
+            {labelAddon}
+          </div>
         )}
         <input
           type={type}

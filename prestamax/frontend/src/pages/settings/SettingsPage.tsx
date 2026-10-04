@@ -25,6 +25,7 @@ import { AMORTIZATION_TYPES } from '@/lib/amortization'
 import { GeneralSectionId, parseGeneralSection, isLegacySectionAlias } from '@/lib/generalSections'
 import { normalizeSelection, toggleSelection, parseStoredCurrencies, deriveMultiCurrency } from '@/lib/currencyOptions'
 import CurrencyMultiSelect from '@/components/shared/CurrencyMultiSelect'
+import InfoTip from '@/components/shared/InfoTip'
 import ProductMoraSection from '@/components/shared/ProductMoraSection'
 import { MoraValues, ProductMoraForm, formForProduct, productIsCustom, validateMoraForm, moraFormPayload, shouldSendMora } from '@/lib/productMora'
 
@@ -877,7 +878,17 @@ const SettingsPage: React.FC = () => {
                       onToggle={code => setCurrencySettings(prev => ({ enabledCurrencies: toggleSelection(prev.enabledCurrencies, code, SUPPORTED_CURRENCIES.map(c => c.code)) }))}
                     />
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.score_mode')}</label>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <label className="block text-sm font-medium text-slate-700">{tGen('set.score_mode')}</label>
+                        <InfoTip
+                          ariaLabel={tGen('set.tip.score_aria')}
+                          intro={tGen('set.tip.score_intro')}
+                          items={[
+                            { term: tGen('set.score_global'), text: tGen('set.tip.score_global') },
+                            { term: tGen('set.score_per_tenant'), text: tGen('set.tip.score_tenant') },
+                          ]}
+                        />
+                      </div>
                       <select value={tenant.scoreMode} onChange={e=>setTenant(p=>({...p,scoreMode:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="global">{tGen('set.score_global')}</option>
                         <option value="per_tenant">{tGen('set.score_per_tenant')}</option>
@@ -999,7 +1010,18 @@ const SettingsPage: React.FC = () => {
                   <p className="text-xs text-slate-500 mb-4">{tGen('set.mora_scope_note')}</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.mora_apply_on')}</label>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <label className="block text-sm font-medium text-slate-700">{tGen('set.mora_apply_on')}</label>
+                        <InfoTip
+                          ariaLabel={tGen('set.tip.apply_aria')}
+                          intro={tGen('set.tip.apply_intro')}
+                          items={[
+                            { term: tGen('set.mora_cuota'), text: tGen('set.tip.apply_cuota') },
+                            { term: tGen('set.tip.apply_term_cap'), text: tGen('set.tip.apply_capital') },
+                          ]}
+                          note={tGen('set.tip.apply_note')}
+                        />
+                      </div>
                       <select value={moraSettings.moraBase} onChange={e=>setMoraSettings(p=>({...p,moraBase:e.target.value}))} disabled={moraSettings.moraFixedEnabled === 1} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed">
                         <option value="cuota_vencida">{tGen('set.mora_cuota')}</option>
                         <option value="capital_pendiente">{tGen('set.mora_cap_pend')}</option>
@@ -1008,11 +1030,22 @@ const SettingsPage: React.FC = () => {
                       <p className="text-xs text-slate-400 mt-1">{moraSettings.moraFixedEnabled === 1 ? tGen('set.mora_fixed_na') : tGen('set.mora_base_help')}</p>
                     </div>
                     <Input label={tGen('set.mora_rate')} type="number" step="0.001" min="0" max="100" value={moraRateText}
+                      labelAddon={<InfoTip ariaLabel={tGen('set.tip.rate_aria')} intro={tGen('set.tip.rate_intro')} items={[{ term: tGen('set.tip.example'), text: tGen('set.tip.rate_example') }]} note={tGen('set.tip.rate_note')} />}
                       onChange={e=>setMoraRateText(e.target.value)} disabled={moraSettings.moraFixedEnabled === 1} helperText={moraSettings.moraFixedEnabled === 1 ? tGen('set.mora_fixed_na') : undefined} />
                     <Input label={tGen('set.mora_grace')} type="number" value={moraSettings.moraGraceDays}
                       onChange={e=>setMoraSettings(p=>({...p,moraGraceDays:parseInt(e.target.value)||0}))} />
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.mora_fixed')}</label>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <label className="block text-sm font-medium text-slate-700">{tGen('set.mora_fixed')}</label>
+                        <InfoTip
+                          ariaLabel={tGen('set.tip.fixed_aria')}
+                          intro={tGen('set.tip.fixed_intro')}
+                          items={[
+                            { term: tGen('set.tip.fixed_term_on'), text: tGen('set.tip.fixed_on') },
+                            { term: tGen('set.tip.fixed_term_off'), text: tGen('set.tip.fixed_off') },
+                          ]}
+                        />
+                      </div>
                       <select value={moraSettings.moraFixedEnabled} onChange={e=>setMoraSettings(p=>({...p,moraFixedEnabled:parseInt(e.target.value)}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value={1}>{tGen('set.enabled')}</option>
                         <option value={0}>{tGen('set.disabled')}</option>
@@ -1025,14 +1058,34 @@ const SettingsPage: React.FC = () => {
                       />
                     )}
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.rebate')}</label>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <label className="block text-sm font-medium text-slate-700">{tGen('set.rebate')}</label>
+                        <InfoTip
+                          ariaLabel={tGen('set.tip.rebate_aria')}
+                          intro={tGen('set.tip.rebate_intro')}
+                          items={[
+                            { term: tGen('set.enabled_f'), text: tGen('set.tip.rebate_on') },
+                            { term: tGen('set.disabled_f'), text: tGen('set.tip.rebate_off') },
+                          ]}
+                        />
+                      </div>
                       <select value={moraSettings.rebateEnabled} onChange={e=>setMoraSettings(p=>({...p,rebateEnabled:parseInt(e.target.value)}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value={1}>{tGen('set.enabled_f')}</option>
                         <option value={0}>{tGen('set.disabled_f')}</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.rebate_type')}</label>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <label className="block text-sm font-medium text-slate-700">{tGen('set.rebate_type')}</label>
+                        <InfoTip
+                          ariaLabel={tGen('set.tip.rebate_type_aria')}
+                          intro={tGen('set.tip.rebate_type_intro')}
+                          items={[
+                            { term: tGen('set.rebate_proportional'), text: tGen('set.tip.rebate_prop') },
+                            { term: tGen('set.rebate_fixed'), text: tGen('set.tip.rebate_fix') },
+                          ]}
+                        />
+                      </div>
                       <select value={moraSettings.rebateType} onChange={e=>setMoraSettings(p=>({...p,rebateType:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="proportional">{tGen('set.rebate_proportional')}</option>
                         <option value="fixed">{tGen('set.rebate_fixed')}</option>
