@@ -946,6 +946,15 @@ const TR: Record<string, Tri> = {
   'set.rebate_fixed':   { es: 'Fija', en: 'Fixed', pt: 'Fixa' },
   'set.saving':         { es: 'Guardando...', en: 'Saving...', pt: 'Salvando...' },
   'set.save_changes':   { es: 'Guardar Cambios', en: 'Save Changes', pt: 'Salvar Alterações' },
+  // Secciones de Configuración > General (navegación secundaria)
+  'set.section.nav_aria':   { es: 'Secciones de configuración general', en: 'General settings sections', pt: 'Seções da configuração geral' },
+  'set.section.company':    { es: 'Empresa', en: 'Company', pt: 'Empresa' },
+  'set.section.operation':  { es: 'Operación', en: 'Operation', pt: 'Operação' },
+  'set.section.legal':      { es: 'Legal y documentos', en: 'Legal & documents', pt: 'Legal e documentos' },
+  'set.section.mora':       { es: 'Mora y pagos', en: 'Late fees & payments', pt: 'Multa e pagamentos' },
+  'set.section.currencies': { es: 'Monedas', en: 'Currencies', pt: 'Moedas' },
+  'set.section.account':    { es: 'Cuenta y seguridad', en: 'Account & security', pt: 'Conta e segurança' },
+  'set.save_shared_hint':   { es: 'Guarda los cambios de Empresa, Operación, Legal y Mora a la vez.', en: 'Saves the changes of Company, Operation, Legal and Late fees together.', pt: 'Salva as alterações de Empresa, Operação, Legal e Multa de uma vez.' },
   // Currencies
   'set.currencies_title':{ es: 'Monedas Habilitadas', en: 'Enabled Currencies', pt: 'Moedas Habilitadas' },
   'set.currencies_desc':{ es: 'Activa el soporte multi-moneda para emitir préstamos en otras divisas. El Peso Dominicano (DOP) siempre está activo.', en: 'Enable multi-currency support to issue loans in other currencies. The Dominican Peso (DOP) is always active.', pt: 'Ative o suporte multimoeda para emitir empréstimos em outras moedas. O Peso Dominicano (DOP) está sempre ativo.' },

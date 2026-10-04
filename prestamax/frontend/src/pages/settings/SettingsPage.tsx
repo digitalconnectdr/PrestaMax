@@ -54,6 +54,17 @@ const PATH_TO_TAB: Record<string, string> = {
   '/settings/subscription': 'subscription',
 }
 
+// Secciones de la pestaña General (solo navegación visual: no cambia la ruta ni recarga datos)
+type GeneralSectionId = 'company' | 'operation' | 'legal' | 'mora' | 'currencies' | 'account'
+const GENERAL_SECTIONS: { id: GeneralSectionId; labelKey: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'company',    labelKey: 'set.section.company',    icon: Building2 },
+  { id: 'operation',  labelKey: 'set.section.operation',  icon: Settings },
+  { id: 'legal',      labelKey: 'set.section.legal',      icon: FileText },
+  { id: 'mora',       labelKey: 'set.section.mora',       icon: Calendar },
+  { id: 'currencies', labelKey: 'set.section.currencies', icon: CreditCard },
+  { id: 'account',    labelKey: 'set.section.account',    icon: KeyRound },
+]
+
 const BANKS_DR = ['BHD Banco', 'Banco Popular', 'Banco Qik', 'BanReservas', 'Banco Santa Cruz', 'Banesco', 'Scotiabank', 'Citibank', 'Bancamérica', 'Banco Caribe', 'Asociación Cibao', 'Otro']
 
 // ─── Role hierarchy helpers ──────────────────────────────────────────────────
@@ -77,6 +88,8 @@ const SettingsPage: React.FC = () => {
   const activeTab = PATH_TO_TAB[location.pathname] || 'general'
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  // Sección visible dentro de General (solo UI; todas las secciones permanecen montadas)
+  const [generalSection, setGeneralSection] = useState<GeneralSectionId>('company')
 
   // General
   const [tenant, setTenant] = useState<TenantData>({ name: '', email: '', phone: '', address: '', currency: 'DOP', scoreMode: 'global', signatureMode: 'physical', rnc: '', representativeName: '', logoUrl: '', signatureUrl: '', city: '', notaryName: '', notaryCollegiateNumber: '', notaryOfficeAddress: '', acreedorIdNumber: '', testigo1Nombre: '', testigo1Id: '', testigo1Domicilio: '', testigo2Nombre: '', testigo2Id: '', testigo2Domicilio: '' })
@@ -681,6 +694,34 @@ const SettingsPage: React.FC = () => {
     try { return JSON.parse(member.roles || '[]').join(', ') } catch(_) { return member.roles || '' }
   }
 
+  // ─── Navegación de General (solo UI) ──────────────────────────────
+  // Flechas/Home/End mueven entre las secciones; no hace requests ni cambia la ruta.
+  const handleGeneralTabKeyDown = (e: React.KeyboardEvent) => {
+    const n = GENERAL_SECTIONS.length
+    const idx = GENERAL_SECTIONS.findIndex(s => s.id === generalSection)
+    let next = -1
+    if (e.key === 'ArrowRight') next = (idx + 1) % n
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + n) % n
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = n - 1
+    if (next < 0) return
+    e.preventDefault()
+    const id = GENERAL_SECTIONS[next].id
+    setGeneralSection(id)
+    document.getElementById(`general-tab-${id}`)?.focus()
+  }
+
+  // Misma acción de guardado (handleSaveGeneral) repetida en las 4 secciones que la comparten.
+  const renderSharedSaveBar = () => (
+    <div className="flex items-center gap-3 flex-wrap">
+      <Button onClick={handleSaveGeneral} isLoading={isSaving} disabled={isSaving} className="flex items-center gap-2">
+        <Save className="w-4 h-4" />
+        {isSaving ? tGen('set.saving') : tGen('set.save_changes')}
+      </Button>
+      <p className="text-xs text-slate-500">{tGen('set.save_shared_hint')}</p>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       <div>
@@ -709,319 +750,368 @@ const SettingsPage: React.FC = () => {
         <>
           {/* ── GENERAL ── */}
           {activeTab === 'general' && (
-            <div className="space-y-6">
-              <Card className="bg-slate-50 border-slate-200">
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-[#1e3a5f]/10 flex items-center justify-center flex-shrink-0">
-                      <HelpCircle className="w-5 h-5 text-[#1e3a5f]" />
+            <div className="space-y-4">
+              {/* Ayuda: barra compacta global (mismo destino/comportamiento) */}
+              <div className="flex items-center justify-between gap-3 flex-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <HelpCircle className="w-4 h-4 text-[#1e3a5f] flex-shrink-0" aria-hidden="true" />
+                  <p className="text-sm text-slate-700 truncate" title={tGen('set.help_desc')}>{tGen('set.help_title')}</p>
+                </div>
+                <button type="button" onClick={() => navigate('/help')} className="flex items-center gap-1 text-sm font-medium text-[#1e3a5f] hover:underline flex-shrink-0">
+                  {tGen('set.help_cta')}<ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </div>
+
+              {/* Navegación secundaria (solo UI: no cambia la ruta ni dispara requests) */}
+              <div className="border-b border-slate-200 overflow-x-auto">
+                <div role="tablist" aria-label={tGen('set.section.nav_aria')} className="flex gap-1 min-w-max" onKeyDown={handleGeneralTabKeyDown}>
+                  {GENERAL_SECTIONS.map(sec => {
+                    const SecIcon = sec.icon
+                    const selected = generalSection === sec.id
+                    return (
+                      <button
+                        key={sec.id}
+                        id={`general-tab-${sec.id}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        aria-controls={`general-panel-${sec.id}`}
+                        tabIndex={selected ? 0 : -1}
+                        onClick={() => setGeneralSection(sec.id)}
+                        className={`flex items-center gap-1.5 pb-2.5 px-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a5f] rounded-t ${
+                          selected ? 'border-[#1e3a5f] text-[#1e3a5f] bg-[#1e3a5f]/5' : 'border-transparent text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        <SecIcon className="w-4 h-4" aria-hidden="true" />{tGen(sec.labelKey)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* ── EMPRESA ── */}
+              <div role="tabpanel" id="general-panel-company" aria-labelledby="general-tab-company" hidden={generalSection !== 'company'} className="space-y-6">
+                <Card>
+                  <h3 className="section-title mb-4">{tGen('set.company_info')}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input label={tGen('set.company_name')} value={tenant.name} onChange={e => setTenant(p=>({...p,name:e.target.value}))} />
+                    <Input label={tGen('set.email')} type="email" value={tenant.email} onChange={e => setTenant(p=>({...p,email:e.target.value}))} />
+                    <Input label={tGen('set.phone')} value={tenant.phone} onChange={e => setTenant(p=>({...p,phone:e.target.value}))} />
+                    <Input label={tGen('set.address')} value={tenant.address} onChange={e => setTenant(p=>({...p,address:e.target.value}))} />
+                    <Input label={tGen('set.rnc')} value={tenant.rnc} onChange={e => { const v=e.target.value.replace(/\D/g,'').slice(0,10); setTenant(p=>({...p,rnc:v})) }} placeholder={tGen('set.rnc_ph')} maxLength={10} />
+                    <Input label={tGen('set.rep_name')} value={tenant.representativeName} onChange={e => setTenant(p=>({...p,representativeName:e.target.value}))} placeholder={tGen('set.rep_name_ph')} />
+                  </div>
+                  {/* Logo — file upload (stored as base64) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                        <Image className="w-4 h-4"/>{tGen('set.company_logo')}
+                      </label>
+                      {tenant.logoUrl ? (
+                        <div className="relative border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3">
+                          <img src={tenant.logoUrl} alt="Logo" className="h-14 object-contain rounded" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-slate-600 font-medium">{tGen('set.logo_loaded')}</p>
+                            <button
+                              type="button"
+                              onClick={() => setTenant(p => ({ ...p, logoUrl: '' }))}
+                              className="text-xs text-red-500 hover:text-red-700 mt-0.5"
+                            >
+                              {tGen('set.remove_image')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-lg p-5 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                          <Upload className="w-7 h-7 text-slate-400 mb-1.5" />
+                          <span className="text-sm text-slate-600 font-medium">{tGen('set.click_upload')}</span>
+                          <span className="text-xs text-slate-400 mt-0.5">{tGen('set.img_formats')}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0]
+                              if (!file) return
+                              if (file.size > 2 * 1024 * 1024) { toast.error(tGen('set.img_too_big')); return }
+                              const reader = new FileReader()
+                              reader.onload = ev => setTenant(p => ({ ...p, logoUrl: ev.target?.result as string }))
+                              reader.readAsDataURL(file)
+                            }}
+                          />
+                        </label>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">{tGen('set.var_logo')} <code className="bg-slate-100 px-1 rounded">{'{{company_logo}}'}</code> {tGen('set.var_renders_img')}</p>
+                    </div>
+                  </div>
+                </Card>
+                {renderSharedSaveBar()}
+              </div>
+
+              {/* ── OPERACIÓN ── */}
+              <div role="tabpanel" id="general-panel-operation" aria-labelledby="general-tab-operation" hidden={generalSection !== 'operation'} className="space-y-6">
+                <Card>
+                  <h3 className="section-title mb-4">{tGen('set.section.operation')}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.currency')}</label>
+                      <select value={tenant.currency} onChange={e=>setTenant(p=>({...p,currency:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        {SUPPORTED_CURRENCIES.map(cur => (
+                          <option key={cur.code} value={cur.code}>{cur.code} — {cur.name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-slate-900 text-sm">{tGen('set.help_title')}</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">{tGen('set.help_desc')}</p>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.score_mode')}</label>
+                      <select value={tenant.scoreMode} onChange={e=>setTenant(p=>({...p,scoreMode:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="global">{tGen('set.score_global')}</option>
+                        <option value="per_tenant">{tGen('set.score_per_tenant')}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.sig_mode')}</label>
+                      <select value={tenant.signatureMode} onChange={e=>setTenant(p=>({...p,signatureMode:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="physical">{tGen('set.sig_physical')}</option>
+                        <option value="digital">{tGen('set.sig_digital')}</option>
+                      </select>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => navigate('/help')} className="flex items-center gap-1.5 flex-shrink-0">
-                    {tGen('set.help_cta')}<ArrowRight className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </Card>
-              <Card>
-                <h3 className="section-title mb-1 flex items-center gap-2"><KeyRound className="w-4 h-4" />{tGen('set.sec.title')}</h3>
-                <p className="text-sm text-slate-500 mb-4">{tGen('set.sec.subtitle')}</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                  <Input type="password" label={tGen('set.sec.current_pw')} value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} />
-                  <Input type="password" label={tGen('set.sec.new_pw')} value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} />
-                  <Input type="password" label={tGen('set.sec.confirm_pw')} value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} />
-                </div>
-                <Button size="sm" onClick={handleChangePassword} disabled={isChangingPw}>{isChangingPw ? tGen('common.saving') : tGen('set.sec.change_pw')}</Button>
+                </Card>
 
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{tGen('set.sec.logout_everywhere')}</p>
-                    <p className="text-xs text-slate-500">{tGen('set.sec.logout_everywhere_desc')}</p>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={handleLogoutEverywhere} disabled={isLoggingOutEverywhere}>
-                    {isLoggingOutEverywhere ? tGen('common.saving') : tGen('set.sec.logout_everywhere_cta')}
-                  </Button>
-                </div>
-              </Card>
-              <Card>
-                <h3 className="section-title mb-1">{tGen('common.language')}</h3>
-                <p className="text-sm text-slate-500 mb-4">{tGen('set.lang_desc')}</p>
-                <LanguageSwitcher variant="inline" />
-              </Card>
-              <Card>
-                <h3 className="section-title mb-4">{tGen('set.company_info')}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label={tGen('set.company_name')} value={tenant.name} onChange={e => setTenant(p=>({...p,name:e.target.value}))} />
-                  <Input label={tGen('set.email')} type="email" value={tenant.email} onChange={e => setTenant(p=>({...p,email:e.target.value}))} />
-                  <Input label={tGen('set.phone')} value={tenant.phone} onChange={e => setTenant(p=>({...p,phone:e.target.value}))} />
-                  <Input label={tGen('set.address')} value={tenant.address} onChange={e => setTenant(p=>({...p,address:e.target.value}))} />
-                  <Input label={tGen('set.rnc')} value={tenant.rnc} onChange={e => { const v=e.target.value.replace(/\D/g,'').slice(0,10); setTenant(p=>({...p,rnc:v})) }} placeholder={tGen('set.rnc_ph')} maxLength={10} />
-                  <Input label={tGen('set.rep_name')} value={tenant.representativeName} onChange={e => setTenant(p=>({...p,representativeName:e.target.value}))} placeholder={tGen('set.rep_name_ph')} />
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.currency')}</label>
-                    <select value={tenant.currency} onChange={e=>setTenant(p=>({...p,currency:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {SUPPORTED_CURRENCIES.map(cur => (
-                        <option key={cur.code} value={cur.code}>{cur.code} — {cur.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.score_mode')}</label>
-                    <select value={tenant.scoreMode} onChange={e=>setTenant(p=>({...p,scoreMode:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="global">{tGen('set.score_global')}</option>
-                      <option value="per_tenant">{tGen('set.score_per_tenant')}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.sig_mode')}</label>
-                    <select value={tenant.signatureMode} onChange={e=>setTenant(p=>({...p,signatureMode:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="physical">{tGen('set.sig_physical')}</option>
-                      <option value="digital">{tGen('set.sig_digital')}</option>
-                    </select>
-                  </div>
-                </div>
-                {/* Logo & Signature — file upload (stored as base64) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
-                  {/* Logo */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-                      <Image className="w-4 h-4"/>{tGen('set.company_logo')}
-                    </label>
-                    {tenant.logoUrl ? (
-                      <div className="relative border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3">
-                        <img src={tenant.logoUrl} alt="Logo" className="h-14 object-contain rounded" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-slate-600 font-medium">{tGen('set.logo_loaded')}</p>
-                          <button
-                            type="button"
-                            onClick={() => setTenant(p => ({ ...p, logoUrl: '' }))}
-                            className="text-xs text-red-500 hover:text-red-700 mt-0.5"
-                          >
-                            {tGen('set.remove_image')}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-lg p-5 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                        <Upload className="w-7 h-7 text-slate-400 mb-1.5" />
-                        <span className="text-sm text-slate-600 font-medium">{tGen('set.click_upload')}</span>
-                        <span className="text-xs text-slate-400 mt-0.5">{tGen('set.img_formats')}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={e => {
-                            const file = e.target.files?.[0]
-                            if (!file) return
-                            if (file.size > 2 * 1024 * 1024) { toast.error(tGen('set.img_too_big')); return }
-                            const reader = new FileReader()
-                            reader.onload = ev => setTenant(p => ({ ...p, logoUrl: ev.target?.result as string }))
-                            reader.readAsDataURL(file)
-                          }}
-                        />
-                      </label>
-                    )}
-                    <p className="text-xs text-slate-400 mt-1">{tGen('set.var_logo')} <code className="bg-slate-100 px-1 rounded">{'{{company_logo}}'}</code> {tGen('set.var_renders_img')}</p>
-                  </div>
-
-                  {/* Signature */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-                      <Upload className="w-4 h-4"/>{tGen('set.signature_img')}
-                    </label>
-                    {tenant.signatureUrl ? (
-                      <div className="relative border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3">
-                        <img src={tenant.signatureUrl} alt="Firma" className="h-14 object-contain rounded" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-slate-600 font-medium">{tGen('set.signature_loaded')}</p>
-                          <button
-                            type="button"
-                            onClick={() => setTenant(p => ({ ...p, signatureUrl: '' }))}
-                            className="text-xs text-red-500 hover:text-red-700 mt-0.5"
-                          >
-                            {tGen('set.remove_image')}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-lg p-5 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                        <Upload className="w-7 h-7 text-slate-400 mb-1.5" />
-                        <span className="text-sm text-slate-600 font-medium">{tGen('set.click_upload')}</span>
-                        <span className="text-xs text-slate-400 mt-0.5">{tGen('set.img_formats')}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={e => {
-                            const file = e.target.files?.[0]
-                            if (!file) return
-                            if (file.size > 2 * 1024 * 1024) { toast.error(tGen('set.img_too_big')); return }
-                            const reader = new FileReader()
-                            reader.onload = ev => setTenant(p => ({ ...p, signatureUrl: ev.target?.result as string }))
-                            reader.readAsDataURL(file)
-                          }}
-                        />
-                      </label>
-                    )}
-                    <p className="text-xs text-slate-400 mt-1">{tGen('set.var_logo')} <code className="bg-slate-100 px-1 rounded">{'{{company_signature}}'}</code> {tGen('set.var_renders_img')}</p>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Notarial / Legal Document Settings */}
-              <Card>
-                <h3 className="section-title mb-1">{tGen('set.notarial_title')}</h3>
-                <p className="text-xs text-slate-400 mb-4">{tGen('set.notarial_desc')}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label={tGen('set.city')} value={tenant.city} onChange={e=>setTenant(p=>({...p,city:e.target.value}))} placeholder="Santiago" />
-                  <Input label={tGen('set.notary_name')} value={tenant.notaryName} onChange={e=>setTenant(p=>({...p,notaryName:e.target.value}))} placeholder="Lic. Juan Pérez" />
-                  <Input label={tGen('set.notary_collegiate')} value={tenant.notaryCollegiateNumber} onChange={e=>setTenant(p=>({...p,notaryCollegiateNumber:e.target.value}))} placeholder="Ej. 5883" />
-                  <Input label={tGen('set.acreedor_id')} value={tenant.acreedorIdNumber} onChange={e=>setTenant(p=>({...p,acreedorIdNumber:e.target.value}))} placeholder="001-0000000-0" />
-                </div>
-                <div className="mt-3">
-                  <Input label={tGen('set.notary_office')} value={tenant.notaryOfficeAddress} onChange={e=>setTenant(p=>({...p,notaryOfficeAddress:e.target.value}))} placeholder="Calle 16 de Agosto No. 124, Edificio Rama, Santiago" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-100">
-                  <p className="col-span-full text-xs font-semibold text-slate-500 uppercase tracking-wide">{tGen('set.witness1')}</p>
-                  <Input label={tGen('set.w_name')} value={tenant.testigo1Nombre} onChange={e=>setTenant(p=>({...p,testigo1Nombre:e.target.value}))} placeholder={tGen('set.w_name_ph')} />
-                  <Input label={tGen('set.w_id')} value={tenant.testigo1Id} onChange={e=>setTenant(p=>({...p,testigo1Id:e.target.value}))} placeholder="001-0000000-0" />
-                  <Input label={tGen('set.w_domicile')} value={tenant.testigo1Domicilio} onChange={e=>setTenant(p=>({...p,testigo1Domicilio:e.target.value}))} placeholder={tGen('set.w_domicile_ph')} />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 pt-3 border-t border-slate-100">
-                  <p className="col-span-full text-xs font-semibold text-slate-500 uppercase tracking-wide">{tGen('set.witness2')}</p>
-                  <Input label={tGen('set.w_name')} value={tenant.testigo2Nombre} onChange={e=>setTenant(p=>({...p,testigo2Nombre:e.target.value}))} placeholder={tGen('set.w_name_ph')} />
-                  <Input label={tGen('set.w_id')} value={tenant.testigo2Id} onChange={e=>setTenant(p=>({...p,testigo2Id:e.target.value}))} placeholder="001-0000000-0" />
-                  <Input label={tGen('set.w_domicile')} value={tenant.testigo2Domicilio} onChange={e=>setTenant(p=>({...p,testigo2Domicilio:e.target.value}))} placeholder={tGen('set.w_domicile_ph')} />
-                </div>
-              </Card>
-
-              <Card>
-                <h3 className="section-title mb-4">{tGen('set.mora_title')}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.mora_apply_on')}</label>
-                    <select value={moraSettings.moraBase} onChange={e=>setMoraSettings(p=>({...p,moraBase:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="cuota_vencida">{tGen('set.mora_cuota')}</option>
-                      <option value="capital_pendiente">{tGen('set.mora_cap_pend')}</option>
-                      <option value="capital_vencido">{tGen('set.mora_cap_venc')}</option>
-                    </select>
-                    <p className="text-xs text-slate-400 mt-1">{tGen('set.mora_base_help')}</p>
-                  </div>
-                  <Input label={tGen('set.mora_rate')} type="number" step="0.001" value={moraSettings.moraRateDaily}
-                    onChange={e=>setMoraSettings(p=>({...p,moraRateDaily:parseFloat(e.target.value)||0}))} />
-                  <Input label={tGen('set.mora_grace')} type="number" value={moraSettings.moraGraceDays}
-                    onChange={e=>setMoraSettings(p=>({...p,moraGraceDays:parseInt(e.target.value)||0}))} />
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.mora_fixed')}</label>
-                    <select value={moraSettings.moraFixedEnabled} onChange={e=>setMoraSettings(p=>({...p,moraFixedEnabled:parseInt(e.target.value)}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value={1}>{tGen('set.enabled')}</option>
-                      <option value={0}>{tGen('set.disabled')}</option>
-                    </select>
-                  </div>
-                  {moraSettings.moraFixedEnabled === 1 && (
-                    <Input label={tGen('set.mora_fixed_amt')} type="number" step="0.01" value={moraSettings.moraFixedAmount}
-                      onChange={e=>setMoraSettings(p=>({...p,moraFixedAmount:parseFloat(e.target.value)||0}))}
-                      placeholder="Ej: 50.00"
+                {/* Aprobación por monto: función Profesional+ (loans.approve_high_value) */}
+                {can('loans.approve_high_value') && (
+                <Card>
+                  <h3 className="section-title mb-1">{tGen('set.approval_title')}</h3>
+                  <p className="text-xs text-slate-500 mb-4">{tGen('set.approval_desc')}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label={tGen('set.approval_threshold')}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={approvalThreshold}
+                      onChange={e => setApprovalThreshold(e.target.value)}
+                      placeholder={tGen('set.approval_threshold_ph')}
                     />
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.rebate')}</label>
-                    <select value={moraSettings.rebateEnabled} onChange={e=>setMoraSettings(p=>({...p,rebateEnabled:parseInt(e.target.value)}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value={1}>{tGen('set.enabled_f')}</option>
-                      <option value={0}>{tGen('set.disabled_f')}</option>
-                    </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.rebate_type')}</label>
-                    <select value={moraSettings.rebateType} onChange={e=>setMoraSettings(p=>({...p,rebateType:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="proportional">{tGen('set.rebate_proportional')}</option>
-                      <option value="fixed">{tGen('set.rebate_fixed')}</option>
-                    </select>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Aprobación por monto: función Profesional+ (loans.approve_high_value) */}
-              {can('loans.approve_high_value') && (
-              <Card>
-                <h3 className="section-title mb-1">{tGen('set.approval_title')}</h3>
-                <p className="text-xs text-slate-500 mb-4">{tGen('set.approval_desc')}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label={tGen('set.approval_threshold')}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={approvalThreshold}
-                    onChange={e => setApprovalThreshold(e.target.value)}
-                    placeholder={tGen('set.approval_threshold_ph')}
-                  />
-                </div>
-                <p className="text-xs text-slate-400 mt-2">{tGen('set.approval_threshold_help')}</p>
-              </Card>
-              )}
-
-              <Button onClick={handleSaveGeneral} isLoading={isSaving} disabled={isSaving} className="flex items-center gap-2">
-                <Save className="w-4 h-4" />
-                {isSaving ? tGen('set.saving') : tGen('set.save_changes')}
-              </Button>
-
-              {/* ── Multi-Currency ── */}
-              <Card>
-                <div className="flex items-center gap-2 mb-1">
-                  <CreditCard className="w-4 h-4 text-blue-600"/>
-                  <h3 className="section-title">{tGen('set.currencies_title')}</h3>
-                </div>
-                <p className="text-xs text-slate-500 mb-4">{tGen('set.currencies_desc')}</p>
-                <div className="flex items-center gap-3 mb-4">
-                  <button
-                    onClick={() => setCurrencySettings(p => ({ ...p, multiCurrencyEnabled: !p.multiCurrencyEnabled }))}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${currencySettings.multiCurrencyEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${currencySettings.multiCurrencyEnabled ? 'translate-x-6' : 'translate-x-1'}`}/>
-                  </button>
-                  <span className="text-sm font-medium text-slate-700">
-                    {currencySettings.multiCurrencyEnabled ? tGen('set.multicurr_on') : tGen('set.multicurr_off')}
-                  </span>
-                </div>
-
-                {currencySettings.multiCurrencyEnabled && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {SUPPORTED_CURRENCIES.map(cur => {
-                      const isEnabled = currencySettings.enabledCurrencies.includes(cur.code)
-                      const isBase = cur.code === 'DOP'
-                      return (
-                        <button
-                          key={cur.code}
-                          onClick={() => toggleCurrency(cur.code)}
-                          disabled={isBase}
-                          className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
-                            isEnabled ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
-                          } ${isBase ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
-                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isEnabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                            {cur.symbol}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">{cur.code}</p>
-                            <p className="text-xs text-slate-500">{cur.name}</p>
-                          </div>
-                          {isBase && <span className="ml-auto text-xs text-blue-600 font-medium">{tGen('set.curr_base')}</span>}
-                          {!isBase && isEnabled && <CheckCircle className="ml-auto w-4 h-4 text-blue-600"/>}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <p className="text-xs text-slate-400 mt-2">{tGen('set.approval_threshold_help')}</p>
+                </Card>
                 )}
-                <div className="mt-4">
-                  <Button size="sm" onClick={handleSaveCurrencies} isLoading={isSavingCurrencies} disabled={isSavingCurrencies} className="flex items-center gap-2">
-                    <Save className="w-4 h-4"/>{tGen('set.save_currencies')}
-                  </Button>
-                </div>
-              </Card>
+                {renderSharedSaveBar()}
+              </div>
+
+              {/* ── LEGAL Y DOCUMENTOS ── */}
+              <div role="tabpanel" id="general-panel-legal" aria-labelledby="general-tab-legal" hidden={generalSection !== 'legal'} className="space-y-6">
+                <Card>
+                  {/* Imagen de firma — file upload (stored as base64) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                        <Upload className="w-4 h-4"/>{tGen('set.signature_img')}
+                      </label>
+                      {tenant.signatureUrl ? (
+                        <div className="relative border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center gap-3">
+                          <img src={tenant.signatureUrl} alt="Firma" className="h-14 object-contain rounded" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-slate-600 font-medium">{tGen('set.signature_loaded')}</p>
+                            <button
+                              type="button"
+                              onClick={() => setTenant(p => ({ ...p, signatureUrl: '' }))}
+                              className="text-xs text-red-500 hover:text-red-700 mt-0.5"
+                            >
+                              {tGen('set.remove_image')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-lg p-5 cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                          <Upload className="w-7 h-7 text-slate-400 mb-1.5" />
+                          <span className="text-sm text-slate-600 font-medium">{tGen('set.click_upload')}</span>
+                          <span className="text-xs text-slate-400 mt-0.5">{tGen('set.img_formats')}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0]
+                              if (!file) return
+                              if (file.size > 2 * 1024 * 1024) { toast.error(tGen('set.img_too_big')); return }
+                              const reader = new FileReader()
+                              reader.onload = ev => setTenant(p => ({ ...p, signatureUrl: ev.target?.result as string }))
+                              reader.readAsDataURL(file)
+                            }}
+                          />
+                        </label>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">{tGen('set.var_logo')} <code className="bg-slate-100 px-1 rounded">{'{{company_signature}}'}</code> {tGen('set.var_renders_img')}</p>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Notarial / Legal Document Settings */}
+                <Card>
+                  <h3 className="section-title mb-1">{tGen('set.notarial_title')}</h3>
+                  <p className="text-xs text-slate-400 mb-4">{tGen('set.notarial_desc')}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input label={tGen('set.city')} value={tenant.city} onChange={e=>setTenant(p=>({...p,city:e.target.value}))} placeholder="Santiago" />
+                    <Input label={tGen('set.notary_name')} value={tenant.notaryName} onChange={e=>setTenant(p=>({...p,notaryName:e.target.value}))} placeholder="Lic. Juan Pérez" />
+                    <Input label={tGen('set.notary_collegiate')} value={tenant.notaryCollegiateNumber} onChange={e=>setTenant(p=>({...p,notaryCollegiateNumber:e.target.value}))} placeholder="Ej. 5883" />
+                    <Input label={tGen('set.acreedor_id')} value={tenant.acreedorIdNumber} onChange={e=>setTenant(p=>({...p,acreedorIdNumber:e.target.value}))} placeholder="001-0000000-0" />
+                  </div>
+                  <div className="mt-3">
+                    <Input label={tGen('set.notary_office')} value={tenant.notaryOfficeAddress} onChange={e=>setTenant(p=>({...p,notaryOfficeAddress:e.target.value}))} placeholder="Calle 16 de Agosto No. 124, Edificio Rama, Santiago" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-100">
+                    <p className="col-span-full text-xs font-semibold text-slate-500 uppercase tracking-wide">{tGen('set.witness1')}</p>
+                    <Input label={tGen('set.w_name')} value={tenant.testigo1Nombre} onChange={e=>setTenant(p=>({...p,testigo1Nombre:e.target.value}))} placeholder={tGen('set.w_name_ph')} />
+                    <Input label={tGen('set.w_id')} value={tenant.testigo1Id} onChange={e=>setTenant(p=>({...p,testigo1Id:e.target.value}))} placeholder="001-0000000-0" />
+                    <Input label={tGen('set.w_domicile')} value={tenant.testigo1Domicilio} onChange={e=>setTenant(p=>({...p,testigo1Domicilio:e.target.value}))} placeholder={tGen('set.w_domicile_ph')} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 pt-3 border-t border-slate-100">
+                    <p className="col-span-full text-xs font-semibold text-slate-500 uppercase tracking-wide">{tGen('set.witness2')}</p>
+                    <Input label={tGen('set.w_name')} value={tenant.testigo2Nombre} onChange={e=>setTenant(p=>({...p,testigo2Nombre:e.target.value}))} placeholder={tGen('set.w_name_ph')} />
+                    <Input label={tGen('set.w_id')} value={tenant.testigo2Id} onChange={e=>setTenant(p=>({...p,testigo2Id:e.target.value}))} placeholder="001-0000000-0" />
+                    <Input label={tGen('set.w_domicile')} value={tenant.testigo2Domicilio} onChange={e=>setTenant(p=>({...p,testigo2Domicilio:e.target.value}))} placeholder={tGen('set.w_domicile_ph')} />
+                  </div>
+                </Card>
+                {renderSharedSaveBar()}
+              </div>
+
+              {/* ── MORA Y PAGOS ── */}
+              <div role="tabpanel" id="general-panel-mora" aria-labelledby="general-tab-mora" hidden={generalSection !== 'mora'} className="space-y-6">
+                <Card>
+                  <h3 className="section-title mb-4">{tGen('set.mora_title')}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.mora_apply_on')}</label>
+                      <select value={moraSettings.moraBase} onChange={e=>setMoraSettings(p=>({...p,moraBase:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="cuota_vencida">{tGen('set.mora_cuota')}</option>
+                        <option value="capital_pendiente">{tGen('set.mora_cap_pend')}</option>
+                        <option value="capital_vencido">{tGen('set.mora_cap_venc')}</option>
+                      </select>
+                      <p className="text-xs text-slate-400 mt-1">{tGen('set.mora_base_help')}</p>
+                    </div>
+                    <Input label={tGen('set.mora_rate')} type="number" step="0.001" value={moraSettings.moraRateDaily}
+                      onChange={e=>setMoraSettings(p=>({...p,moraRateDaily:parseFloat(e.target.value)||0}))} />
+                    <Input label={tGen('set.mora_grace')} type="number" value={moraSettings.moraGraceDays}
+                      onChange={e=>setMoraSettings(p=>({...p,moraGraceDays:parseInt(e.target.value)||0}))} />
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.mora_fixed')}</label>
+                      <select value={moraSettings.moraFixedEnabled} onChange={e=>setMoraSettings(p=>({...p,moraFixedEnabled:parseInt(e.target.value)}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value={1}>{tGen('set.enabled')}</option>
+                        <option value={0}>{tGen('set.disabled')}</option>
+                      </select>
+                    </div>
+                    {moraSettings.moraFixedEnabled === 1 && (
+                      <Input label={tGen('set.mora_fixed_amt')} type="number" step="0.01" value={moraSettings.moraFixedAmount}
+                        onChange={e=>setMoraSettings(p=>({...p,moraFixedAmount:parseFloat(e.target.value)||0}))}
+                        placeholder="Ej: 50.00"
+                      />
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.rebate')}</label>
+                      <select value={moraSettings.rebateEnabled} onChange={e=>setMoraSettings(p=>({...p,rebateEnabled:parseInt(e.target.value)}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value={1}>{tGen('set.enabled_f')}</option>
+                        <option value={0}>{tGen('set.disabled_f')}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.rebate_type')}</label>
+                      <select value={moraSettings.rebateType} onChange={e=>setMoraSettings(p=>({...p,rebateType:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="proportional">{tGen('set.rebate_proportional')}</option>
+                        <option value="fixed">{tGen('set.rebate_fixed')}</option>
+                      </select>
+                    </div>
+                  </div>
+                </Card>
+                {renderSharedSaveBar()}
+              </div>
+
+              {/* ── MONEDAS ── */}
+              <div role="tabpanel" id="general-panel-currencies" aria-labelledby="general-tab-currencies" hidden={generalSection !== 'currencies'} className="space-y-6">
+                {/* ── Multi-Currency ── */}
+                <Card>
+                  <div className="flex items-center gap-2 mb-1">
+                    <CreditCard className="w-4 h-4 text-blue-600"/>
+                    <h3 className="section-title">{tGen('set.currencies_title')}</h3>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4">{tGen('set.currencies_desc')}</p>
+                  <div className="flex items-center gap-3 mb-4">
+                    <button
+                      onClick={() => setCurrencySettings(p => ({ ...p, multiCurrencyEnabled: !p.multiCurrencyEnabled }))}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${currencySettings.multiCurrencyEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${currencySettings.multiCurrencyEnabled ? 'translate-x-6' : 'translate-x-1'}`}/>
+                    </button>
+                    <span className="text-sm font-medium text-slate-700">
+                      {currencySettings.multiCurrencyEnabled ? tGen('set.multicurr_on') : tGen('set.multicurr_off')}
+                    </span>
+                  </div>
+
+                  {currencySettings.multiCurrencyEnabled && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {SUPPORTED_CURRENCIES.map(cur => {
+                        const isEnabled = currencySettings.enabledCurrencies.includes(cur.code)
+                        const isBase = cur.code === 'DOP'
+                        return (
+                          <button
+                            key={cur.code}
+                            onClick={() => toggleCurrency(cur.code)}
+                            disabled={isBase}
+                            className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
+                              isEnabled ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
+                            } ${isBase ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isEnabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                              {cur.symbol}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{cur.code}</p>
+                              <p className="text-xs text-slate-500">{cur.name}</p>
+                            </div>
+                            {isBase && <span className="ml-auto text-xs text-blue-600 font-medium">{tGen('set.curr_base')}</span>}
+                            {!isBase && isEnabled && <CheckCircle className="ml-auto w-4 h-4 text-blue-600"/>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <div className="mt-4">
+                    <Button size="sm" onClick={handleSaveCurrencies} isLoading={isSavingCurrencies} disabled={isSavingCurrencies} className="flex items-center gap-2">
+                      <Save className="w-4 h-4"/>{tGen('set.save_currencies')}
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+
+              {/* ── CUENTA Y SEGURIDAD ── */}
+              <div role="tabpanel" id="general-panel-account" aria-labelledby="general-tab-account" hidden={generalSection !== 'account'} className="space-y-6">
+                <Card>
+                  <h3 className="section-title mb-1">{tGen('common.language')}</h3>
+                  <p className="text-sm text-slate-500 mb-4">{tGen('set.lang_desc')}</p>
+                  <LanguageSwitcher variant="inline" />
+                </Card>
+                <Card>
+                  <h3 className="section-title mb-1 flex items-center gap-2"><KeyRound className="w-4 h-4" />{tGen('set.sec.title')}</h3>
+                  <p className="text-sm text-slate-500 mb-4">{tGen('set.sec.subtitle')}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                    <Input type="password" label={tGen('set.sec.current_pw')} value={pwForm.current} onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))} />
+                    <Input type="password" label={tGen('set.sec.new_pw')} value={pwForm.next} onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))} />
+                    <Input type="password" label={tGen('set.sec.confirm_pw')} value={pwForm.confirm} onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))} />
+                  </div>
+                  <Button size="sm" onClick={handleChangePassword} disabled={isChangingPw}>{isChangingPw ? tGen('common.saving') : tGen('set.sec.change_pw')}</Button>
+
+                  <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{tGen('set.sec.logout_everywhere')}</p>
+                      <p className="text-xs text-slate-500">{tGen('set.sec.logout_everywhere_desc')}</p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={handleLogoutEverywhere} disabled={isLoggingOutEverywhere}>
+                      {isLoggingOutEverywhere ? tGen('common.saving') : tGen('set.sec.logout_everywhere_cta')}
+                    </Button>
+                  </div>
+                </Card>
+              </div>
             </div>
           )}
 
