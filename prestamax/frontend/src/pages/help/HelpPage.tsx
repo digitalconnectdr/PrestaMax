@@ -168,7 +168,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         shortcutLabel: 'Ir a Solicitudes',
         requiredPermission: 'requests.view',
         steps: [
-          { title: 'Activa el módulo en Configuración General', description: 'Configuración → General → "Solicitudes Públicas" activa el switch. Esto genera un enlace único de tu empresa (ej. https://credytek.vercel.app/apply/abc123).' },
+          { title: 'Abre Solicitudes y obtén tu enlace', description: 'En el menú lateral entra a "Solicitudes" y pulsa el botón "Link del Portal". Se muestra el enlace único de tu empresa (ej. https://credytek.vercel.app/apply/abc123); usa "Copiar" para copiarlo.', tip: 'Si pulsas "Nuevo link", se genera otro enlace y el anterior deja de funcionar.' },
           { title: 'Comparte el enlace', description: 'Por WhatsApp, en tu Instagram bio, código QR en tu local, etc. Cualquier persona puede llenar la solicitud desde el celular sin estar registrada en tu sistema.' },
           { title: 'Revisa solicitudes entrantes', description: 'En "Solicitudes" verás todas las solicitudes nuevas. Cada una con datos del solicitante: nombre, cédula, teléfono, monto solicitado, plazo deseado.' },
           { title: 'Aprueba o rechaza', description: 'Revisa la solicitud y decide. Si apruebas, puedes convertirla directamente en préstamo: rellena los campos faltantes (cuenta de desembolso, fecha primer pago) y al guardar se crea cliente + préstamo en un solo paso.', tip: 'Si rechazas, puedes agregar una nota explicando por qué (sirve para auditoría interna).' },
@@ -246,8 +246,8 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         shortcutLabel: 'Ir a Contratos',
         requiredPermission: 'contracts.view',
         steps: [
-          { title: 'Crea una plantilla en Plantillas → Contratos', description: 'En el menú: "Plantillas" → tab "Contratos" → "+ Nueva Plantilla". Pega el texto de tu contrato con variables como {{cliente.nombre}}, {{prestamo.monto}}, {{prestamo.cuotas}}.' },
-          { title: 'Define qué variables vas a usar', description: 'Variables disponibles: {{cliente.nombre}}, {{cliente.cedula}}, {{cliente.direccion}}, {{prestamo.numero}}, {{prestamo.monto}}, {{prestamo.tasa}}, {{prestamo.cuotas}}, {{empresa.nombre}}, {{empresa.rnc}}, fecha actual, etc.' },
+          { title: 'Crea una plantilla en Plantillas → Contratos', description: 'En el menú: "Plantillas" → tab "Contratos" → "+ Nueva Plantilla". Pega el texto de tu contrato con variables como {{client_name}}, {{amount}}, {{term}}.' },
+          { title: 'Define qué variables vas a usar', description: 'Variables del cliente: {{client_name}}, {{client_id}}, {{client_address}}, {{client_phone}}. Del préstamo: {{loan_number}}, {{amount}}, {{rate}}, {{term}}, {{payment_plan}}. De la empresa: {{company_name}}, {{company_address}}, {{rnc}}, {{representative_name}}, {{company_logo}}, {{company_signature}}. Notariales: {{notary_name}}, {{notary_collegiate_number}}, {{notary_office_address}}, {{acreedor_id}}, {{company_city}}, {{testigo1_nombre}}, {{testigo2_nombre}}. Fechas: {{date}}, {{today_date_long}}.', tip: 'Los datos de la empresa, los notariales y los testigos se cargan en Configuración → General (secciones Empresa y Legal y documentos). La lista completa de variables aparece al crear o editar una plantilla.' },
           { title: 'Genera un contrato para un préstamo específico', description: 'Ve a Contratos → "+ Nuevo" → selecciona plantilla y préstamo. El sistema interpola las variables con los datos reales.', tip: 'El contrato generado se guarda como PDF y queda asociado al préstamo. Puedes regenerarlo si actualizas la plantilla.' },
           { title: 'Imprime o comparte', description: 'Descarga el PDF, imprime para firma física, o envía por WhatsApp/email. La firma digital queda pendiente (rama futura del producto).' },
         ],
@@ -323,6 +323,25 @@ const GUIDES: { section: string; items: Guide[] }[] = [
   {
     section: 'CONFIGURACIÓN AVANZADA',
     items: [
+      {
+        id: 'configuracion-general',
+        icon: <Settings className="w-5 h-5" />,
+        title: 'Configuración general',
+        subtitle: 'Cómo está organizada Configuración → General: Empresa, Operación, Legal, Mora, Monedas y Cuenta',
+        shortcutPath: '/settings?section=company',
+        shortcutLabel: 'Ir a Configuración general',
+        requiredPermission: 'settings.general',
+        steps: [
+          { title: 'Abre Configuración → General', description: 'En el menú lateral: "Configuración" → "General". Arriba verás seis secciones: Empresa, Operación, Legal y documentos, Mora y pagos, Monedas y Cuenta y seguridad. Puedes pasar de una a otra sin perder lo que hayas escrito y aún no hayas guardado.' },
+          { title: 'Empresa', description: 'Aquí están los datos de tu empresa: nombre, email, teléfono, dirección, RNC y nombre del representante. En esta sección también se encuentra el control del logo.' },
+          { title: 'Operación', description: 'Moneda de la empresa, Modo de Score y Tipo de Firma de Contrato. Si tu plan y tu permiso lo incluyen, también verás "Aprobación por monto".' },
+          { title: 'Legal y documentos', description: 'Aquí se encuentra el control de la imagen de firma y los datos notariales: ciudad o municipio, notario, número de colegiatura, cédula del acreedor o representante y dirección del estudio. Además, los datos del Testigo 1 y del Testigo 2 (nombre, cédula y domicilio).' },
+          { title: 'Mora y pagos', description: 'Aquí se agrupan los ajustes generales de mora (sobre qué se aplica y su tasa diaria), los días de gracia, el cargo fijo y la rebaja por pago anticipado con su tipo.' },
+          { title: 'Guardar Cambios', description: 'Las secciones Empresa, Operación, Legal y documentos y Mora y pagos comparten el mismo guardado: el botón "Guardar Cambios" aparece en cada una y guarda los cambios de las cuatro a la vez.', tip: 'Monedas y Cuenta y seguridad tienen sus propias acciones y no usan este botón.' },
+          { title: 'Monedas', description: 'Activa o desactiva el modo multi-moneda y marca las monedas que quieres tener habilitadas. El Peso Dominicano (DOP) siempre permanece disponible. Termina con "Guardar Monedas".' },
+          { title: 'Cuenta y seguridad', description: 'Elige el idioma de la interfaz, cambia tu contraseña (contraseña actual, nueva y confirmación) o usa "Cerrar sesiones" para cerrar tu sesión en todos los dispositivos.' },
+        ],
+      },
       {
         id: 'crear-usuario',
         icon: <UserPlus className="w-5 h-5" />,

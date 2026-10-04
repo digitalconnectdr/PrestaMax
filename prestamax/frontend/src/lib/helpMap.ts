@@ -26,6 +26,10 @@ export const HELP_MAP: { prefix: string; guide: string }[] = [
 
 // Devuelve el id de guía (texto estático) para una ruta, o null si no hay una específica.
 export function guideForPath(pathname: string): string | null {
+  // Configuración → General: SOLO la ruta exacta '/settings'. Las subrutas
+  // (/settings/products, /users, /branches, /bank-accounts, /subscription) tienen
+  // su propio contexto y NO deben caer en esta guía por coincidencia de prefijo.
+  if (pathname === '/settings' || pathname === '/settings/') return 'configuracion-general'
   const hit = HELP_MAP.find(m => pathname === m.prefix || pathname.startsWith(m.prefix + '/') || pathname.startsWith(m.prefix))
   return hit ? hit.guide : null
 }

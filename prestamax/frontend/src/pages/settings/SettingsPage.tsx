@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { TenantContext } from '@/contexts/TenantContext'
 import { useAuth } from '@/hooks/useAuth'
 import { PERM_BY_MODULE, PERM_DEFS, PermKey } from '@/lib/permissions'
@@ -88,8 +88,23 @@ const SettingsPage: React.FC = () => {
   const activeTab = PATH_TO_TAB[location.pathname] || 'general'
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  // Sección visible dentro de General (solo UI; todas las secciones permanecen montadas)
-  const [generalSection, setGeneralSection] = useState<GeneralSectionId>('company')
+  // Sección visible dentro de General (solo UI; todas las secciones permanecen montadas).
+  // Deep link: /settings?section=<id>. El query NO cambia el pathname, así que no dispara
+  // loadTab ni requests; un valor inválido cae a 'company'.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const parseGeneralSection = (raw: string | null): GeneralSectionId =>
+    (GENERAL_SECTIONS.find(s => s.id === raw)?.id) ?? 'company'
+  const [generalSection, setGeneralSection] = useState<GeneralSectionId>(() => parseGeneralSection(searchParams.get('section')))
+  const sectionParam = searchParams.get('section')
+  useEffect(() => {
+    // Si la URL trae ?section= (al entrar o al cambiar), se refleja en la UI.
+    if (sectionParam !== null) setGeneralSection(parseGeneralSection(sectionParam))
+  }, [sectionParam])
+  // Cambia de sección y sincroniza ?section= (replace: no llena el historial).
+  const selectGeneralSection = (id: GeneralSectionId) => {
+    setGeneralSection(id)
+    setSearchParams(prev => { const n = new URLSearchParams(prev); n.set('section', id); return n }, { replace: true })
+  }
 
   // General
   const [tenant, setTenant] = useState<TenantData>({ name: '', email: '', phone: '', address: '', currency: 'DOP', scoreMode: 'global', signatureMode: 'physical', rnc: '', representativeName: '', logoUrl: '', signatureUrl: '', city: '', notaryName: '', notaryCollegiateNumber: '', notaryOfficeAddress: '', acreedorIdNumber: '', testigo1Nombre: '', testigo1Id: '', testigo1Domicilio: '', testigo2Nombre: '', testigo2Id: '', testigo2Domicilio: '' })
@@ -707,7 +722,7 @@ const SettingsPage: React.FC = () => {
     if (next < 0) return
     e.preventDefault()
     const id = GENERAL_SECTIONS[next].id
-    setGeneralSection(id)
+    selectGeneralSection(id)
     document.getElementById(`general-tab-${id}`)?.focus()
   }
 
@@ -777,7 +792,7 @@ const SettingsPage: React.FC = () => {
                         aria-selected={selected}
                         aria-controls={`general-panel-${sec.id}`}
                         tabIndex={selected ? 0 : -1}
-                        onClick={() => setGeneralSection(sec.id)}
+                        onClick={() => selectGeneralSection(sec.id)}
                         className={`flex items-center gap-1.5 pb-2.5 px-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1e3a5f] rounded-t ${
                           selected ? 'border-[#1e3a5f] text-[#1e3a5f] bg-[#1e3a5f]/5' : 'border-transparent text-slate-500 hover:text-slate-800'
                         }`}
