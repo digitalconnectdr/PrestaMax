@@ -76,6 +76,13 @@ router.get('/collectors', authenticate, requireTenant, requirePermission('collec
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });
 
+// Préstamo 'restructured' = sustituido por una consolidación: ya no está en cobranza activa (la deuda vive en el nuevo).
+const RESTRUCTURED_TASK_ERROR = 'Este préstamo fue reestructurado (consolidado en otro préstamo) y ya no está en cobranza activa. Crea la tarea sobre el préstamo consolidado.';
+function isRestructuredLoan(db: any, tenantId: string, loanId: string): boolean {
+  const row = db.prepare('SELECT status FROM loans WHERE id=? AND tenant_id=?').get(loanId, tenantId) as any;
+  return row?.status === 'restructured';
+}
+
 // ─── POST /collection-tasks — create a new task ───────────────────────────────
 router.post('/', authenticate, requireTenant, requirePermission('collections.tasks.manage'), (req: AuthRequest, res: Response) => {
   try {
@@ -88,6 +95,9 @@ router.post('/', authenticate, requireTenant, requirePermission('collections.tas
     // Validacion unica (POST y PUT): mismo tenant + membership activa + elegible por RBAC.
     const assignee = validateTaskAssignee(db, req.tenant.id, d.assigned_to);
     if (!assignee.ok) return res.status(400).json({ error: assignee.error, code: 'INVALID_ASSIGNEE' });
+    if (d.loan_id && isRestructuredLoan(db, req.tenant.id, d.loan_id)) {
+      return res.status(409).json({ error: RESTRUCTURED_TASK_ERROR, code: 'LOAN_RESTRUCTURED' });
+    }
 
     const id = uuid();
     db.prepare(`
@@ -146,6 +156,10 @@ router.put('/:id', authenticate, requireTenant, requirePermission('collections.t
     if (assigneeChanged) {
       const assignee = validateTaskAssignee(db, req.tenant.id, d.assigned_to);
       if (!assignee.ok) return res.status(400).json({ error: assignee.error, code: 'INVALID_ASSIGNEE' });
+    }
+    // Vincular (o cambiar) la tarea a un préstamo reestructurado equivale a crear cobranza sobre él.
+    if (d.loan_id && d.loan_id !== task.loan_id && isRestructuredLoan(db, req.tenant.id, d.loan_id)) {
+      return res.status(409).json({ error: RESTRUCTURED_TASK_ERROR, code: 'LOAN_RESTRUCTURED' });
     }
     db.prepare(`
       UPDATE collection_tasks SET

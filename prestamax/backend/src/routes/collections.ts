@@ -225,6 +225,14 @@ router.post('/promises', authenticate, requireTenant, requirePermission('collect
     if (!d.promised_amount || isNaN(promisedAmount) || promisedAmount <= 0) {
       return res.status(400).json({ error: 'El monto prometido debe ser mayor a cero' });
     }
+    // Un préstamo reestructurado (sustituido por una consolidación) no está en cobranza activa: la promesa va al nuevo.
+    const promiseLoan = db.prepare('SELECT status FROM loans WHERE id=? AND tenant_id=?').get(d.loan_id, req.tenant.id) as any;
+    if (promiseLoan?.status === 'restructured') {
+      return res.status(409).json({
+        error: 'Este préstamo fue reestructurado (consolidado en otro préstamo) y ya no está en cobranza activa. Registra la promesa en el préstamo consolidado.',
+        code: 'LOAN_RESTRUCTURED',
+      });
+    }
     db.prepare(`INSERT INTO payment_promises (id,loan_id,collector_id,promised_date,promised_amount,notes,requires_visit)
       VALUES (?,?,?,?,?,?,?)`).run(
       id, d.loan_id, d.collector_id||req.user.id, d.promised_date, promisedAmount, d.notes||null, d.requires_visit?1:0

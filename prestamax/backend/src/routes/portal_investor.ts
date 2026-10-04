@@ -78,7 +78,7 @@ router.get('/summary', authenticate, requireTenant, requireInvestor, (req: AuthR
       SELECT COALESCE(SUM(principal_balance), 0) as v, COUNT(*) as n
       FROM loans
       WHERE investor_id=? AND tenant_id=? AND is_voided=0
-        AND status IN ('active','in_mora','disbursed','restructured')
+        AND status IN ('active','in_mora','disbursed')
     `).get(inv.id, req.tenant!.id) as any);
 
     // Intereses + mora cobrados acumulados (lifetime) sobre pagos del inversionista

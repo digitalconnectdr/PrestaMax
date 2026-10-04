@@ -70,8 +70,8 @@ router.get('/dashboard', authenticate, requireTenant, requirePermission('reports
     const portfolioByCurrency = db.prepare(`
       SELECT COALESCE(currency,'DOP') as currency,
              COUNT(*) as loan_count,
-             COALESCE(SUM(total_balance),0) as active_balance,
-             COALESCE(SUM(mora_balance),0) as mora_balance,
+             COALESCE(SUM(CASE WHEN status!='restructured' THEN total_balance ELSE 0 END),0) as active_balance,
+             COALESCE(SUM(CASE WHEN status!='restructured' THEN mora_balance ELSE 0 END),0) as mora_balance,
              COALESCE(SUM(CASE WHEN status IN ('active','current','overdue','in_mora') THEN total_balance ELSE 0 END),0) as portfolio_balance,
              COALESCE(AVG(CASE WHEN currency!='DOP' THEN exchange_rate_to_dop ELSE NULL END),1) as avg_rate
       FROM loans WHERE tenant_id=? AND is_voided=0 GROUP BY COALESCE(currency,'DOP')
@@ -538,7 +538,7 @@ router.get('/projection', authenticate, requireTenant, requirePermission('report
       FROM loans l
       JOIN clients c ON c.id = l.client_id
       WHERE l.tenant_id = ?
-        AND l.status IN ('active','current','overdue','in_mora','disbursed','restructured')
+        AND l.status IN ('active','current','overdue','in_mora','disbursed')
       ORDER BY c.full_name ASC
     `).all(tid) as any[];
 
@@ -765,9 +765,11 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
     };
     const mapEstatus = (status: string): string => {
       switch (status) {
-        case 'active': case 'current': case 'disbursed': case 'restructured': return 'V';
+        case 'active': case 'current': case 'disbursed': return 'V';
         case 'overdue': case 'in_mora': return 'V'; // Vigente con atraso
-        case 'paid': case 'liquidated': return 'C';            // Cancelado/Cerrado
+        // Cancelado/Cerrado. 'restructured' = cuenta sustituida por una consolidación: la deuda se reporta en el
+        // préstamo nuevo, así que esta cuenta se informa cerrada y sin saldo ni atraso (ver isClosedByConsolidation).
+        case 'paid': case 'liquidated': case 'restructured': return 'C';
         case 'defaulted': case 'charged_off': case 'written_off': return 'X'; // Castigado
         case 'cancelled': case 'voided': return 'A';           // Anulado (no se reporta normalmente)
         default: return 'V';
@@ -853,7 +855,9 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
       `).get(loan.id) as any;
 
       // Atraso buckets: overdue installments grouped by age in days
-      const overdueInsts = db.prepare(`
+      // Cuenta cerrada por consolidación: sus saldos históricos siguen en BD pero el buró no debe ver deuda duplicada.
+      const isClosedByConsolidation = loan.status === 'restructured';
+      const overdueInsts = isClosedByConsolidation ? [] : db.prepare(`
         SELECT total_amount, paid_total, due_date FROM installments
         WHERE loan_id=? AND status IN ('pending','partial') AND due_date < ?
         ORDER BY due_date
@@ -879,7 +883,7 @@ router.get('/datacredito', authenticate, requireTenant, requirePermission('repor
 
       const totalAtraso = r2(a1_30 + a31_60 + a61_90 + a91_120 + a121_150 + a151_180 + a181plus);
       const creditApproved = r2(loan.approved_amount || loan.disbursed_amount || 0);
-      const montoAdeudado  = r2(loan.total_balance || 0);
+      const montoAdeudado  = isClosedByConsolidation ? 0 : r2(loan.total_balance || 0);
 
       return {
         // ── Datos Personales ──────────────────────────────────────────────────

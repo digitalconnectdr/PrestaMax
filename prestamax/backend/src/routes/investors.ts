@@ -21,7 +21,7 @@ router.get('/', authenticate, requireTenant, requirePermission('investors.view')
     const rows = db.prepare(`
       SELECT i.*,
         (SELECT COUNT(*) FROM loans l WHERE l.investor_id=i.id AND l.tenant_id=?) AS loan_count,
-        (SELECT COALESCE(SUM(l.principal_balance),0) FROM loans l WHERE l.investor_id=i.id AND l.tenant_id=? AND l.status IN ('active','in_mora','disbursed','restructured')) AS active_capital
+        (SELECT COALESCE(SUM(l.principal_balance),0) FROM loans l WHERE l.investor_id=i.id AND l.tenant_id=? AND l.status IN ('active','in_mora','disbursed')) AS active_capital
       FROM investors i
       ${where}
       ORDER BY i.created_at DESC
@@ -298,7 +298,7 @@ router.get('/:id/liquidation-report', authenticate, requireTenant, requirePermis
 
     const activeLoans = db.prepare(`
       SELECT COUNT(*) as n, COALESCE(SUM(principal_balance),0) as outstanding
-      FROM loans WHERE investor_id=? AND tenant_id=? AND is_voided=0 AND status IN ('active','in_mora','disbursed','restructured')
+      FROM loans WHERE investor_id=? AND tenant_id=? AND is_voided=0 AND status IN ('active','in_mora','disbursed')
     `).get(req.params.id, req.tenant.id) as any;
 
     const lastPayout = db.prepare(`

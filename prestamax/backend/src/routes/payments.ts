@@ -132,6 +132,16 @@ function applyProrrogaShift(
 // ahora en ../lib/calculations (motor unificado, testeado y timezone-safe).
 // Las copias locales fueron eliminadas para evitar divergencia.
 
+// Préstamo 'restructured' = sustituido por una consolidación (consolidated_into_loan_id): su obligación pasó al préstamo
+// nuevo, así que no acepta pagos (los pagos se registran en el consolidado).
+function restructuredPaymentError(loan: any) {
+  return {
+    error: 'Este préstamo fue reestructurado (consolidado en otro préstamo) y no acepta pagos. Registra el pago en el préstamo consolidado.',
+    code: 'LOAN_RESTRUCTURED',
+    consolidated_into_loan_id: loan.consolidated_into_loan_id || null,
+  };
+}
+
 // ─── GET preview (calculate allocation without saving) ────────────────────────
 router.post('/preview', authenticate, requireTenant, requirePermission('payments.create'), (req: AuthRequest, res: Response) => {
   try {
@@ -141,6 +151,7 @@ router.post('/preview', authenticate, requireTenant, requirePermission('payments
 
     const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(loan_id, req.tenant.id) as any;
     if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
+    if (loan.status === 'restructured') return res.status(409).json(restructuredPaymentError(loan));
 
     const installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY due_date').all(loan_id) as any[];
     const pDate = tenantAsOf(db, req.tenant.id);
@@ -280,6 +291,7 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     const db = getDb();
     const loan = db.prepare('SELECT * FROM loans WHERE id=? AND tenant_id=?').get(loan_id, req.tenant.id) as any;
     if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
+    if (loan.status === 'restructured') return res.status(409).json(restructuredPaymentError(loan));
     if (['liquidated', 'paid', 'cancelled', 'rejected'].includes(loan.status)) {
       return res.status(400).json({ error: `Este préstamo ya está "${loan.status}" y no acepta más pagos` });
     }
@@ -607,6 +619,12 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
     const payment = db.prepare('SELECT * FROM payments WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
     if (!payment) return res.status(404).json({ error: 'Pago no encontrado' });
     if (payment.is_voided) return res.status(400).json({ error: 'Pago ya anulado' });
+    // Un préstamo reestructurado conserva su historial intacto: anular un pago reaplicaría las cuotas y reabriría el
+    // préstamo ('active'/'liquidated'), duplicando la deuda que ya pasó al préstamo consolidado.
+    const payLoanStatus = db.prepare('SELECT status, loan_number, consolidated_into_loan_id FROM loans WHERE id=? AND tenant_id=?').get(payment.loan_id, req.tenant.id) as any;
+    if (payLoanStatus?.status === 'restructured') {
+      return res.status(409).json({ ...restructuredPaymentError(payLoanStatus), error: 'Los pagos de un préstamo reestructurado no se pueden anular: su historial quedó cerrado por la consolidación.' });
+    }
 
     // Migracion idempotente FUERA de la transaccion
     try { db.exec(`ALTER TABLE receipts ADD COLUMN is_voided INTEGER NOT NULL DEFAULT 0`); } catch(_) {}

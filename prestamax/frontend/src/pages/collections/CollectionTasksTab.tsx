@@ -246,7 +246,7 @@ const CollectionTasksTab: React.FC = () => {
         : loansRes.data?.data || loansRes.data?.loans || []
       setLoanOptions(
         loansRaw
-          .filter((l: any) => ['active','current','in_mora','overdue','disbursed','restructured'].includes(l.status))
+          .filter((l: any) => ['active','current','in_mora','overdue','disbursed'].includes(l.status))
           .map((l: any) => ({
             id: l.id,
             loanNumber: l.loanNumber || '',
