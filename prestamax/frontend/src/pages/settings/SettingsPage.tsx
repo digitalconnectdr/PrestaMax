@@ -1058,19 +1058,24 @@ const SettingsPage: React.FC = () => {
                             key={cur.code}
                             onClick={() => toggleCurrency(cur.code)}
                             disabled={isBase}
-                            className={`flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
+                            className={`flex items-center gap-2 md:gap-3 p-2 md:p-3 min-w-0 rounded-lg border-2 text-left transition-all ${
                               isEnabled ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
                             } ${isBase ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
                           >
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isEnabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                            <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold leading-none ${cur.symbol.length > 2 ? 'text-[10px]' : 'text-sm'} ${isEnabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                               {cur.symbol}
                             </div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">{cur.code}</p>
-                              <p className="text-xs text-slate-500">{cur.name}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                                {cur.code}
+                                {/* En móvil la etiqueta va junto al código, dentro de la tarjeta */}
+                                {isBase && <span className="md:hidden text-xs text-blue-600 font-medium">{tGen('set.curr_base')}</span>}
+                                {!isBase && isEnabled && <CheckCircle className="md:hidden flex-shrink-0 w-3.5 h-3.5 text-blue-600"/>}
+                              </p>
+                              <p className="text-[11px] md:text-xs text-slate-500 break-words">{cur.name}</p>
                             </div>
-                            {isBase && <span className="ml-auto text-xs text-blue-600 font-medium">{tGen('set.curr_base')}</span>}
-                            {!isBase && isEnabled && <CheckCircle className="ml-auto w-4 h-4 text-blue-600"/>}
+                            {isBase && <span className="hidden md:inline ml-auto text-xs text-blue-600 font-medium">{tGen('set.curr_base')}</span>}
+                            {!isBase && isEnabled && <CheckCircle className="hidden md:block ml-auto flex-shrink-0 w-4 h-4 text-blue-600"/>}
                           </button>
                         )
                       })}
