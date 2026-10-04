@@ -322,13 +322,13 @@ router.put('/tenants/:id', authenticate, requirePlatformAdmin, (req: AuthRequest
       now(), req.params.id
     );
 
-    // Si hubo cambio de plan, limpiar permisos explicitos que el nuevo plan no permite.
-    // Esto evita que un downgrade deje permisos huerfanos que se reactivarian
-    // automaticamente en un upgrade posterior.
+    // Cambio de plan: los grants historicos fuera del nuevo plan NO se borran (quedan
+    // almacenados pero inefectivos por el techo del plan y reviven si el tenant vuelve a
+    // un plan que los incluye). Ver lib/planChange.ts.
     if (planChanged) {
       try {
         applyPlanChange(db, req.params.id, d.plan_id);
-      } catch (e) { console.error('Error limpiando permisos al cambiar plan:', e); }
+      } catch (e) { console.error('Error evaluando permisos al cambiar plan:', e); }
       // Aviso persistente a owner/admin del tenant (cambio identificable: lo hizo el panel).
       const newPlan = db.prepare('SELECT name FROM plans WHERE id=?').get(d.plan_id) as any;
       notifyTenantBilling(db, req.params.id, 'plan_changed', { key: `${before?.plan_id || 'none'}>${d.plan_id}:${now()}`, planName: newPlan?.name });

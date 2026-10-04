@@ -323,7 +323,7 @@ const webhookHandler = async (req: Request, res: Response) => {
             db.prepare(`UPDATE tenants SET subscription_status=?, subscription_end=?, plan_id=?, billing_cycle=?, updated_at=datetime('now') WHERE id=?`)
               .run(localStatus, periodEnd, newPlanId, billingPeriod, tenantId);
 
-            // Si hubo cambio de plan, limpiar permisos explicitos que el nuevo plan no permite
+            // Si hubo cambio de plan: los grants fuera del plan quedan inefectivos, no se borran (lib/planChange.ts)
             if (planChanged) {
               applyPlanChange(db, tenantId, newPlanId);
               console.log(`[Stripe] Tenant ${tenantId} cambio plan ${current?.plan_id} -> ${newPlanId}, permisos limpiados`);
