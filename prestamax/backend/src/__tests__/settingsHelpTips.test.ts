@@ -44,7 +44,25 @@ describe('ayudas ⓘ de Operación y Mora y pagos', () => {
     expect(infoTip).toContain('role="tooltip"');
     expect(infoTip).toContain('aria-describedby');
     for (const h of ['onMouseEnter', 'onFocus', 'onClick', "e.key === 'Escape'", "addEventListener('mousedown'"]) expect(infoTip, h).toContain(h);
-    expect(infoTip).toContain('max-w-[calc(100vw-3rem)]');      // no desborda en móvil
+    expect(infoTip).toContain('max-w-[calc(100vw-1rem)]');      // no desborda en móvil
+  });
+
+  it('el globo se coloca según el espacio real de la ventana (no se corta abajo ni a los lados)', () => {
+    expect(infoTip).toContain('fixed');                          // no depende del overflow de ningún contenedor
+    expect(infoTip).toContain('getBoundingClientRect');
+    expect(infoTip).toContain('window.innerHeight');
+    expect(infoTip).toContain('window.innerWidth');
+    expect(infoTip).toContain('useBelow');                       // abajo si cabe, si no arriba
+    expect(infoTip).toContain('overflow-y-auto');                // si ni así cabe, scroll interno
+    expect(infoTip).toContain("addEventListener('scroll', place, true)");
+    expect(infoTip).toContain("addEventListener('resize', place)");
+  });
+
+  it('el modal Editar Préstamo scrollea desde arriba (el centrado va en un hijo min-h-full, no en el contenedor con overflow)', () => {
+    const modal = fe('pages/loans/EditLoanModal.tsx');
+    expect(modal).toContain('fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto');
+    expect(modal).toContain('flex min-h-full items-center justify-center p-4');
+    expect(modal).not.toContain('flex items-center justify-center z-50 p-4 overflow-y-auto');
   });
 
   it('el Input admite un complemento junto a la etiqueta sin cambiar el resto de usos', () => {

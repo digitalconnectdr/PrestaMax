@@ -124,7 +124,10 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved, c
   const disabledInputCls = `${inputCls} bg-slate-50 text-slate-400 cursor-not-allowed`
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    // El contenedor fijo es el que hace scroll y el centrado va en un hijo con min-h-full: si el modal es más alto que la
+    // ventana, empieza arriba (con flex centrado + overflow en el mismo elemento se cortaba el encabezado y las pestañas).
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto">
+     <div className="flex min-h-full items-center justify-center p-4">
       <Card className="w-full max-w-2xl my-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-1">
@@ -499,6 +502,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved, c
           </Button>
         </div>
       </Card>
+     </div>
     </div>
   )
 }
