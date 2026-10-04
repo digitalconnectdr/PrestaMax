@@ -11,6 +11,7 @@ import { initAnalytics, trackPageView, registerAnalyticsContext } from '@/lib/an
 import { applyRouteSeo } from '@/lib/seo'
 import { setLocale, type Locale } from '@/lib/i18n'
 import { PageLoadingState } from '@/components/ui/Loading'
+import AppErrorBoundary from '@/components/shared/AppErrorBoundary'
 import { initPostHog, phPause, phResume } from '@/lib/posthog'
 import { initClarity, clarityPause, clarityResume } from '@/lib/clarity'
 import { isAcquisitionRoute } from '@/lib/routeSensitivity'
@@ -208,17 +209,19 @@ const App: React.FC = () => {
     registerAnalyticsContext()
   }, [])
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <TenantProvider>
-          <RouteEffects />
-          <Toaster position="top-right" />
-          <Suspense fallback={<PageLoadingState />}>
-            <AppRoutes />
-          </Suspense>
-        </TenantProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <AppErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <TenantProvider>
+            <RouteEffects />
+            <Toaster position="top-right" />
+            <Suspense fallback={<PageLoadingState />}>
+              <AppRoutes />
+            </Suspense>
+          </TenantProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </AppErrorBoundary>
   )
 }
 
