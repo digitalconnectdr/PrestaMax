@@ -12,6 +12,7 @@ import { formatDate } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useT } from '@/lib/i18n'
+import { escapeHtml } from '@/lib/htmlSafe'
 
 interface Contract {
   id: string
@@ -117,10 +118,10 @@ const ContractsPage: React.FC = () => {
     // Otherwise wrap with a generic legal-paper shell
     const hasPageRule = contract.content.includes('@page')
     const html = hasPageRule
-      ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${contract.contractNumber}</title></head><body>${contract.content}</body></html>`
+      ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(contract.contractNumber)}</title></head><body>${contract.content}</body></html>`
       : `<!DOCTYPE html><html><head>
 <meta charset="UTF-8">
-<title>${contract.contractNumber}</title>
+<title>${escapeHtml(contract.contractNumber)}</title>
 <style>
   @page { size: legal portrait; margin: 2cm 2.5cm 2.5cm 2.5cm; }
   * { box-sizing: border-box; }

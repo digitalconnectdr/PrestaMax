@@ -96,11 +96,12 @@ html { scroll-behavior: smooth; }
 .lp-blob { animation: lp-blob 16s ease-in-out infinite; }
 
 /* Móvil: los campos de formulario a 16 px. Con menos, Safari de iPhone hace zoom al enfocarlos y la pantalla queda
-   desplazada. Fuera de @layer para ganarle a las utilidades text-sm / text-xs de cada campo. */
+   desplazada. Tailwind v3 no usa capas CSS nativas: .text-sm (0,1,0) le ganaría a un selector solo de elemento, por eso
+   select y textarea llevan un :not() (0,1,1) y los input cinco (0,5,1). */
 @media (max-width: 767px) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
-  select,
-  textarea {
+  select:not([data-keep-font]),
+  textarea:not([data-keep-font]) {
     font-size: 16px;
   }
 }

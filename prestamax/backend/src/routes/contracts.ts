@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
+import { escapeHtml, safeImageDataUrl } from '../lib/htmlSafe';
 
 const router = Router();
 
@@ -99,63 +100,74 @@ function renderTemplate(body: string, loan: any, tenant: any, installments: any[
   }
   const freq = freqLabel[loan.payment_frequency] || loan.payment_frequency || 'Mensual'
 
-  return body
+  // Todos los valores se escapan (& < > " ') ANTES de sustituirse: client_name, company_name, representante, datos
+  // notariales, testigos, etc. pueden venir de usuarios con menos privilegios o del formulario público de solicitudes.
+  // La plantilla (HTML estructural) no se toca. Una sola pasada: un valor que contenga "{{otra_variable}}" no se re-expande.
+  const E = escapeHtml
+  const logoSrc = safeImageDataUrl(tenant?.logo_url)
+  const signatureSrc = safeImageDataUrl(tenant?.signature_url)
+  const vars: Record<string, string> = {
     // Debtor
-    .replace(/\{\{client_name\}\}/g, loan.client_name || '')
-    .replace(/\{\{client_id\}\}/g, loan.client_id_number || loan.client_id || '')
-    .replace(/\{\{client_address\}\}/g, loan.client_address || '')
-    .replace(/\{\{client_city\}\}/g, loan.client_city || '')
-    .replace(/\{\{client_email\}\}/g, loan.client_email || '')
-    .replace(/\{\{client_phone\}\}/g, loan.client_phone || loan.client_phone_personal || '')
+    client_name: E(loan.client_name || ''),
+    client_id: E(loan.client_id_number || loan.client_id || ''),
+    client_address: E(loan.client_address || ''),
+    client_city: E(loan.client_city || ''),
+    client_email: E(loan.client_email || ''),
+    client_phone: E(loan.client_phone || loan.client_phone_personal || ''),
     // Lender / company
-    .replace(/\{\{company_name\}\}/g, tenant?.name || '')
-    .replace(/\{\{company_address\}\}/g, tenant?.address || '')
-    .replace(/\{\{company_phone\}\}/g, tenant?.phone || '')
-    .replace(/\{\{company_email\}\}/g, tenant?.email || '')
-    .replace(/\{\{rnc\}\}/g, tenant?.rnc || '')
-    .replace(/\{\{representative_name\}\}/g, tenant?.representative_name || '')
-    .replace(/\{\{company_logo\}\}/g, tenant?.logo_url ? `<img src="${tenant.logo_url}" alt="Logo" style="max-height:90px;max-width:240px;object-fit:contain"/>` : '')
-    .replace(/\{\{company_signature\}\}/g, tenant?.signature_url ? `<img src="${tenant.signature_url}" alt="Firma" style="max-height:60px;max-width:200px;object-fit:contain"/>` : '')
+    company_name: E(tenant?.name || ''),
+    company_address: E(tenant?.address || ''),
+    company_phone: E(tenant?.phone || ''),
+    company_email: E(tenant?.email || ''),
+    rnc: E(tenant?.rnc || ''),
+    representative_name: E(tenant?.representative_name || ''),
+    // Imágenes: solo PNG/JPEG/WEBP en data URL válida; cualquier otra cosa no genera <img>
+    company_logo: logoSrc ? `<img src="${logoSrc}" alt="Logo" style="max-height:90px;max-width:240px;object-fit:contain"/>` : '',
+    company_signature: signatureSrc ? `<img src="${signatureSrc}" alt="Firma" style="max-height:60px;max-width:200px;object-fit:contain"/>` : '',
     // Loan data
-    .replace(/\{\{loan_number\}\}/g, loan.loan_number || '')
-    .replace(/\{\{amount\}\}/g, fmt(loan.disbursed_amount || loan.requested_amount))
-    .replace(/\{\{rate\}\}/g, rateStr)
-    .replace(/\{\{term\}\}/g, termStr)
-    .replace(/\{\{monthly_payment\}\}/g, freq)
-    .replace(/\{\{start_date\}\}/g, loan.start_date ? new Date(loan.start_date).toLocaleDateString('es-DO') : '-')
-    .replace(/\{\{end_date\}\}/g, loan.end_date ? new Date(loan.end_date).toLocaleDateString('es-DO') : '-')
-    .replace(/\{\{next_payment_date\}\}/g, nextPaymentDate)
-    .replace(/\{\{print_date\}\}/g, printDate)
-    .replace(/\{\{date\}\}/g, printDate)
+    loan_number: E(loan.loan_number || ''),
+    amount: E(fmt(loan.disbursed_amount || loan.requested_amount)),
+    rate: E(rateStr),
+    term: E(termStr),
+    monthly_payment: E(freq),
+    start_date: E(loan.start_date ? new Date(loan.start_date).toLocaleDateString('es-DO') : '-'),
+    end_date: E(loan.end_date ? new Date(loan.end_date).toLocaleDateString('es-DO') : '-'),
+    next_payment_date: E(nextPaymentDate),
+    print_date: E(printDate),
+    date: E(printDate),
     // Payment plan table
-    .replace(/\{\{payment_plan\}\}/g, paymentPlanLines)
+    payment_plan: E(paymentPlanLines),
     // ── Notarial / legal document variables ────────────────────────────────
-    .replace(/\{\{notary_name\}\}/g, tenant?.notary_name || '[NOMBRE DEL NOTARIO]')
-    .replace(/\{\{notary_collegiate_number\}\}/g, tenant?.notary_collegiate_number || '[NO. COLEGIATURA]')
-    .replace(/\{\{notary_office_address\}\}/g, tenant?.notary_office_address || '[DIRECCIÓN DEL NOTARIO]')
-    .replace(/\{\{acreedor_id\}\}/g, tenant?.acreedor_id_number || '[CÉDULA ACREEDOR]')
-    .replace(/\{\{company_city\}\}/g, tenant?.city || 'Santiago')
-    .replace(/\{\{testigo1_nombre\}\}/g, tenant?.testigo1_nombre || '[NOMBRE TESTIGO 1]')
-    .replace(/\{\{testigo1_id\}\}/g, tenant?.testigo1_id || '[CÉDULA TESTIGO 1]')
-    .replace(/\{\{testigo1_domicilio\}\}/g, tenant?.testigo1_domicilio || '[DOMICILIO TESTIGO 1]')
-    .replace(/\{\{testigo2_nombre\}\}/g, tenant?.testigo2_nombre || '[NOMBRE TESTIGO 2]')
-    .replace(/\{\{testigo2_id\}\}/g, tenant?.testigo2_id || '[CÉDULA TESTIGO 2]')
-    .replace(/\{\{testigo2_domicilio\}\}/g, tenant?.testigo2_domicilio || '[DOMICILIO TESTIGO 2]')
+    notary_name: E(tenant?.notary_name || '[NOMBRE DEL NOTARIO]'),
+    notary_collegiate_number: E(tenant?.notary_collegiate_number || '[NO. COLEGIATURA]'),
+    notary_office_address: E(tenant?.notary_office_address || '[DIRECCIÓN DEL NOTARIO]'),
+    acreedor_id: E(tenant?.acreedor_id_number || '[CÉDULA ACREEDOR]'),
+    company_city: E(tenant?.city || 'Santiago'),
+    testigo1_nombre: E(tenant?.testigo1_nombre || '[NOMBRE TESTIGO 1]'),
+    testigo1_id: E(tenant?.testigo1_id || '[CÉDULA TESTIGO 1]'),
+    testigo1_domicilio: E(tenant?.testigo1_domicilio || '[DOMICILIO TESTIGO 1]'),
+    testigo2_nombre: E(tenant?.testigo2_nombre || '[NOMBRE TESTIGO 2]'),
+    testigo2_id: E(tenant?.testigo2_id || '[CÉDULA TESTIGO 2]'),
+    testigo2_domicilio: E(tenant?.testigo2_domicilio || '[DOMICILIO TESTIGO 2]'),
     // ── Financial words ────────────────────────────────────────────────────
-    .replace(/\{\{amount_words\}\}/g, currencyWords(loanAmount))
-    .replace(/\{\{amount_raw\}\}/g, String(loanAmount))
-    .replace(/\{\{installment_amount\}\}/g, `RD$${Number(installmentAmt).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`)
-    .replace(/\{\{installment_amount_words\}\}/g, currencyWords(installmentAmt))
-    .replace(/\{\{rate_pct\}\}/g, String(loan.rate || 0))
-    .replace(/\{\{rate_words\}\}/g, numToWords(loan.rate || 0))
-    .replace(/\{\{loan_term\}\}/g, String(loan.term || 0))
-    .replace(/\{\{loan_term_words\}\}/g, numToWords(loan.term || 0))
-    .replace(/\{\{frequency_label\}\}/g, freq)
+    amount_words: E(currencyWords(loanAmount)),
+    amount_raw: E(String(loanAmount)),
+    installment_amount: E(`RD$${Number(installmentAmt).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`),
+    installment_amount_words: E(currencyWords(installmentAmt)),
+    rate_pct: E(String(loan.rate || 0)),
+    rate_words: E(numToWords(loan.rate || 0)),
+    loan_term: E(String(loan.term || 0)),
+    loan_term_words: E(numToWords(loan.term || 0)),
+    frequency_label: E(freq),
     // ── Date words ─────────────────────────────────────────────────────────
-    .replace(/\{\{today_date_long\}\}/g, dateLong(new Date().toISOString()))
-    .replace(/\{\{maturity_date_long\}\}/g, dateLong(maturityDateStr))
-    .replace(/\{\{first_payment_date_long\}\}/g, dateLong(loan.first_payment_date))
-    .replace(/\{\{disbursement_date_long\}\}/g, dateLong(loan.disbursement_date))
+    today_date_long: E(dateLong(new Date().toISOString())),
+    maturity_date_long: E(dateLong(maturityDateStr)),
+    first_payment_date_long: E(dateLong(loan.first_payment_date)),
+    disbursement_date_long: E(dateLong(loan.disbursement_date)),
+  }
+
+  // Variables desconocidas se dejan tal cual (igual que antes); la función de reemplazo evita que "$&" o "$1" en un valor se interpreten.
+  return body.replace(/\{\{(\w+)\}\}/g, (m, key) => (Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : m))
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -201,12 +213,12 @@ router.post('/', authenticate, requireTenant, requirePermission('contracts.creat
     const count = (db.prepare('SELECT COUNT(*) as c FROM contracts WHERE tenant_id=?').get(req.tenant.id) as any).c;
     const contract_number = `CON-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
 
+    // La plantilla debe pertenecer a ESTE tenant. Una plantilla de otro tenant (o inexistente) responde igual: 404.
     let content = '';
     if (template_id) {
-      const tmpl = db.prepare('SELECT * FROM contract_templates WHERE id=?').get(template_id) as any;
-      if (tmpl) {
-        content = renderTemplate(tmpl.body, loan, tenant, installments);
-      }
+      const tmpl = db.prepare('SELECT * FROM contract_templates WHERE id=? AND tenant_id=?').get(template_id, req.tenant.id) as any;
+      if (!tmpl) return res.status(404).json({ error: 'Plantilla no encontrada' });
+      content = renderTemplate(tmpl.body, loan, tenant, installments);
     }
 
     const id = uuid();

@@ -22,6 +22,7 @@ import { AMORT_LABELS, getAmortLabel } from '@/lib/amortization'
 import { printPaymentReceipt, sendReceiptByWhatsApp } from '@/lib/printReceipt'
 import { useT } from '@/lib/i18n'
 import { trackFirstPaymentCreated, trackActivationCompleted } from '@/lib/analytics'
+import { escapeHtml, decodeBasicEntities } from '@/lib/htmlSafe'
 
 interface Installment {
   id: string
@@ -628,7 +629,7 @@ const LoanDetailPage: React.FC = () => {
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Contrato ${loan?.loanNumber}</title>
+  <title>Contrato ${escapeHtml(loan?.loanNumber)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Courier New', Courier, monospace; font-size: 12px; line-height: 1.6; color: #000; background: #fff; padding: 30px 40px; }
@@ -641,7 +642,7 @@ const LoanDetailPage: React.FC = () => {
   </style>
 </head>
 <body>
-  <pre>${generatedContractContent
+  <pre>${decodeBasicEntities(generatedContractContent)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/\{\{company_logo\}\}/g, loan ? `</pre><img src="{{LOGO}}" /><pre>` : '')}</pre>
   <script>window.onload = () => { window.print(); }</script>
@@ -2216,7 +2217,7 @@ const LoanDetailPage: React.FC = () => {
                   {/* Contract preview */}
                   <div className="border border-slate-200 rounded-lg bg-slate-50 p-4 max-h-96 overflow-y-auto">
                     <pre className="text-xs font-mono whitespace-pre-wrap text-slate-800 leading-relaxed">
-                      {generatedContractContent}
+                      {decodeBasicEntities(generatedContractContent)}
                     </pre>
                   </div>
 

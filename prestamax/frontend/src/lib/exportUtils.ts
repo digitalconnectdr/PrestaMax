@@ -6,6 +6,7 @@
  * y títulos las traduce cada página al construir headers/title.
  */
 import { t, getLocale } from '@/lib/i18n'
+import { escapeHtml as esc } from '@/lib/htmlSafe'
 import api from '@/lib/api'
 
 // Mapea el locale de la app al locale de Intl para fechas/montos.
@@ -63,7 +64,7 @@ export function printToPDF(options: PrintTableOptions): void {
   const tableRows = rows.map(row => {
     const cells = headers.map(h => {
       const align = h.align || 'left'
-      return `<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:${align};font-size:12px;">${row[h.key] ?? ''}</td>`
+      return `<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:${align};font-size:12px;">${esc(row[h.key] ?? '')}</td>`
     }).join('')
     return `<tr>${cells}</tr>`
   }).join('')
@@ -72,8 +73,8 @@ export function printToPDF(options: PrintTableOptions): void {
     <div style="margin-top:20px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;display:flex;gap:32px;flex-wrap:wrap;">
       ${summary.map(s => `
         <div>
-          <p style="font-size:11px;color:#64748b;margin:0;">${s.label}</p>
-          <p style="font-size:15px;font-weight:700;color:#1e293b;margin:4px 0 0;">${s.value}</p>
+          <p style="font-size:11px;color:#64748b;margin:0;">${esc(s.label)}</p>
+          <p style="font-size:15px;font-weight:700;color:#1e293b;margin:4px 0 0;">${esc(s.value)}</p>
         </div>
       `).join('')}
     </div>
@@ -83,7 +84,7 @@ export function printToPDF(options: PrintTableOptions): void {
 <html lang="${getLocale()}">
 <head>
   <meta charset="UTF-8"/>
-  <title>${title}</title>
+  <title>${esc(title)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1e293b; padding: 24px; }
@@ -104,15 +105,15 @@ export function printToPDF(options: PrintTableOptions): void {
 </head>
 <body>
   <div class="header">
-    <h1>${title}</h1>
-    ${subtitle ? `<p>${subtitle}</p>` : ''}
+    <h1>${esc(title)}</h1>
+    ${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
     <span class="badge">CredyTek · ${t('report.generated_on')} ${new Date().toLocaleDateString(intlLocale(), { dateStyle: 'full' })}</span>
   </div>
   ${summaryHtml}
   <table>
     <thead>
       <tr>
-        ${headers.map(h => `<th style="text-align:${h.align || 'left'}">${h.label}</th>`).join('')}
+        ${headers.map(h => `<th style="text-align:${h.align || 'left'}">${esc(h.label)}</th>`).join('')}
       </tr>
     </thead>
     <tbody>

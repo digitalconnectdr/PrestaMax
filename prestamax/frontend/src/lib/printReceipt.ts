@@ -3,6 +3,7 @@
 
 import api from '@/lib/api'
 import { t as tg, getLocale } from '@/lib/i18n'
+import { escapeHtml as esc, safeImageDataUrl } from '@/lib/htmlSafe'
 
 export interface ReceiptPayment {
   id: string
@@ -53,10 +54,12 @@ export async function printPaymentReceipt(
   tenant: ReceiptTenant | string,
 ): Promise<void> {
   const t = typeof tenant === 'string' ? { name: tenant } : (tenant || {})
-  const tenantName = t.name || tg('rcp.business')
-  const tenantPhone = t.phone || ''
-  const tenantAddress = t.address || ''
-  const tenantLogo = t.logoUrl || ''
+  // Todo valor dinámico se escapa antes de entrar al HTML del recibo (nombre del cliente/empresa, referencia, notas...).
+  // El logo solo se acepta como data URL PNG/JPEG/WEBP; cualquier otra cosa no genera <img>.
+  const tenantName = esc(t.name || tg('rcp.business'))
+  const tenantPhone = esc(t.phone || '')
+  const tenantAddress = esc(t.address || '')
+  const tenantLogo = safeImageDataUrl(t.logoUrl)
 
   // Fetch loan detail para incluir balance, proxima fecha y cuotas X de Y
   let loan: any = null
@@ -120,14 +123,14 @@ export async function printPaymentReceipt(
   </div>
   <hr/>
   <table><tbody>
-    <tr><td>${tg('rcp.receipt_no')}</td><td style="text-align:right" class="num">${p.receiptNumber || p.paymentNumber}</td></tr>
-    <tr><td>${tg('rcp.payment_no')}</td><td style="text-align:right" class="num">${p.paymentNumber}</td></tr>
+    <tr><td>${tg('rcp.receipt_no')}</td><td style="text-align:right" class="num">${esc(p.receiptNumber || p.paymentNumber)}</td></tr>
+    <tr><td>${tg('rcp.payment_no')}</td><td style="text-align:right" class="num">${esc(p.paymentNumber)}</td></tr>
     <tr><td>${tg('rcp.date')}</td><td style="text-align:right">${fmtDate(p.paymentDate)}</td></tr>
-    <tr><td>${tg('rcp.client')}</td><td style="text-align:right">${p.clientName}</td></tr>
-    <tr><td>${tg('rcp.loan')}</td><td style="text-align:right" class="num">${p.loanNumber}</td></tr>
-    <tr><td>${tg('rcp.method')}</td><td style="text-align:right">${methodLabel(p.paymentMethod)}</td></tr>
-    ${p.bankAccountName ? `<tr><td>${tg('rcp.account')}</td><td style="text-align:right">${p.bankAccountName}</td></tr>` : ''}
-    ${p.reference ? `<tr><td>${tg('rcp.reference')}</td><td style="text-align:right">${p.reference}</td></tr>` : ''}
+    <tr><td>${tg('rcp.client')}</td><td style="text-align:right">${esc(p.clientName)}</td></tr>
+    <tr><td>${tg('rcp.loan')}</td><td style="text-align:right" class="num">${esc(p.loanNumber)}</td></tr>
+    <tr><td>${tg('rcp.method')}</td><td style="text-align:right">${esc(methodLabel(p.paymentMethod))}</td></tr>
+    ${p.bankAccountName ? `<tr><td>${tg('rcp.account')}</td><td style="text-align:right">${esc(p.bankAccountName)}</td></tr>` : ''}
+    ${p.reference ? `<tr><td>${tg('rcp.reference')}</td><td style="text-align:right">${esc(p.reference)}</td></tr>` : ''}
   </tbody></table>
   <hr/>
   <table><tbody>${rows}</tbody></table>
@@ -136,13 +139,13 @@ export async function printPaymentReceipt(
     <span>${tg('rcp.total_paid')}</span><span class="total">${fmtMoney(p.amount)}</span>
   </div>
   <hr/>
-  ${cuotasInfo ? `<div class="bal-row"><span>${tg('rcp.installments_paid')}</span><strong>${cuotasInfo}</strong></div>` : ''}
-  ${proximoPago ? `<div class="next-row"><span>${tg('rcp.next_date')}</span><strong>${proximoPago}</strong></div>` : ''}
-  ${balancePendiente ? `<div class="bal-row"><span>${tg('rcp.pending_balance')}</span><strong>${balancePendiente}</strong></div>` : ''}
+  ${cuotasInfo ? `<div class="bal-row"><span>${tg('rcp.installments_paid')}</span><strong>${esc(cuotasInfo)}</strong></div>` : ''}
+  ${proximoPago ? `<div class="next-row"><span>${tg('rcp.next_date')}</span><strong>${esc(proximoPago)}</strong></div>` : ''}
+  ${balancePendiente ? `<div class="bal-row"><span>${tg('rcp.pending_balance')}</span><strong>${esc(balancePendiente)}</strong></div>` : ''}
   ${p.isVoided ? `<div class="void">${tg('rcp.voided')}</div><hr/>` : ''}
   <p style="font-size:10px;color:#888;text-align:center;margin-top:12px">
-    ${tg('rcp.registered_by')} ${p.registeredByName || '—'}
-    ${p.notes ? `<br/>${tg('rcp.notes')} ${p.notes}` : ''}
+    ${tg('rcp.registered_by')} ${esc(p.registeredByName || '—')}
+    ${p.notes ? `<br/>${tg('rcp.notes')} ${esc(p.notes)}` : ''}
   </p>
   <p class="footer">${tg('rcp.platform')}</p>
   <script>window.onload=()=>{window.print();}</script>

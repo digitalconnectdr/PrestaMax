@@ -121,14 +121,9 @@ describe('móvil: tamaño de fuente y áreas táctiles', () => {
     expect(at).toBeGreaterThan(-1);
     const block = css.slice(at, css.indexOf('}\n}', at) + 3);
     expect(block).toContain('font-size: 16px');
-    for (const sel of ['input:not([type="checkbox"])', 'select', 'textarea']) expect(block, sel).toContain(sel);
-    // no está dentro de un @layer
-    const layers = [...css.matchAll(/@layer [a-z]+ \{/g)].map(m => m.index!);
-    for (const start of layers) {
-      let depth = 0, end = start;
-      for (let i = css.indexOf('{', start); i < css.length; i++) { if (css[i] === '{') depth++; else if (css[i] === '}') { depth--; if (depth === 0) { end = i; break; } } }
-      expect(at > start && at < end, '@layer').toBe(false);
-    }
+    // select/textarea necesitan un :not() para superar la especificidad de .text-sm (Tailwind v3 no usa @layer nativo)
+    for (const sel of ['input:not([type="checkbox"])', 'select:not(', 'textarea:not(']) expect(block, sel).toContain(sel);
+    expect(block).not.toMatch(/^\s*select,\s*$/m);
   });
   it('.tap-target garantiza 40 px en pantallas táctiles y se aplica a los botones de icono', () => {
     expect(css).toMatch(/@media \(pointer: coarse\) \{\s*\.tap-target \{[^}]*min-width: 40px; min-height: 40px/);
