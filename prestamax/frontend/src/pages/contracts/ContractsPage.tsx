@@ -260,7 +260,7 @@ const ContractsPage: React.FC = () => {
                             <>
                               <button
                                 onClick={() => setShowContentModal(contract)}
-                                className="p-1 hover:bg-blue-100 rounded text-blue-600 transition-colors"
+                                className="tap-target p-1 hover:bg-blue-100 rounded text-blue-600 transition-colors"
                                 title={t('ctr.view')}
                               >
                                 <Eye className="w-4 h-4" />
@@ -279,7 +279,7 @@ const ContractsPage: React.FC = () => {
                               {can('contracts.sign') && (
                                 <button
                                   onClick={() => handleSign(contract)}
-                                  className="p-1 hover:bg-green-100 rounded text-green-600 transition-colors"
+                                  className="tap-target p-1 hover:bg-green-100 rounded text-green-600 transition-colors"
                                   title={t('ctr.sign')}
                                 >
                                   <PenLine className="w-4 h-4" />
@@ -288,7 +288,7 @@ const ContractsPage: React.FC = () => {
                               {can('contracts.delete') && (
                                 <button
                                   onClick={() => handleDelete(contract)}
-                                  className="p-1 hover:bg-red-100 rounded text-red-500 transition-colors"
+                                  className="tap-target p-1 hover:bg-red-100 rounded text-red-500 transition-colors"
                                   title={t('ctr.delete')}
                                 >
                                   <Trash2 className="w-4 h-4" />

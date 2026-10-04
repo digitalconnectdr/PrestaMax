@@ -461,7 +461,62 @@ const LoansPage: React.FC = () => {
       {/* Loans Table */}
       {filtered.length > 0 ? (
         <Card>
-          <div className="overflow-x-auto">
+          {/* Móvil: tarjetas (la tabla de 8 columnas dejaba Saldo y Estado fuera de pantalla) */}
+          <ul className="md:hidden -mx-2 divide-y divide-slate-100" data-testid="loans-mobile-list">
+            {filtered.map((loan) => (
+              <li key={loan.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/loans/${loan.id}`)}
+                  className="w-full text-left px-2 py-3 hover:bg-slate-50 active:bg-slate-100"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm font-medium text-blue-700 break-all">
+                        {loan.loanNumber}
+                        {loan.daysOverdue > 0 && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-red-500 font-sans text-xs">
+                            <AlertCircle className="w-3 h-3" />{loan.daysOverdue}d
+                          </span>
+                        )}
+                      </p>
+                      <p className="font-medium text-slate-900 truncate">{loan.clientName}</p>
+                      <p className="text-xs text-slate-500 truncate">{loan.productName}</p>
+                    </div>
+                    <LoanStatusBadge status={loan.status as any} />
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-slate-500">{t('col.amount')}</p>
+                      <p className="font-semibold">
+                        {formatCurrency(loan.disbursedAmount || loan.approvedAmount || loan.requestedAmount, loan.currency || 'DOP')}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">{t('col.balance')}</p>
+                      <p className={loan.moraBalance > 0 ? 'text-red-600 font-semibold' : 'font-medium'}>
+                        {formatCurrency(loan.totalBalance, loan.currency || 'DOP')}
+                      </p>
+                      {loan.moraBalance > 0 && (
+                        <p className="text-xs text-red-500">{t('loan.mora_label')}: {formatCurrency(loan.moraBalance, loan.currency || 'DOP')}</p>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {loan.rate}% {loan.rateType === 'monthly' ? t('loan.rate_monthly') : t('loan.rate_annual')} · {loan.term} {
+                      loan.termUnit === 'months'   ? t('loan.unit.months') :
+                      loan.termUnit === 'biweekly' ? t('loan.unit.biweekly') :
+                      loan.termUnit === 'weeks'    ? t('loan.unit.weeks') :
+                      loan.termUnit === 'days'     ? t('loan.unit.days') :
+                      loan.termUnit === 'years'    ? t('loan.unit.years') :
+                      loan.termUnit
+                    }
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
@@ -536,7 +591,7 @@ const LoansPage: React.FC = () => {
                       <LoanStatusBadge status={loan.status as any} />
                     </td>
                     <td className="py-3 px-4 text-center" onClick={(e) => { e.stopPropagation(); navigate(`/loans/${loan.id}`) }}>
-                      <button className="p-1 hover:bg-blue-100 rounded transition-colors text-blue-600">
+                      <button className="tap-target p-1 hover:bg-blue-100 rounded transition-colors text-blue-600">
                         <Eye className="w-4 h-4" />
                       </button>
                     </td>

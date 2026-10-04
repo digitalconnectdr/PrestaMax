@@ -95,6 +95,21 @@ html { scroll-behavior: smooth; }
 }
 .lp-blob { animation: lp-blob 16s ease-in-out infinite; }
 
+/* Móvil: los campos de formulario a 16 px. Con menos, Safari de iPhone hace zoom al enfocarlos y la pantalla queda
+   desplazada. Fuera de @layer para ganarle a las utilidades text-sm / text-xs de cada campo. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Móvil: áreas táctiles de al menos 40 px en los botones de icono de las filas y encabezados (marcados con .tap-target) */
+@media (pointer: coarse) {
+  .tap-target { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+}
+
 /* Accesibilidad: si el usuario pide menos movimiento, desactivar animaciones */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

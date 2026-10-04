@@ -140,7 +140,46 @@ const ClientsPage: React.FC = () => {
       {/* Clients Table */}
       {filteredClients.length > 0 ? (
         <Card>
-          <div className="overflow-x-auto">
+          {/* Móvil: tarjetas (la tabla de 7 columnas partía nombres y cédulas en varias líneas) */}
+          <ul className="md:hidden -mx-2 divide-y divide-slate-100" data-testid="clients-mobile-list">
+            {filteredClients.map((client) => {
+              const c = client as any
+              const name = c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim()
+              const idNum = c.idNumber || c.documentNumber || '—'
+              const phone = c.phonePersonal || c.phone || '—'
+              const isActive = c.isActive !== 0
+              return (
+                <li key={client.id} className="flex items-center gap-1 px-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/clients/${client.id}`)}
+                    className="flex-1 min-w-0 text-left py-3 hover:bg-slate-50 active:bg-slate-100"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-slate-900 truncate">{name}</p>
+                      <ScoreBadge score={c.score ?? 0} compact />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">{idNum} · {phone}</p>
+                    <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {isActive ? t('common.active') : t('common.inactive')}
+                    </span>
+                  </button>
+                  {can('clients.edit') && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/clients/${client.id}/edit`)}
+                      className="tap-target p-1 hover:bg-amber-100 rounded transition-colors text-amber-600 flex-shrink-0"
+                      title={t('cli.edit_title')}
+                      aria-label={t('cli.edit_title')}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">
@@ -179,7 +218,7 @@ const ClientsPage: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => navigate(`/clients/${client.id}`)}
-                          className="p-1 hover:bg-blue-100 rounded transition-colors text-blue-600"
+                          className="tap-target p-1 hover:bg-blue-100 rounded transition-colors text-blue-600"
                           title={t('cli.view_detail')}
                         >
                           <Eye className="w-4 h-4" />
@@ -187,7 +226,7 @@ const ClientsPage: React.FC = () => {
                         {can('clients.edit') && (
                           <button
                             onClick={() => navigate(`/clients/${client.id}/edit`)}
-                            className="p-1 hover:bg-amber-100 rounded transition-colors text-amber-600"
+                            className="tap-target p-1 hover:bg-amber-100 rounded transition-colors text-amber-600"
                             title={t('cli.edit_title')}
                           >
                             <Edit className="w-4 h-4" />

@@ -736,6 +736,21 @@ const LoanDetailPage: React.FC = () => {
             </Card>
           </div>
 
+          {/* Móvil: el panel de acciones queda al final de la página (debajo del plan de pagos), así que el
+              pago, la acción principal, se ofrece aquí arriba. En escritorio vive en el panel lateral. */}
+          {can('payments.create') && (loan.status === 'active' || loan.status === 'in_mora' || loan.status === 'disbursed') && (
+            <Button
+              size="md"
+              className="lg:hidden w-full flex items-center justify-center gap-2"
+              onClick={() => setShowPaymentModal(true)}
+              disabled={isSubmitting}
+              data-testid="loan-mobile-pay"
+            >
+              <DollarSign className="w-4 h-4" />
+              {t('ld.register_payment')}
+            </Button>
+          )}
+
           {/* Overtime Warning */}
           {loan.overtimeDays > 0 && (
             <div className="flex items-start gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl">
@@ -1193,10 +1208,12 @@ const LoanDetailPage: React.FC = () => {
                   {t('ld.send_whatsapp')}
                 </a>
               )}
+              {/* Acciones destructivas: separadas del resto (y entre sí) para evitar toques accidentales, sobre todo en móvil */}
+              <div className="mt-4 pt-4 border-t border-slate-200 space-y-3 empty:hidden" data-testid="loan-danger-zone">
               {can('loans.write_off') && !['written_off', 'cancelled', 'paid', 'rejected', 'voided', 'liquidated', 'restructured'].includes(loan.status) && (
                 <button
                   onClick={() => { setShowWriteOffModal(true); setWriteOffReason(''); setWriteOffRecordLoss(true); setWriteOffComponents({ capital: true, interest: true, mora: true }) }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-orange-300 rounded-lg text-sm text-orange-700 hover:bg-orange-50 transition-colors font-medium mt-2"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-orange-300 rounded-lg text-sm text-orange-700 hover:bg-orange-50 transition-colors font-medium"
                 >
                   <AlertTriangle className="w-4 h-4" />
                   {t('ld.mark_writeoff')}
@@ -1205,7 +1222,7 @@ const LoanDetailPage: React.FC = () => {
               {can('loans.void') && !['cancelled', 'paid', 'rejected', 'voided', 'written_off', 'restructured'].includes(loan.status) && (
                 <button
                   onClick={() => setShowVoidLoanModal(true)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-red-300 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors font-medium mt-1"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-red-300 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
                 >
                   <Trash2 className="w-4 h-4" />
                   {t('ld.void_loan')}
@@ -1214,13 +1231,14 @@ const LoanDetailPage: React.FC = () => {
               {can('loans.void') && loan.status !== 'restructured' && (
                 <button
                   onClick={handleDeleteLoan}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-red-400 rounded-lg text-sm text-white bg-red-600 hover:bg-red-700 transition-colors font-medium mt-1"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-red-500 rounded-lg text-sm text-red-700 bg-red-50 hover:bg-red-100 transition-colors font-semibold"
                   title={t('ld.delete_perm_title')}
                 >
                   <Trash2 className="w-4 h-4" />
                   {t('ld.delete_perm')}
                 </button>
               )}
+              </div>
             </div>
           </Card>
 

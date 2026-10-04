@@ -28,13 +28,14 @@ interface KPI {
   todayPayments: number
 }
 
+// El interceptor de api.ts convierte las claves de la respuesta a camelCase (loan_count -> loanCount, etc.).
 interface PortfolioByCurrency {
   currency: string
-  loan_count: number
-  active_balance: number
-  mora_balance: number
-  portfolio_balance: number
-  avg_rate: number
+  loanCount: number
+  activeBalance: number
+  moraBalance: number
+  portfolioBalance: number
+  avgRate: number
 }
 
 interface ReportData {
@@ -639,23 +640,23 @@ const ReportsPage: React.FC = () => {
                               {pc.currency}
                             </span>
                           </div>
-                          <span className="text-xs text-slate-500">{t('rpt.loan_count').replace('{n}', String(pc.loan_count))}</span>
+                          <span className="text-xs text-slate-500">{t('rpt.loan_count').replace('{n}', String(pc.loanCount))}</span>
                         </div>
                         <div className="space-y-1.5 text-sm">
                           <div className="flex justify-between">
                             <span className="text-slate-500">{t('rpt.stat_active_portfolio')}</span>
-                            <span className="font-semibold text-slate-800">{formatCurrency(pc.portfolio_balance, pc.currency)}</span>
+                            <span className="font-semibold text-slate-800">{formatCurrency(pc.portfolioBalance, pc.currency)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">{t('status.in_mora')}</span>
-                            <span className={`font-semibold ${pc.mora_balance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                              {pc.mora_balance > 0 ? formatCurrency(pc.mora_balance, pc.currency) : '—'}
+                            <span className={`font-semibold ${pc.moraBalance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                              {pc.moraBalance > 0 ? formatCurrency(pc.moraBalance, pc.currency) : '—'}
                             </span>
                           </div>
-                          {pc.avg_rate && pc.avg_rate !== 1 && (
+                          {pc.avgRate && pc.avgRate !== 1 && (
                             <div className="flex justify-between pt-1.5 border-t border-slate-200 mt-1">
                               <span className="text-slate-400 text-xs">{t('rpt.exchange_rate_avg')}</span>
-                              <span className="text-slate-500 text-xs font-medium">1 {pc.currency} = {formatCurrency(pc.avg_rate, 'DOP')}</span>
+                              <span className="text-slate-500 text-xs font-medium">1 {pc.currency} = {formatCurrency(pc.avgRate, 'DOP')}</span>
                             </div>
                           )}
                         </div>

@@ -147,7 +147,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
               <span className="text-[#f59e0b]">Credy</span>Tek
             </h1>
             {/* Cerrar (móvil) */}
-            <button onClick={onClose} className="lg:hidden p-1 hover:bg-white/10 rounded transition-colors">
+            <button onClick={onClose} aria-label={t('common.close')} className="tap-target lg:hidden p-1 hover:bg-white/10 rounded transition-colors">
               <ChevronLeft className="w-5 h-5" />
             </button>
             {/* Contraer / expandir (desktop) */}

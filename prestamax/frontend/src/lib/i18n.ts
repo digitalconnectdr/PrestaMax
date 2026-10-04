@@ -2616,6 +2616,7 @@ const TR: Record<string, Tri> = {
   'prom.visit_notes':    { es: 'Notas de la visita', en: 'Visit notes', pt: 'Notas da visita' },
   'prom.visit_notes_ph': { es: '¿Qué ocurrió en la visita?', en: 'What happened during the visit?', pt: 'O que aconteceu na visita?' },
   'col.number':         { es: 'Número', en: 'Number', pt: 'Número' },
+  'col.bank':           { es: 'Cuenta Bancaria', en: 'Bank Account', pt: 'Conta Bancária' },
   'col.method':         { es: 'Método', en: 'Method', pt: 'Método' },
   'col.registered_by':  { es: 'Registrado por', en: 'Registered by', pt: 'Registrado por' },
 

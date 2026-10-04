@@ -137,7 +137,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved, c
             </h2>
             <p className="text-xs text-slate-500">{loan.loanNumber ?? loan.loan_number} · {loan.clientName ?? loan.client_name}</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded transition-colors">
+          <button onClick={onClose} aria-label={t('common.close')} className="p-2 -m-1 hover:bg-slate-100 rounded transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -169,14 +169,14 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved, c
         )}
 
         {/* Tabs — hidden if permission denied */}
-        <div className={`flex gap-1 border-b border-slate-200 mb-4 ${permissionDenied ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div className={`flex gap-1 border-b border-slate-200 mb-4 overflow-x-auto ${permissionDenied ? 'opacity-40 pointer-events-none' : ''}`}>
           {tabs.map(tab => {
             const Icon = tab.icon
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 rounded-t-lg transition-colors ${
                   activeTab === tab.id
                     ? 'bg-white border border-b-white border-slate-200 text-blue-700'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -214,17 +214,18 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved, c
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            {/* En móvil el plazo (número + unidad) y la frecuencia van apilados: lado a lado el número quedaba de ~27 px */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>{t('elm.term')}</label>
                 <div className="flex gap-2">
-                  <input type="number" value={form.term} onChange={e => set('term', e.target.value)} className={`${inputCls.replace('w-full ', '')} flex-1 min-w-0 ${ro('term') ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`} disabled={ro('term')} placeholder="12" />
+                  <input type="number" value={form.term} onChange={e => set('term', e.target.value)} className={`${inputCls.replace('w-full ', '')} flex-1 min-w-[4rem] ${ro('term') ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`} disabled={ro('term')} placeholder="12" />
                   <select value={form.termUnit} onChange={e => {
                       const u = e.target.value
                       const freqMap: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
                       set('termUnit', u)
                       if (freqMap[u]) set('paymentFrequency', freqMap[u])
-                    }} className={`${inputCls.replace('w-full ', '')} w-auto ${ro('termUnit') ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`} disabled={ro('termUnit')}>
+                    }} className={`${inputCls.replace('w-full ', '')} w-auto shrink-0 ${ro('termUnit') ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`} disabled={ro('termUnit')}>
                     <option value="months">{t('elm.u_months')}</option>
                     <option value="biweekly">{t('elm.u_biweekly')}</option>
                     <option value="weeks">{t('elm.u_weeks')}</option>

@@ -1271,7 +1271,7 @@ const SettingsPage: React.FC = () => {
                           <td className="py-3 px-4 text-center">
                             <div className="flex items-center justify-center gap-1">
                               {canModifyMember(m) && !isTenantOwner(m) && (
-                                <button onClick={()=>setEditingMember(m)} className="p-1 hover:bg-blue-100 rounded text-blue-600 transition-colors" title={tGen('set.edit_role')}>
+                                <button onClick={()=>setEditingMember(m)} className="tap-target p-1 hover:bg-blue-100 rounded text-blue-600 transition-colors" title={tGen('set.edit_role')}>
                                   <Edit2 className="w-4 h-4"/>
                                 </button>
                               )}
@@ -1282,7 +1282,7 @@ const SettingsPage: React.FC = () => {
                               )}
                               {canModifyMember(m) && (
                                 <button onClick={()=>handleResetPassword(m)}
-                                  className="p-1 hover:bg-amber-100 rounded text-amber-600 transition-colors" title={tGen('set.reset_pwd_title')}>
+                                  className="tap-target p-1 hover:bg-amber-100 rounded text-amber-600 transition-colors" title={tGen('set.reset_pwd_title')}>
                                   <KeyRound className="w-4 h-4"/>
                                 </button>
                               )}

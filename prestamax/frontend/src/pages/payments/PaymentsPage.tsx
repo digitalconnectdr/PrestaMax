@@ -390,7 +390,70 @@ const PaymentsPage: React.FC = () => {
       {/* Table */}
       {filtered.length > 0 ? (
         <Card>
-          <div className="overflow-x-auto">
+          {/* Móvil: tarjetas (la tabla de 10 columnas obligaba a desplazarse para ver monto, estado y acciones) */}
+          <ul className="md:hidden -mx-2 divide-y divide-slate-100" data-testid="payments-mobile-list">
+            {filtered.map(payment => (
+              <li key={payment.id} className={`px-2 py-3 ${payment.isVoided ? 'opacity-60' : ''}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-900 truncate">{payment.clientName}</p>
+                    <p className="text-xs text-slate-500 font-mono">{payment.paymentNumber} · {payment.loanNumber}</p>
+                    <p className="text-xs text-slate-500">{formatDate(payment.paymentDate)} · {methodLabel(payment.paymentMethod)}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`font-semibold ${payment.isVoided ? 'line-through text-slate-400' : 'text-green-700'}`}>{formatCurrency(payment.amount)}</p>
+                    {payment.isVoided ? (
+                      <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs bg-slate-200 text-slate-600">{t('pay.st_voided')}</span>
+                    ) : (
+                      <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">{t('pay.st_registered')}</span>
+                    )}
+                  </div>
+                </div>
+                {payment.bankAccountName && (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
+                    <Landmark className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />{payment.bankAccountName}
+                  </p>
+                )}
+                <div className="mt-1 flex items-center gap-1">
+                  <button
+                    onClick={() => printPaymentReceipt(payment, (tenantState as any)?.currentTenant?.tenant || { name: 'Negocio' })}
+                    className="tap-target p-1.5 hover:bg-blue-50 rounded text-blue-500 transition-colors"
+                    title={t('pay.print_receipt')} aria-label={t('pay.print_receipt')}
+                  >
+                    <Printer className="w-4 h-4"/>
+                  </button>
+                  {can('whatsapp.send') && !payment.isVoided && payment.clientPhone && (
+                    <button
+                      onClick={() => sendWhatsApp(payment, (tenantState as any)?.currentTenant?.tenant?.name || 'Negocio')}
+                      className="tap-target p-1.5 hover:bg-green-50 rounded text-green-600 transition-colors"
+                      title={t('pay.send_whatsapp')} aria-label={t('pay.send_whatsapp')}
+                    >
+                      <MessageCircle className="w-4 h-4"/>
+                    </button>
+                  )}
+                  {can('payments.edit') && !payment.isVoided && (
+                    <button
+                      onClick={() => openEditPayment(payment)}
+                      className="tap-target p-1.5 hover:bg-blue-50 rounded text-blue-400 transition-colors"
+                      title={t('pay.edit_title')} aria-label={t('pay.edit_title')}
+                    >
+                      <Edit2 className="w-4 h-4"/>
+                    </button>
+                  )}
+                  {can('payments.void') && !payment.isVoided && (
+                    <button
+                      onClick={() => { setVoidingPayment(payment); setVoidReason('') }}
+                      className="tap-target p-1.5 hover:bg-red-50 rounded text-red-400 transition-colors"
+                      title={t('pay.void_title')} aria-label={t('pay.void_title')}
+                    >
+                      <Trash2 className="w-4 h-4"/>
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="border-b border-slate-200">

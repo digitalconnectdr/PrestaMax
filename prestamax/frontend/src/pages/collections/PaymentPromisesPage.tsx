@@ -258,7 +258,7 @@ const PaymentPromisesPage: React.FC = () => {
                               <button onClick={()=>handleUpdateStatus(promise.id,'fulfilled')} className="p-1 hover:bg-emerald-100 rounded text-emerald-600" title={t('prom.mark_fulfilled')}>
                                 <CheckCircle className="w-4 h-4"/>
                               </button>
-                              <button onClick={()=>handleUpdateStatus(promise.id,'broken')} className="p-1 hover:bg-red-100 rounded text-red-500" title={t('prom.mark_broken')}>
+                              <button onClick={()=>handleUpdateStatus(promise.id,'broken')} className="tap-target p-1 hover:bg-red-100 rounded text-red-500" title={t('prom.mark_broken')}>
                                 <AlertCircle className="w-4 h-4"/>
                               </button>
                             </>

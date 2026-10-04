@@ -165,10 +165,10 @@ const OnboardingChecklist: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button onClick={() => setCollapsed(c => !c)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title={collapsed ? t('onb.show') : t('onb.hide')}>
+          <button onClick={() => setCollapsed(c => !c)} className="tap-target p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title={collapsed ? t('onb.show') : t('onb.hide')}>
             {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
           </button>
-          <button onClick={hide} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400" title={t('onb.hide')}>
+          <button onClick={hide} className="tap-target p-1.5 hover:bg-slate-100 rounded-lg text-slate-400" title={t('onb.hide')}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -213,7 +213,7 @@ const OnboardingChecklist: React.FC = () => {
                 </div>
                 <button
                   onClick={() => startTour(step.tourId)}
-                  className="text-xs px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition flex-shrink-0"
+                  className="tap-target text-xs px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg font-medium hover:bg-[#152a45] transition flex-shrink-0"
                 >
                   {t('onb.go')}
                 </button>
