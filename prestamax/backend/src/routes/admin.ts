@@ -11,6 +11,7 @@ import { getPlanFeatures, findExplicitOutsidePlan, PERMISSION_OUTSIDE_PLAN } fro
 import { checkMembershipLimits, membershipDelta, countActiveLoans } from '../lib/planLimits';
 import { PLAN_CATALOG } from '../db/planCatalog';
 import { notifyTenantBilling } from '../lib/billingNotifications';
+import { applyPlanChange } from '../lib/planChange';
 import { PRICING_FUNNEL_STEPS, ALL_FUNNEL_EVENTS, computeSequentialFunnel, computeGlobalCounts, computeSignupSources, FunnelEventRow } from '../lib/analyticsFunnel';
 
 // Helper: valida el campo `features` de un plan (string JSON o array) contra
@@ -326,7 +327,6 @@ router.put('/tenants/:id', authenticate, requirePlatformAdmin, (req: AuthRequest
     // automaticamente en un upgrade posterior.
     if (planChanged) {
       try {
-        const { applyPlanChange } = require('./billing');
         applyPlanChange(db, req.params.id, d.plan_id);
       } catch (e) { console.error('Error limpiando permisos al cambiar plan:', e); }
       // Aviso persistente a owner/admin del tenant (cambio identificable: lo hizo el panel).

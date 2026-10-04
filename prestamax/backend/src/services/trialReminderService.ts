@@ -7,7 +7,7 @@
 //  - El dia se calcula en la zona del tenant (tenants.timezone).
 //  - Para un trial activo se emite UN solo hito (el que corresponde hoy), nunca 3/1/0
 //    juntos; un trial ya terminado produce un unico aviso "vencido" (ventana de 14 dias).
-import { uuid } from '../db/database';
+import { uuid, NOTIFICATIONS_V2_MIGRATION_KEY } from '../db/database';
 import { sendTrialReminderEmail } from './emailService';
 import { notifyTenantBilling } from '../lib/billingNotifications';
 import { localParts, daysBetweenStr, safeTz } from '../lib/tz';
@@ -15,6 +15,22 @@ import { localParts, daysBetweenStr, safeTz } from '../lib/tz';
 const EMAIL_LOCAL_HOUR = 9;      // el email sale a partir de las 9:00 locales del tenant
 const EXPIRED_WINDOW_DAYS = 14;  // no avisar de trials vencidos hace mas de 2 semanas
 export const EXPIRED_MILESTONE = -1;
+
+/**
+ * Instante del primer arranque con Notifications V2 (app_migrations.applied_at).
+ * Si faltara el registro se usa `fallback` (el instante actual): criterio conservador,
+ * equivale a tratar como historico todo lo ya vencido => sin emails retroactivos.
+ */
+export function notificationsV2DeployedAt(db: any, fallback: Date): Date {
+  try {
+    const row = db.prepare('SELECT applied_at FROM app_migrations WHERE key = ?').get(NOTIFICATIONS_V2_MIGRATION_KEY) as any;
+    const raw = String(row?.applied_at || '');
+    const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw;
+    const d = new Date(iso);
+    if (raw && !isNaN(d.getTime())) return d;
+  } catch (_) { /* usa el fallback */ }
+  return fallback;
+}
 
 /** Hito de un trial ACTIVO segun los dias locales que faltan (null = aun no toca). */
 export function milestoneForDaysLeft(daysLeft: number): number | null {
@@ -36,6 +52,10 @@ export async function runTrialReminderCron(
   let sent = 0;
   let inApp = 0;
   const emailConfigured = !!process.env.RESEND_API_KEY;
+  // Backfill historico vs. funcionamiento normal: un trial que YA habia vencido antes de
+  // desplegar Notifications V2 solo recibe el aviso in-app; jamas un email retroactivo
+  // (y tampoco se marca como "enviado" algo que nunca correspondio enviar).
+  const deployedAt = notificationsV2DeployedAt(db, now);
 
   for (const t of tenants) {
     const end = new Date(t.subscription_end);
@@ -59,6 +79,9 @@ export async function runTrialReminderCron(
     inApp += notifyTenantBilling(db, t.id, expired ? 'trial_expired' : 'trial_expiring', {
       key: `m${milestone}`, daysLeft: Math.max(0, daysLeft),
     });
+
+    // Trial vencido antes del despliegue de V2: sin email retroactivo, nunca.
+    if (expired && end.getTime() < deployedAt.getTime()) continue;
 
     // Email: solo a partir de la hora local indicada y si el hito no se envio aun.
     if (!emailConfigured || local.hour < EMAIL_LOCAL_HOUR) continue;

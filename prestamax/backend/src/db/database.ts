@@ -2,6 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import { PLAN_CATALOG, TRIAL_PLAN, PRICING_V2_MIGRATION_KEY, TRIAL_DESCRIPTION, TRIAL_DESCRIPTION_MIGRATION_KEY } from './planCatalog';
 
+/** Clave en app_migrations cuyo applied_at es el instante del primer arranque con Notifications V2. */
+export const NOTIFICATIONS_V2_MIGRATION_KEY = 'notifications_v2_2026_10';
+
 // DB path: env variable > local prestamax.db next to backend folder > Linux sandbox path
 export const DB_PATH = process.env.DATABASE_PATH ||
   path.join(__dirname, '..', '..', '..', 'prestamax.db');
@@ -736,6 +739,13 @@ export function initializeDatabase(): void {
     PRIMARY KEY (job, scope, run_key)
   )`); } catch(_) {}
   try { db.exec(`ALTER TABLE tenants ADD COLUMN timezone TEXT NOT NULL DEFAULT 'America/Santo_Domingo'`); } catch(_) {}
+  // Marca de despliegue de Notifications V2 (se registra UNA vez, con su instante real).
+  // Los trials que ya habian vencido ANTES de este instante son "historicos": reciben el
+  // aviso in-app pero nunca un email retroactivo (ver trialReminderService).
+  try {
+    db.prepare(`INSERT OR IGNORE INTO app_migrations (key, applied_at) VALUES (?, ?)`)
+      .run(NOTIFICATIONS_V2_MIGRATION_KEY, new Date().toISOString());
+  } catch(_) {}
 
   // -- Cargo de Prorroga: fixed extension fee per loan --
   try { db.exec(`ALTER TABLE loans ADD COLUMN prorroga_fee REAL NOT NULL DEFAULT 0`); } catch(_) {}

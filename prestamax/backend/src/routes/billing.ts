@@ -39,40 +39,10 @@ const router = Router();
 
 const FRONTEND = () => process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// applyPlanChange — actualiza plan_id de un tenant y LIMPIA los permisos
-// explicitos (tenant_memberships.permissions) que ya no esten incluidos en el
-// nuevo plan. Esto previene que upgrades posteriores reactiven permisos viejos
-// que el usuario perdio cuando hubo un downgrade.
-// ─────────────────────────────────────────────────────────────────────────────
-export function applyPlanChange(db: any, tenantId: string, newPlanId: string | null) {
-  if (!newPlanId) return;
-  const plan = db.prepare('SELECT features FROM plans WHERE id=?').get(newPlanId) as any;
-  if (!plan) return;
-  let features: string[] = [];
-  try { features = JSON.parse(plan.features || '[]'); } catch (_) { features = []; }
-  // Si el plan no tiene features definidas, no aplicamos ceiling (backward compat)
-  if (features.length === 0) return;
-  const featureSet = new Set(features);
-
-  const memberships = db.prepare('SELECT id, permissions FROM tenant_memberships WHERE tenant_id=?').all(tenantId) as any[];
-  for (const m of memberships) {
-    let explicit: Record<string, boolean> = {};
-    try { explicit = JSON.parse(m.permissions || '{}'); } catch (_) { continue; }
-    let changed = false;
-    for (const key of Object.keys(explicit)) {
-      // Solo limpiar grants positivos (allowed=true) que el plan ya no permite
-      if (explicit[key] && !featureSet.has(key)) {
-        delete explicit[key];
-        changed = true;
-      }
-    }
-    if (changed) {
-      db.prepare('UPDATE tenant_memberships SET permissions=? WHERE id=?')
-        .run(JSON.stringify(explicit), m.id);
-    }
-  }
-}
+// applyPlanChange vive en lib/planChange.ts (sin dependencias circulares con admin.ts).
+// Se re-exporta aqui por compatibilidad con quien lo importaba desde las rutas de billing.
+import { applyPlanChange } from '../lib/planChange';
+export { applyPlanChange };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Periodo de gracia tras un pago fallido. Stripe reintenta el cobro durante

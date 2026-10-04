@@ -173,6 +173,95 @@ describe('recordatorios de trial', () => {
   });
 });
 
+describe('trial: backfill histórico vs. funcionamiento normal (sin emails retroactivos)', () => {
+  const KEY = 'notifications_v2_2026_10';
+  const deployedAt = () => (app.db.prepare('SELECT applied_at FROM app_migrations WHERE key=?').get(KEY) as any).applied_at as string;
+  let original = '';
+  beforeAll(() => { original = deployedAt(); });
+  afterAll(() => { app.db.prepare('UPDATE app_migrations SET applied_at=? WHERE key=?').run(original, KEY); });
+  // aislar: los trials creados por otros tests de este archivo no participan
+  beforeEach(() => { app.db.prepare(`UPDATE tenants SET subscription_status='active' WHERE subscription_status='trial'`).run(); });
+  const deployOn = (iso: string) => app.db.prepare('UPDATE app_migrations SET applied_at=? WHERE key=?').run(iso, KEY);
+
+  it('el marcador de despliegue de V2 existe y es idempotente (no se reescribe en reinicios)', async () => {
+    expect(original).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const dbMod = await import('../db/database');
+    dbMod.initializeDatabase();
+    expect(deployedAt()).toBe(original);
+  });
+
+  it('trial YA vencido antes de V2: solo in-app idempotente; ningún email, ninguna marca; restarts posteriores tampoco envían', async () => {
+    const { runTrialReminderCron } = await import('../services/trialReminderService');
+    deployOn('2030-03-09T00:00:00.000Z');
+    const t = trialTenant('2030-03-08T20:00:00Z');                 // venció ANTES del despliegue
+    const now = new Date('2030-03-10T15:00:00Z');                   // 11:00 locales
+    for (let restart = 0; restart < 3; restart++) {                 // primer arranque + 2 reinicios/ticks
+      const r = await runTrialReminderCron(app.db, now);
+      expect(r.sent).toBe(0);
+    }
+    expect(rows(t.admin.userId, 'trial_expired')).toHaveLength(1);  // in-app sí, una sola vez
+    expect(rows(t.ownerId, 'trial_expired')).toHaveLength(1);
+    expect(resendCalls).toHaveLength(0);                            // nada de email retroactivo
+    expect(marks(t.tenantId)).toEqual([]);                          // y no se marca algo que nunca correspondió enviar
+    // un día después y con Resend sano: sigue sin enviarse nada
+    await runTrialReminderCron(app.db, new Date('2030-03-11T15:00:00Z'));
+    expect(resendCalls).toHaveLength(0);
+    expect(marks(t.tenantId)).toEqual([]);
+  });
+
+  it('trial que vence DESPUÉS de V2: reminders normales, vence hoy, y transición real a vencido con email una sola vez', async () => {
+    const { runTrialReminderCron } = await import('../services/trialReminderService');
+    deployOn('2030-03-09T00:00:00.000Z');
+    const t = trialTenant('2030-03-10T20:00:00Z');                  // vence 16:00 locales del 10 (posterior al despliegue)
+    // 1 día antes -> reminder normal
+    expect((await runTrialReminderCron(app.db, new Date('2030-03-09T15:00:00Z'))).sent).toBe(1);
+    expect(marks(t.tenantId)).toEqual([1]);
+    expect(resendCalls.at(-1)!.subject).toBe('Tu prueba de CredyTek vence mañana');
+    // día del vencimiento -> mensaje "vence hoy"
+    expect((await runTrialReminderCron(app.db, new Date('2030-03-10T15:00:00Z'))).sent).toBe(1);
+    expect(resendCalls.at(-1)!.subject).toBe('Tu prueba de CredyTek vence hoy');
+    expect(marks(t.tenantId)).toEqual([1, 0]);
+    // transición real a vencido -> in-app persistente + email "terminó" (una vez)
+    expect((await runTrialReminderCron(app.db, new Date('2030-03-11T15:00:00Z'))).sent).toBe(1);
+    expect(resendCalls.at(-1)!.subject).toBe('Tu prueba de CredyTek terminó');
+    expect(marks(t.tenantId)).toEqual([1, 0, -1]);
+    expect(rows(t.admin.userId, 'trial_expired')).toHaveLength(1);
+    // reinicios/ticks posteriores: no vuelven a enviar nada
+    const callsAfter = resendCalls.length;
+    for (let i = 0; i < 3; i++) await runTrialReminderCron(app.db, new Date('2030-03-11T16:00:00Z'));
+    await runTrialReminderCron(app.db, new Date('2030-03-12T15:00:00Z'));
+    expect(resendCalls).toHaveLength(callsAfter);
+    expect(rows(t.admin.userId, 'trial_expired')).toHaveLength(1);
+  });
+
+  it('el email del vencido solo se marca si Resend confirma; si falla, reintenta (trial posterior a V2)', async () => {
+    const { runTrialReminderCron } = await import('../services/trialReminderService');
+    deployOn('2030-03-09T00:00:00.000Z');
+    const t = trialTenant('2030-03-10T20:00:00Z');
+    const now = new Date('2030-03-11T15:00:00Z');
+    resendStatus = 400;
+    expect((await runTrialReminderCron(app.db, now)).sent).toBe(0);
+    expect(marks(t.tenantId)).toEqual([]);
+    resendStatus = 200;
+    expect((await runTrialReminderCron(app.db, now)).sent).toBe(1);
+    expect(marks(t.tenantId)).toEqual([-1]);
+  });
+
+  it('en una misma corrida, histórico y posterior se tratan distinto: solo el posterior envía email', async () => {
+    const { runTrialReminderCron } = await import('../services/trialReminderService');
+    deployOn('2030-03-09T00:00:00.000Z');
+    const historic = trialTenant('2030-03-08T20:00:00Z');
+    const later = trialTenant('2030-03-10T20:00:00Z');
+    resendCalls.length = 0;
+    const r = await runTrialReminderCron(app.db, new Date('2030-03-11T15:00:00Z'));
+    expect(r.sent).toBe(1);
+    expect(marks(historic.tenantId)).toEqual([]);
+    expect(marks(later.tenantId)).toEqual([-1]);
+    expect(rows(historic.admin.userId, 'trial_expired')).toHaveLength(1);
+    expect(rows(later.admin.userId, 'trial_expired')).toHaveLength(1);
+  });
+});
+
 describe('resumen programado (digest)', () => {
   it('isDigestDue: diario/semanal/mensual por días de calendario, estable ante la latencia del envío anterior', async () => {
     const { isDigestDue } = await import('../services/reportSubscriptionService');
