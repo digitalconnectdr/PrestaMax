@@ -235,7 +235,7 @@ export function calcMoraDetails(
       } else {
         baseAmount = r2((inst.principal_amount || 0) - (inst.paid_principal || 0));
       }
-      out[key] = { days: moraDays, amount: r2(Math.max(0, baseAmount) * (loan.mora_rate_daily || 0.001) * moraDays) };
+      out[key] = { days: moraDays, amount: r2(Math.max(0, baseAmount) * (loan.mora_rate_daily ?? 0.001) * moraDays) };   // ?? : una tasa 0 guardada en el préstamo es válida (no cae a 0.001)
     }
   }
   return out;

@@ -15,6 +15,8 @@ import { checkActiveLoanLimit, ACTIVE_LOAN_STATUSES, PLAN_LIMIT_ACTIVE_LOANS } f
 import { planAllows } from '../lib/access';
 import { notifyUsersWithPermission } from '../lib/notify';
 import { tenantAsOf } from '../lib/tz';
+import { resolveMoraConfig, validateMoraInput } from '../lib/moraConfig';
+import { isCurrencyEnabled, currencyNotEnabledError } from '../lib/currencies';
 
 const router = Router();
 
@@ -165,6 +167,13 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
     const status = product?.requires_approval ? 'under_review' : 'approved';
     // Multi-currency: default to tenant base currency if not specified
     const currency = (d.currency || 'DOP').toUpperCase();
+    // La moneda debe estar habilitada para el tenant (DOP siempre lo está). Solo aplica a
+    // préstamos NUEVOS: los existentes conservan su moneda aunque luego se deshabilite.
+    if (!isCurrencyEnabled(db, req.tenant.id, currency)) return res.status(400).json(currencyNotEnabledError(currency));
+    // Mora: valores explícitos del préstamo (si vienen) > mora global del tenant > sistema.
+    const moraErr = validateMoraInput(d);
+    if (moraErr) return res.status(400).json({ error: moraErr });
+    const mora = resolveMoraConfig(db, req.tenant.id, d);
     const exchange_rate_to_dop = currency === 'DOP' ? 1.0 : (parseFloat(d.exchange_rate_to_dop) || 1.0);
     // Validate bank account currency matches loan currency if provided
     if (d.disbursement_bank_account_id) {
@@ -175,12 +184,12 @@ router.post('/', authenticate, requireTenant, requirePermission('loans.create'),
     }
     db.prepare(`INSERT INTO loans (id,tenant_id,branch_id,client_id,product_id,loan_number,status,requested_amount,
       rate,rate_type,term,term_unit,payment_frequency,amortization_type,purpose,notes,
-      mora_rate_daily,mora_grace_days,collector_id,currency,exchange_rate_to_dop,prorroga_fee,
-      first_payment_date,disbursement_bank_account_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      mora_rate_daily,mora_grace_days,mora_base,mora_fixed_enabled,mora_fixed_amount,collector_id,currency,exchange_rate_to_dop,prorroga_fee,
+      first_payment_date,disbursement_bank_account_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       id,req.tenant.id,d.branch_id||null,d.client_id,d.product_id,loan_number,status,d.requested_amount,
       d.rate||product?.rate,d.rate_type||product?.rate_type||'monthly',d.term,d.term_unit||'months',
       d.payment_frequency||product?.payment_frequency||'monthly',d.amortization_type||product?.amortization_type||'fixed_installment',
-      d.purpose||null,d.notes||null,product?.mora_rate_daily||0.001,product?.mora_grace_days||3,d.collector_id||null,
+      d.purpose||null,d.notes||null,mora.mora_rate_daily,mora.mora_grace_days,mora.mora_base,mora.mora_fixed_enabled,mora.mora_fixed_amount,d.collector_id||null,
       currency,exchange_rate_to_dop,parseFloat(d.prorroga_fee)||0,
       d.first_payment_date||null,d.disbursement_bank_account_id||null
     );
@@ -259,6 +268,11 @@ router.post('/consolidate', authenticate, requireTenant, requirePermission('loan
     const product = db.prepare('SELECT * FROM loan_products WHERE id=?').get(d.product_id) as any;
     if (!product) return res.status(404).json({ error: 'Producto de préstamo no encontrado' });
 
+    // Mora del préstamo consolidado: mora global del tenant (o constantes del sistema) como
+    // instantánea. Moneda: hereda la de los préstamos consolidados (flujo histórico; no se
+    // bloquea por moneda deshabilitada para no impedir refinanciar deuda ya existente).
+    const moraCfg = resolveMoraConfig(db, req.tenant.id);
+
     const newId = uuid();
     const loan_number = nextDocNumber(db, 'loans', 'loan_number', req.tenant.id, `PRE-${new Date().getFullYear()}-`, 5);
     const disbDate = new Date();
@@ -276,15 +290,15 @@ router.post('/consolidate', authenticate, requireTenant, requirePermission('loan
 
     db.prepare(`INSERT INTO loans (id,tenant_id,branch_id,client_id,product_id,loan_number,status,requested_amount,approved_amount,disbursed_amount,
       rate,rate_type,term,term_unit,payment_frequency,amortization_type,purpose,notes,
-      mora_rate_daily,mora_grace_days,collector_id,currency,exchange_rate_to_dop,
+      mora_rate_daily,mora_grace_days,mora_base,mora_fixed_enabled,mora_fixed_amount,collector_id,currency,exchange_rate_to_dop,
       disbursement_date,first_payment_date,maturity_date,approval_date,
-      principal_balance,interest_balance,total_balance,total_interest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      principal_balance,interest_balance,total_balance,total_interest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       newId, req.tenant.id, oldLoans[0].branch_id || null, clientId, d.product_id, loan_number, 'active',
       totalAmount, totalAmount, totalAmount,
       rate, rateType, term, termUnit, paymentFrequency, amortizationType,
       'Consolidación de préstamos',
       d.notes || `Consolidación de los préstamos ${oldLoans.map(l => l.loan_number).join(', ')}`,
-      product?.mora_rate_daily || 0.001, product?.mora_grace_days || 3,
+      moraCfg.mora_rate_daily, moraCfg.mora_grace_days, moraCfg.mora_base, moraCfg.mora_fixed_enabled, moraCfg.mora_fixed_amount,
       d.collector_id || oldLoans[0].collector_id || null,
       oldLoans[0].currency || 'DOP', oldLoans[0].exchange_rate_to_dop || 1.0,
       disbDate.toISOString(), firstPayDate.toISOString(), maturityDate, now(),
@@ -984,6 +998,8 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
 
   const results: { row: number; status: 'created' | 'error'; loanNumber?: string; clientName?: string; error?: string; code?: string }[] = [];
   let activeLimitHit: ReturnType<typeof checkActiveLoanLimit> = null;
+  // Mora de los préstamos importados: mora global del tenant (o sistema) como instantánea.
+  const moraCfg = resolveMoraConfig(db, req.tenant.id);
 
   // Find or create a generic migration product for this tenant
   const ensureProduct = (type: string, rate: number, rateType: string, freq: string, amorType: string): string => {
@@ -993,7 +1009,7 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
     if (!prod) {
       const pid = uuid();
       db.prepare(`INSERT INTO loan_products (id,tenant_id,name,type,min_amount,max_amount,rate,rate_type,min_term,max_term,term_unit,payment_frequency,amortization_type,mora_rate_daily,mora_grace_days,is_active)
-        VALUES (?,?,?,?,?,?,?,?,?,?,'months',?,?,0.001,3,1)`)
+        VALUES (?,?,?,?,?,?,?,?,?,?,'months',?,?,NULL,NULL,1)`)
         .run(pid, req.tenant.id, productName, type, 0, 100000000, rate, rateType, 1, 999, freq, amorType);
       return pid;
     }
@@ -1005,6 +1021,14 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
     const clientName = (row.client_name || '').trim();
     if (!clientName) { results.push({ row: i+1, status:'error', error:'Nombre de cliente requerido' }); continue; }
     if (!row.loan_amount || isNaN(parseFloat(row.loan_amount))) { results.push({ row: i+1, status:'error', clientName, error:'Monto de préstamo inválido' }); continue; }
+
+    // Moneda: vacía = DOP. Cualquier otra debe estar habilitada para el tenant (antes se
+    // degradaba en silencio a DOP). Solo afecta filas nuevas; no toca préstamos existentes.
+    const rowCurrency = String(row.currency || 'DOP').trim().toUpperCase();
+    if (!isCurrencyEnabled(db, req.tenant.id, rowCurrency)) {
+      results.push({ row: i+1, status:'error', clientName, code: 'CURRENCY_NOT_ENABLED', error: currencyNotEnabledError(rowCurrency).error });
+      continue;
+    }
 
     // Límite comercial de préstamos activos: cada fila crea un préstamo 'active'.
     // Se re-cuenta por fila (las anteriores ya están confirmadas), así que el
@@ -1030,9 +1054,7 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
       const amountPaid = parseFloat(row.amount_paid || '0') || 0;
       const outstandingBalance = row.outstanding_balance ? parseFloat(row.outstanding_balance) : null;
       // Multi-currency support
-      const currency = ((row.currency || 'DOP') as string).toUpperCase();
-      const VALID_CURRENCIES = ['DOP','USD','EUR','HTG','CAD','GBP'];
-      const safeCurrency = VALID_CURRENCIES.includes(currency) ? currency : 'DOP';
+      const safeCurrency = rowCurrency;   // ya validada contra las monedas habilitadas
       const exchangeRateToDop = safeCurrency === 'DOP' ? 1.0 : (parseFloat(row.exchange_rate_to_dop || '1') || 1.0);
       const nameParts = clientName.split(' ');
       const firstName = nameParts[0] || clientName;
@@ -1077,14 +1099,15 @@ router.post('/bulk-import', authenticate, requireTenant, requirePermission('loan
       db.prepare(`INSERT INTO loans (id,tenant_id,client_id,product_id,loan_number,status,requested_amount,approved_amount,disbursed_amount,
         rate,rate_type,term,term_unit,payment_frequency,amortization_type,purpose,notes,
         principal_balance,interest_balance,total_balance,total_interest,
-        mora_rate_daily,mora_grace_days,disbursement_date,first_payment_date,maturity_date,approval_date,
+        mora_rate_daily,mora_grace_days,mora_base,mora_fixed_enabled,mora_fixed_amount,disbursement_date,first_payment_date,maturity_date,approval_date,
         currency,exchange_rate_to_dop)
-        VALUES (?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0.001,3,?,?,?,?,?,?)`)
+        VALUES (?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(loanId, req.tenant.id, client.id, productId, loanNumber,
              loanAmount, loanAmount, loanAmount,
              rate, rateType, termMonths, 'months', freq, amorType,
              row.purpose || null, row.notes || null,
              principalBalance, totalInterest, r2(principalBalance + totalInterest), totalInterest,
+             moraCfg.mora_rate_daily, moraCfg.mora_grace_days, moraCfg.mora_base, moraCfg.mora_fixed_enabled, moraCfg.mora_fixed_amount,
              startDate.toISOString(), firstPayDate.toISOString(), maturityDate, startDate.toISOString(),
              safeCurrency, exchangeRateToDop);
 

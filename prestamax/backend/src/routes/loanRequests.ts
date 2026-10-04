@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { getDb, uuid, now, nextDocNumber } from '../db/database';
 import { authenticate, requireTenant, AuthRequest, requirePermission } from '../middleware/auth';
 import { checkActiveLoanLimit } from '../lib/planLimits';
+import { resolveMoraConfig } from '../lib/moraConfig';
 
 const router = Router();
 
@@ -154,16 +155,18 @@ router.put('/:id/convert', authenticate, requireTenant, requirePermission('reque
     const loanId = uuid();
     const loanNumber = nextDocNumber(db, 'loans', 'loan_number', req.tenant.id, `PRE-${new Date().getFullYear()}-`, 5);
     const loanStatus = 'active'; // Requests are pre-approved; go straight to active
+    // Mora: instantánea de la mora global del tenant (o constantes del sistema) al crear el préstamo.
+    const mora = resolveMoraConfig(db, req.tenant.id);
 
     db.prepare(`INSERT INTO loans (id,tenant_id,branch_id,client_id,product_id,loan_number,status,requested_amount,approved_amount,disbursed_amount,
       rate,rate_type,term,term_unit,payment_frequency,amortization_type,purpose,
-      mora_rate_daily,mora_grace_days,disbursement_bank_account_id,disbursement_date,first_payment_date,application_date,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,datetime('now'),datetime('now'))`).run(
+      mora_rate_daily,mora_grace_days,mora_base,mora_fixed_enabled,mora_fixed_amount,disbursement_bank_account_id,disbursement_date,first_payment_date,application_date,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?,datetime('now'),datetime('now'))`).run(
       loanId, req.tenant.id, branch_id || null, clientId, finalProductId,
       loanNumber, loanStatus, finalAmount, finalAmount, finalAmount,
       finalRate, rate_type, finalTerm, term_unit, payment_frequency, amortization_type,
       request.loan_purpose || null,
-      product.mora_rate_daily || 0.001, product.mora_grace_days || 3,
+      mora.mora_rate_daily, mora.mora_grace_days, mora.mora_base, mora.mora_fixed_enabled, mora.mora_fixed_amount,
       disbursement_bank_account_id || request.disbursement_bank_account_id || null,
       finalFirstDate
     );

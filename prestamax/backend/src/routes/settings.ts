@@ -4,6 +4,8 @@ import { authenticate, requireTenant, requirePermission, AuthRequest } from '../
 import { PERM_DEFS, ROLE_DEFAULTS, computePermissions } from '../lib/permissions';
 import { checkMembershipLimits, membershipDelta, rolesHaveCollector } from '../lib/planLimits';
 import { getPlanFeatures, planAllows, findExplicitOutsidePlan, PERMISSION_OUTSIDE_PLAN } from '../lib/access';
+import { validateMoraInput, normalizeMoraBase } from '../lib/moraConfig';
+import { validateCurrencyInput, applyCurrencySettings } from '../lib/currencies';
 const router = Router();
 
 // ─── Role hierarchy helpers ─────────────────────────────────────────────────
@@ -56,11 +58,19 @@ router.get('/', authenticate, requireTenant, requirePermission('settings.general
 
 // PUT update tenant info
 router.put('/tenant', authenticate, requireTenant, requirePermission('settings.general'), (req: AuthRequest, res: Response) => {
+  let inTx = false;
+  const db = getDb();
   try {
-    const d = req.body; const db = getDb();
+    const d = req.body;
     const signatureMode = d.signature_mode || d.signatureMode || undefined;
     // Helper: return value if defined, else null (never undefined — SQLite can't bind undefined)
     const col = (v: any) => v !== undefined ? (v || null) : null;
+    // Monedas de operación (General > Operación): se guardan junto con los datos de la empresa
+    // en UNA sola transacción, sin añadir otro PUT secuencial. Se valida ANTES de escribir.
+    const touchesCurrencies = d.enabled_currencies !== undefined || d.multi_currency_enabled !== undefined;
+    const curErr = validateCurrencyInput(d.enabled_currencies);
+    if (curErr) return res.status(400).json({ error: curErr });
+    if (touchesCurrencies) { db.exec('BEGIN'); inTx = true; }
     db.prepare(`UPDATE tenants SET
       name=COALESCE(?,name),
       email=COALESCE(?,email),
@@ -107,14 +117,28 @@ router.put('/tenant', authenticate, requireTenant, requirePermission('settings.g
       col(d.testigo2_domicilio),
       now(), req.tenant.id
     );
-    res.json(db.prepare('SELECT * FROM tenants WHERE id=?').get(req.tenant.id));
-  } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
+    let currencies: { enabled_currencies: string[]; multi_currency_enabled: boolean } | undefined;
+    if (touchesCurrencies) {
+      currencies = applyCurrencySettings(db, req.tenant.id, d, now());
+      db.exec('COMMIT'); inTx = false;
+    }
+    res.json({ ...(db.prepare('SELECT * FROM tenants WHERE id=?').get(req.tenant.id) as any), ...(currencies ? { enabled_currencies: currencies.enabled_currencies, multi_currency_enabled: currencies.multi_currency_enabled } : {}) });
+  } catch(e:any) {
+    if (inTx) { try { db.exec('ROLLBACK'); } catch (_) { /* noop */ } }
+    res.status(500).json({ error: e.message || 'Failed' });
+  }
 });
 
 // PUT update mora settings
+// La mora global es el valor INICIAL de los préstamos NUEVOS (se copia al préstamo al crearlo,
+// ver lib/moraConfig). Cambiarla NO modifica préstamos existentes.
 router.put('/mora', authenticate, requireTenant, requirePermission('settings.general'), (req: AuthRequest, res: Response) => {
   try {
     const d = req.body; const db = getDb();
+    // La mora global ahora tiene efecto real (default de préstamos nuevos): se valida.
+    const moraErr = validateMoraInput(d);
+    if (moraErr) return res.status(400).json({ error: moraErr });
+    if (d.mora_base !== undefined && d.mora_base !== null && d.mora_base !== '') d.mora_base = normalizeMoraBase(d.mora_base);
     const existing = db.prepare('SELECT id FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id) as any;
     if (existing) {
       db.prepare(`UPDATE tenant_settings SET
@@ -137,7 +161,7 @@ router.put('/mora', authenticate, requireTenant, requirePermission('settings.gen
     } else {
       db.prepare('INSERT INTO tenant_settings (id,tenant_id,mora_rate_daily,mora_grace_days,mora_base,mora_fixed_enabled,mora_fixed_amount) VALUES (?,?,?,?,?,?,?)').run(
         uuid(), req.tenant.id, d.mora_rate_daily ?? 0.001, d.mora_grace_days ?? 3,
-        d.mora_base ?? 'cuota', d.mora_fixed_enabled ?? 0, d.mora_fixed_amount ?? 0
+        d.mora_base ?? 'cuota_vencida', d.mora_fixed_enabled ?? 0, d.mora_fixed_amount ?? 0
       );
     }
     res.json(db.prepare('SELECT * FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id));
@@ -181,28 +205,11 @@ router.put('/approvals', authenticate, requireTenant, requirePermission('setting
 router.put('/currencies', authenticate, requireTenant, requirePermission('settings.general'), (req: AuthRequest, res: Response) => {
   try {
     const d = req.body; const db = getDb();
-    const multiCurrencyEnabled = d.multi_currency_enabled !== undefined ? (d.multi_currency_enabled ? 1 : 0) : null;
-    // Always ensure DOP is included in enabled currencies
-    let enabledCurrencies: string[] = Array.isArray(d.enabled_currencies) ? d.enabled_currencies : ['DOP'];
-    if (!enabledCurrencies.includes('DOP')) enabledCurrencies = ['DOP', ...enabledCurrencies];
-    enabledCurrencies = [...new Set(enabledCurrencies.map((c: string) => c.toUpperCase()))];
-
-    const existing = db.prepare('SELECT id FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id) as any;
-    if (existing) {
-      db.prepare(`UPDATE tenant_settings SET
-        multi_currency_enabled=COALESCE(?,multi_currency_enabled),
-        enabled_currencies=?,
-        updated_at=?
-      WHERE tenant_id=?`).run(
-        multiCurrencyEnabled,
-        JSON.stringify(enabledCurrencies),
-        now(), req.tenant.id
-      );
-    } else {
-      db.prepare('INSERT INTO tenant_settings (id,tenant_id,multi_currency_enabled,enabled_currencies) VALUES (?,?,?,?)').run(
-        uuid(), req.tenant.id, multiCurrencyEnabled ?? 0, JSON.stringify(enabledCurrencies)
-      );
-    }
+    // Endpoint conservado por compatibilidad (la UI actual guarda las monedas dentro de
+    // PUT /settings/tenant). Misma lógica: DOP siempre, solo catálogo, flag multimoneda derivado.
+    const curErr = validateCurrencyInput(d.enabled_currencies);
+    if (curErr) return res.status(400).json({ error: curErr });
+    applyCurrencySettings(db, req.tenant.id, d, now());
     res.json(db.prepare('SELECT * FROM tenant_settings WHERE tenant_id=?').get(req.tenant.id));
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });

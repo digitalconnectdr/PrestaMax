@@ -658,7 +658,7 @@ router.get('/projection', authenticate, requireTenant, requirePermission('report
         total,
         due_dates:     rangeInsts.map((i: any) => i.deferred_due_date || i.due_date),
         mora_type:     loan.mora_fixed_enabled ? 'fixed' : 'daily',
-        mora_rate:     loan.mora_fixed_enabled ? (loan.mora_fixed_amount || 0) : (loan.mora_rate_daily || 0.001),
+        mora_rate:     loan.mora_fixed_enabled ? (loan.mora_fixed_amount || 0) : (loan.mora_rate_daily ?? 0.001),
       });
     }
 
@@ -698,7 +698,7 @@ router.get('/projection', authenticate, requireTenant, requirePermission('report
         total:         r2(mora),
         due_dates:     [],
         mora_type:     loan.mora_fixed_enabled ? 'fixed' : 'daily',
-        mora_rate:     loan.mora_fixed_enabled ? (loan.mora_fixed_amount || 0) : (loan.mora_rate_daily || 0.001),
+        mora_rate:     loan.mora_fixed_enabled ? (loan.mora_fixed_amount || 0) : (loan.mora_rate_daily ?? 0.001),
         note:          'Sin cuotas en este período — mora acumulada',
       });
     }

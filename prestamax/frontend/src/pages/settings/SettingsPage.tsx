@@ -22,11 +22,15 @@ import { SUPPORTED_CURRENCIES } from '@/lib/utils'
 import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { AMORTIZATION_TYPES } from '@/lib/amortization'
+import { GeneralSectionId, parseGeneralSection, isLegacySectionAlias } from '@/lib/generalSections'
+import { normalizeSelection, toggleSelection, parseStoredCurrencies, deriveMultiCurrency } from '@/lib/currencyOptions'
+import CurrencyMultiSelect from '@/components/shared/CurrencyMultiSelect'
 
 // ─── Interfaces ───────────────────────────────────────────────────
 interface TenantData { name: string; email: string; phone: string; address: string; currency: string; scoreMode: string; signatureMode: string; rnc: string; representativeName: string; logoUrl: string; signatureUrl: string; city: string; notaryName: string; notaryCollegiateNumber: string; notaryOfficeAddress: string; acreedorIdNumber: string; testigo1Nombre: string; testigo1Id: string; testigo1Domicilio: string; testigo2Nombre: string; testigo2Id: string; testigo2Domicilio: string }
 interface SettingsData { moraRateDaily: number; moraGraceDays: number; rebateEnabled: number; rebateType: string; moraBase: string; moraFixedEnabled: number; moraFixedAmount: number }
-interface CurrencySettings { multiCurrencyEnabled: boolean; enabledCurrencies: string[] }
+// Monedas de operación: el flag multimoneda no se edita; se deriva de la selección al guardar.
+interface CurrencySettings { enabledCurrencies: string[] }
 interface LoanProduct { id: string; name: string; code: string; type: string; rate: number; minTerm: number; maxTerm: number; isActive: number; paymentFrequency: string; amortizationType: string; minAmount: number; maxAmount: number; requiresGuarantee?: boolean | number }
 interface Member { id: string; userId: string; fullName: string; email: string; roles: string; isActive: number; userActive: number; branchId: string | null; commissionPercent?: number; lastLogin: string | null }
 interface Branch { id: string; name: string; address: string; phone: string; isActive: number }
@@ -54,14 +58,13 @@ const PATH_TO_TAB: Record<string, string> = {
   '/settings/subscription': 'subscription',
 }
 
-// Secciones de la pestaña General (solo navegación visual: no cambia la ruta ni recarga datos)
-type GeneralSectionId = 'company' | 'operation' | 'legal' | 'mora' | 'currencies' | 'account'
+// Secciones de la pestaña General (solo navegación visual: no cambia la ruta ni recarga datos).
+// "Monedas" ya no es una sección: se unificó en Operación (?section=currencies sigue abriendo Operación).
 const GENERAL_SECTIONS: { id: GeneralSectionId; labelKey: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'company',    labelKey: 'set.section.company',    icon: Building2 },
   { id: 'operation',  labelKey: 'set.section.operation',  icon: Settings },
   { id: 'legal',      labelKey: 'set.section.legal',      icon: FileText },
   { id: 'mora',       labelKey: 'set.section.mora',       icon: Calendar },
-  { id: 'currencies', labelKey: 'set.section.currencies', icon: CreditCard },
   { id: 'account',    labelKey: 'set.section.account',    icon: KeyRound },
 ]
 
@@ -92,14 +95,16 @@ const SettingsPage: React.FC = () => {
   // Deep link: /settings?section=<id>. El query NO cambia el pathname, así que no dispara
   // loadTab ni requests; un valor inválido cae a 'company'.
   const [searchParams, setSearchParams] = useSearchParams()
-  const parseGeneralSection = (raw: string | null): GeneralSectionId =>
-    (GENERAL_SECTIONS.find(s => s.id === raw)?.id) ?? 'company'
   const [generalSection, setGeneralSection] = useState<GeneralSectionId>(() => parseGeneralSection(searchParams.get('section')))
   const sectionParam = searchParams.get('section')
   useEffect(() => {
     // Si la URL trae ?section= (al entrar o al cambiar), se refleja en la UI.
     if (sectionParam !== null) setGeneralSection(parseGeneralSection(sectionParam))
-  }, [sectionParam])
+    // Enlaces antiguos (?section=currencies): se reescriben con replace al valor vigente (?section=operation).
+    if (isLegacySectionAlias(sectionParam)) {
+      setSearchParams(prev => { const n = new URLSearchParams(prev); n.set('section', parseGeneralSection(sectionParam)); return n }, { replace: true })
+    }
+  }, [sectionParam, setSearchParams])
   // Cambia de sección y sincroniza ?section= (replace: no llena el historial).
   const selectGeneralSection = (id: GeneralSectionId) => {
     setGeneralSection(id)
@@ -109,8 +114,9 @@ const SettingsPage: React.FC = () => {
   // General
   const [tenant, setTenant] = useState<TenantData>({ name: '', email: '', phone: '', address: '', currency: 'DOP', scoreMode: 'global', signatureMode: 'physical', rnc: '', representativeName: '', logoUrl: '', signatureUrl: '', city: '', notaryName: '', notaryCollegiateNumber: '', notaryOfficeAddress: '', acreedorIdNumber: '', testigo1Nombre: '', testigo1Id: '', testigo1Domicilio: '', testigo2Nombre: '', testigo2Id: '', testigo2Domicilio: '' })
   const [moraSettings, setMoraSettings] = useState<SettingsData>({ moraRateDaily: 0.001, moraGraceDays: 3, rebateEnabled: 1, rebateType: 'proportional', moraBase: 'cuota_vencida', moraFixedEnabled: 0, moraFixedAmount: 0 })
-  const [currencySettings, setCurrencySettings] = useState<CurrencySettings>({ multiCurrencyEnabled: false, enabledCurrencies: ['DOP'] })
-  const [isSavingCurrencies, setIsSavingCurrencies] = useState(false)
+  // Tasa de mora diaria como TEXTO en % (la API guarda una fracción: 0.1 % <-> 0.001).
+  const [moraRateText, setMoraRateText] = useState<string>('0.1')
+  const [currencySettings, setCurrencySettings] = useState<CurrencySettings>({ enabledCurrencies: ['DOP'] })
   // Umbral para aprobacion en dos niveles ('' = deshabilitado)
   const [approvalThreshold, setApprovalThreshold] = useState<string>('')
 
@@ -205,13 +211,12 @@ const SettingsPage: React.FC = () => {
             moraFixedEnabled: d.settings.moraFixedEnabled ?? 0,
             moraFixedAmount: d.settings.moraFixedAmount ?? 0,
           })
-          const rawCurrencies = d.settings.enabledCurrencies || d.settings.enabled_currencies
-          const parsedCurrencies: string[] = (() => {
-            try { return JSON.parse(rawCurrencies || '["DOP"]') } catch(_) { return ['DOP'] }
-          })()
+          setMoraRateText(String(Number((((d.settings.moraRateDaily ?? 0.001) * 100)).toFixed(6))))
+          // Monedas efectivas = las guardadas solo si multimoneda está activa; si no, solo DOP.
+          const multi = !!(d.settings.multiCurrencyEnabled || d.settings.multi_currency_enabled)
+          const stored = parseStoredCurrencies(d.settings.enabledCurrencies ?? d.settings.enabled_currencies)
           setCurrencySettings({
-            multiCurrencyEnabled: !!(d.settings.multiCurrencyEnabled || d.settings.multi_currency_enabled),
-            enabledCurrencies: parsedCurrencies.length ? parsedCurrencies : ['DOP'],
+            enabledCurrencies: normalizeSelection(multi ? stored : [], SUPPORTED_CURRENCIES.map(c => c.code)),
           })
           const threshold = d.settings.approvalThresholdAmount
           setApprovalThreshold(threshold != null ? String(threshold) : '')
@@ -250,6 +255,9 @@ const SettingsPage: React.FC = () => {
 
   // ─── GENERAL SAVE ────────────────────────────────────────────────
   const handleSaveGeneral = async () => {
+    // Valida ANTES de enviar nada (evita guardados parciales por un error de captura).
+    const ratePct = parseFloat(moraRateText)
+    if (!Number.isFinite(ratePct) || ratePct < 0 || ratePct > 100) { toast.error(tGen('set.mora_rate_invalid')); return }
     setIsSaving(true)
     try {
       await api.put('/settings/tenant', {
@@ -257,7 +265,10 @@ const SettingsPage: React.FC = () => {
         email: tenant.email,
         phone: tenant.phone,
         address: tenant.address,
-        currency: tenant.currency,
+        // Monedas de operación: viajan en el mismo PUT (una transacción en el backend).
+        // multi_currency_enabled se deriva de la selección; tenants.currency ya no se edita.
+        enabledCurrencies: currencySettings.enabledCurrencies,
+        multiCurrencyEnabled: deriveMultiCurrency(currencySettings.enabledCurrencies),
         scoreMode: tenant.scoreMode,
         signatureMode: tenant.signatureMode,
         rnc: tenant.rnc || null,
@@ -275,7 +286,7 @@ const SettingsPage: React.FC = () => {
         testigo2Domicilio: tenant.testigo2Domicilio || null,
       })
       await api.put('/settings/mora', {
-        moraRateDaily: moraSettings.moraRateDaily,
+        moraRateDaily: Number((ratePct / 100).toFixed(8)),
         moraGraceDays: moraSettings.moraGraceDays,
         rebateEnabled: moraSettings.rebateEnabled,
         rebateType: moraSettings.rebateType,
@@ -294,32 +305,6 @@ const SettingsPage: React.FC = () => {
     } finally {
       setIsSaving(false)
     }
-  }
-
-  // ─── CURRENCIES ──────────────────────────────────────────────────
-  const handleSaveCurrencies = async () => {
-    setIsSavingCurrencies(true)
-    try {
-      await api.put('/settings/currencies', {
-        multi_currency_enabled: currencySettings.multiCurrencyEnabled,
-        enabled_currencies: currencySettings.enabledCurrencies,
-      })
-      toast.success(tGen('set.curr_saved'))
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || tGen('set.curr_error'))
-    } finally {
-      setIsSavingCurrencies(false)
-    }
-  }
-
-  const toggleCurrency = (code: string) => {
-    if (code === 'DOP') return // DOP siempre activa
-    setCurrencySettings(prev => ({
-      ...prev,
-      enabledCurrencies: prev.enabledCurrencies.includes(code)
-        ? prev.enabledCurrencies.filter(c => c !== code)
-        : [...prev.enabledCurrencies, code],
-    }))
   }
 
   // ─── SEGURIDAD DE LA CUENTA ──────────────────────────────────────
@@ -868,14 +853,16 @@ const SettingsPage: React.FC = () => {
                 <Card>
                   <h3 className="section-title mb-4">{tGen('set.section.operation')}</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.currency')}</label>
-                      <select value={tenant.currency} onChange={e=>setTenant(p=>({...p,currency:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        {SUPPORTED_CURRENCIES.map(cur => (
-                          <option key={cur.code} value={cur.code}>{cur.code} — {cur.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                    <CurrencyMultiSelect
+                      label={tGen('set.op_currencies')}
+                      helpText={tGen('set.op_currencies_help')}
+                      helpAriaLabel={tGen('set.op_currencies_info_aria')}
+                      baseLabel={tGen('set.op_currencies_base')}
+                      listAriaLabel={tGen('set.op_currencies_list_aria')}
+                      options={SUPPORTED_CURRENCIES.map(c => ({ code: c.code, name: c.name }))}
+                      value={currencySettings.enabledCurrencies}
+                      onToggle={code => setCurrencySettings(prev => ({ enabledCurrencies: toggleSelection(prev.enabledCurrencies, code, SUPPORTED_CURRENCIES.map(c => c.code)) }))}
+                    />
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.score_mode')}</label>
                       <select value={tenant.scoreMode} onChange={e=>setTenant(p=>({...p,scoreMode:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -995,7 +982,8 @@ const SettingsPage: React.FC = () => {
               {/* ── MORA Y PAGOS ── */}
               <div role="tabpanel" id="general-panel-mora" aria-labelledby="general-tab-mora" hidden={generalSection !== 'mora'} className="space-y-6">
                 <Card>
-                  <h3 className="section-title mb-4">{tGen('set.mora_title')}</h3>
+                  <h3 className="section-title mb-1">{tGen('set.mora_title')}</h3>
+                  <p className="text-xs text-slate-500 mb-4">{tGen('set.mora_scope_note')}</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.mora_apply_on')}</label>
@@ -1006,8 +994,8 @@ const SettingsPage: React.FC = () => {
                       </select>
                       <p className="text-xs text-slate-400 mt-1">{tGen('set.mora_base_help')}</p>
                     </div>
-                    <Input label={tGen('set.mora_rate')} type="number" step="0.001" value={moraSettings.moraRateDaily}
-                      onChange={e=>setMoraSettings(p=>({...p,moraRateDaily:parseFloat(e.target.value)||0}))} />
+                    <Input label={tGen('set.mora_rate')} type="number" step="0.001" min="0" max="100" value={moraRateText}
+                      onChange={e=>setMoraRateText(e.target.value)} />
                     <Input label={tGen('set.mora_grace')} type="number" value={moraSettings.moraGraceDays}
                       onChange={e=>setMoraSettings(p=>({...p,moraGraceDays:parseInt(e.target.value)||0}))} />
                     <div>
@@ -1040,68 +1028,6 @@ const SettingsPage: React.FC = () => {
                   </div>
                 </Card>
                 {renderSharedSaveBar()}
-              </div>
-
-              {/* ── MONEDAS ── */}
-              <div role="tabpanel" id="general-panel-currencies" aria-labelledby="general-tab-currencies" hidden={generalSection !== 'currencies'} className="space-y-6">
-                {/* ── Multi-Currency ── */}
-                <Card>
-                  <div className="flex items-center gap-2 mb-1">
-                    <CreditCard className="w-4 h-4 text-blue-600"/>
-                    <h3 className="section-title">{tGen('set.currencies_title')}</h3>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-4">{tGen('set.currencies_desc')}</p>
-                  <div className="flex items-center gap-3 mb-4">
-                    <button
-                      onClick={() => setCurrencySettings(p => ({ ...p, multiCurrencyEnabled: !p.multiCurrencyEnabled }))}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${currencySettings.multiCurrencyEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}
-                    >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${currencySettings.multiCurrencyEnabled ? 'translate-x-6' : 'translate-x-1'}`}/>
-                    </button>
-                    <span className="text-sm font-medium text-slate-700">
-                      {currencySettings.multiCurrencyEnabled ? tGen('set.multicurr_on') : tGen('set.multicurr_off')}
-                    </span>
-                  </div>
-
-                  {currencySettings.multiCurrencyEnabled && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {SUPPORTED_CURRENCIES.map(cur => {
-                        const isEnabled = currencySettings.enabledCurrencies.includes(cur.code)
-                        const isBase = cur.code === 'DOP'
-                        return (
-                          <button
-                            key={cur.code}
-                            onClick={() => toggleCurrency(cur.code)}
-                            disabled={isBase}
-                            className={`flex items-center gap-2 md:gap-3 p-2 md:p-3 min-w-0 rounded-lg border-2 text-left transition-all ${
-                              isEnabled ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
-                            } ${isBase ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
-                          >
-                            <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold leading-none ${cur.symbol.length > 2 ? 'text-[10px]' : 'text-sm'} ${isEnabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                              {cur.symbol}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                                {cur.code}
-                                {/* En móvil la etiqueta va junto al código, dentro de la tarjeta */}
-                                {isBase && <span className="md:hidden text-xs text-blue-600 font-medium">{tGen('set.curr_base')}</span>}
-                                {!isBase && isEnabled && <CheckCircle className="md:hidden flex-shrink-0 w-3.5 h-3.5 text-blue-600"/>}
-                              </p>
-                              <p className="text-[11px] md:text-xs text-slate-500 break-words">{cur.name}</p>
-                            </div>
-                            {isBase && <span className="hidden md:inline ml-auto text-xs text-blue-600 font-medium">{tGen('set.curr_base')}</span>}
-                            {!isBase && isEnabled && <CheckCircle className="hidden md:block ml-auto flex-shrink-0 w-4 h-4 text-blue-600"/>}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                  <div className="mt-4">
-                    <Button size="sm" onClick={handleSaveCurrencies} isLoading={isSavingCurrencies} disabled={isSavingCurrencies} className="flex items-center gap-2">
-                      <Save className="w-4 h-4"/>{tGen('set.save_currencies')}
-                    </Button>
-                  </div>
-                </Card>
               </div>
 
               {/* ── CUENTA Y SEGURIDAD ── */}
