@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { bootTestApp, TestApp } from './helpers/testApp';
 import { resolveMoraConfig, productHasCustomMora, parseInheritFlag, normalizeProductMoraFields } from '../lib/moraConfig';
+import { calcMoraDetails } from '../lib/calculations';
 import {
   formForProduct, formFromValues, validateMoraForm, moraFormPayload, shouldSendMora, productIsCustom, pctFromFraction, SYSTEM_MORA_VALUES,
 } from '../../../frontend/src/lib/productMora';
@@ -549,5 +550,73 @@ describe('frontend: cableado (fuente) de Productos, nuevo préstamo, guía e i18
     expect(help).toContain('Personalizar para este producto');
     expect(help).toContain('configuración general → producto');
     expect(help).toContain('nunca los existentes');
+  });
+});
+
+describe('cargo fijo de mora: semántica del motor real y UX consistente', () => {
+  const inst = (id: string, due: string, extra: any = {}) => ({ id, status: 'overdue', due_date: due, principal_amount: 800, interest_amount: 200, paid_total: 0, paid_principal: 0, ...extra });
+  const asOf = new Date('2030-02-20T12:00:00Z');
+
+  it('cargo fijo HABILITADO sustituye a la mora porcentual: no depende de la tasa ni de la base ni de cuántos días de atraso', () => {
+    const base = { mora_grace_days: 0, mora_fixed_enabled: 1, mora_fixed_amount: 250 };
+    const a = calcMoraDetails({ ...base, mora_rate_daily: 0.001, mora_base: 'cuota_vencida' }, [inst('i1', '2030-01-01')], asOf).i1;
+    const b = calcMoraDetails({ ...base, mora_rate_daily: 0.5, mora_base: 'capital_pendiente' }, [inst('i1', '2030-02-10')], asOf).i1;
+    expect(a.amount).toBe(250);
+    expect(b.amount).toBe(250);                                  // otra tasa, otra base, menos días: mismo cargo
+    expect(a.days).toBeGreaterThan(b.days);
+  });
+  it('el cargo fijo se cobra POR CUOTA VENCIDA (una vez por cuota, no por día ni por "evento")', () => {
+    const d = calcMoraDetails({ mora_rate_daily: 0.01, mora_grace_days: 0, mora_fixed_enabled: 1, mora_fixed_amount: 100 },
+      [inst('a', '2030-01-01'), inst('b', '2030-01-15'), inst('c', '2030-03-01')], asOf);
+    expect(d.a.amount).toBe(100);
+    expect(d.b.amount).toBe(100);
+    expect(d.c.amount).toBe(0);                                  // no vencida todavía
+    expect(Object.values(d).reduce((s, x) => s + x.amount, 0)).toBe(200);
+  });
+  it('los días de gracia SÍ siguen aplicando con cargo fijo; una cuota pagada no genera cargo', () => {
+    const cfg = { mora_rate_daily: 0.01, mora_fixed_enabled: 1, mora_fixed_amount: 100 };
+    expect(calcMoraDetails({ ...cfg, mora_grace_days: 60 }, [inst('x', '2030-02-10')], asOf).x.amount).toBe(0);
+    expect(calcMoraDetails({ ...cfg, mora_grace_days: 3 }, [inst('x', '2030-02-10')], asOf).x.amount).toBe(100);
+    expect(calcMoraDetails({ ...cfg, mora_grace_days: 0 }, [inst('x', '2030-02-10', { status: 'paid' })], asOf).x.amount).toBe(0);
+  });
+  it('cargo fijo DESHABILITADO: vuelve la tasa y la base (valores conservados en el préstamo)', () => {
+    const loan = { mora_rate_daily: 0.01, mora_grace_days: 0, mora_base: 'capital_pendiente', mora_fixed_amount: 250 };
+    expect(calcMoraDetails({ ...loan, mora_fixed_enabled: 1 }, [inst('z', '2030-02-10')], asOf).z.amount).toBe(250);
+    expect(calcMoraDetails({ ...loan, mora_fixed_enabled: 0 }, [inst('z', '2030-02-10')], asOf).z.amount).toBe(80);   // 800 * 1% * 10 días
+  });
+
+  const FRONT = path.resolve(__dirname, '..', '..', '..', 'frontend', 'src');
+  const read = (p: string) => fs.readFileSync(path.join(FRONT, p), 'utf8');
+  it('General, Producto y Editar Préstamo deshabilitan tasa y base mientras el cargo fijo está habilitado, con el mismo texto', () => {
+    const settings = read('pages/settings/SettingsPage.tsx');
+    const section = read('components/shared/ProductMoraSection.tsx');
+    const modal = read('pages/loans/EditLoanModal.tsx');
+    expect(settings).toContain('disabled={moraSettings.moraFixedEnabled === 1}');
+    expect((settings.match(/set\.mora_fixed_na/g) || []).length).toBeGreaterThanOrEqual(2);       // base + tasa
+    expect(section).toContain('disabled={fixedOn}');
+    expect((section.match(/set\.mora_fixed_na/g) || []).length).toBeGreaterThanOrEqual(2);
+    expect(modal).toContain('disabled={fixedOn}');
+    expect((modal.match(/set\.mora_fixed_na/g) || []).length).toBeGreaterThanOrEqual(2);
+    // no se borran los valores: ningún handler vacía tasa/base al habilitar el cargo fijo
+    expect(modal).not.toContain("set('moraRateDaily', '')");
+    expect(section).not.toContain("ratePct: ''");
+  });
+  it('terminología: "por cuota vencida" en ES/EN/PT; ya no hay "por evento" ni "se suma" en la ayuda del cargo fijo', () => {
+    const i18n = read('lib/i18n.ts');
+    const line = (k: string) => { const i = i18n.indexOf(`'${k}'`); return i18n.slice(i, i18n.indexOf('\n', i)); };
+    for (const k of ['set.mora_fixed_amt', 'elm.mora_fixed_amt']) {
+      expect(line(k)).toContain('por cuota vencida');
+      expect(line(k)).toContain('per overdue installment');
+      expect(line(k)).toContain('por parcela vencida');
+    }
+    expect(line('set.mora_fixed_amt')).not.toMatch(/por evento|per event/);
+    expect(line('elm.mora_fixed_amt_hint')).not.toMatch(/Se suma|Added to|Somado/);
+    expect(line('elm.mora_fixed_amt_hint')).toMatch(/reemplaza|replaces|substitui/);
+    expect(line('lc.c_mora_fixed')).toContain('por cuota vencida');          // wizard
+    for (const k of ['set.mora_fixed_na', 'set.mora_na_short']) {
+      const l = line(k);
+      expect(l).toMatch(/es:\s*'/); expect(l).toMatch(/en:\s*'/); expect(l).toMatch(/pt:\s*'/);
+    }
+    expect(line('set.mora_fixed_na')).toContain('No aplica mientras el cargo fijo está habilitado.');
   });
 });

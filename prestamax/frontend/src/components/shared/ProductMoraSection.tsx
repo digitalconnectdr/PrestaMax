@@ -30,7 +30,10 @@ const ProductMoraSection: React.FC<Props> = ({ value, onChange, globals }) => {
   const g = globals ?? SYSTEM_MORA_VALUES
   const set = (patch: Partial<ProductMoraForm>) => onChange({ ...value, ...patch })
   const baseLabel = (b: string) => t(BASE_LABEL_KEY[b] || 'set.mora_cuota')
-  const sel = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+  const sel = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed'
+  // Con cargo fijo habilitado, la tasa % y la base no participan: se conservan (deshabilitadas) para restaurarlas.
+  const fixedOn = value.fixedEnabled === 1
+  const gFixed = !!g.moraFixedEnabled
 
   return (
     <fieldset className="md:col-span-2 border border-slate-200 rounded-lg bg-white p-3">
@@ -57,9 +60,9 @@ const ProductMoraSection: React.FC<Props> = ({ value, onChange, globals }) => {
 
       {value.inherit ? (
         <dl className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs" aria-label={t('set.prod_mora_current_global')}>
-          <div><dt className="text-slate-500">{t('set.mora_rate')}</dt><dd className="font-semibold text-slate-800">{pctFromFraction(g.moraRateDaily)} %</dd></div>
+          <div><dt className="text-slate-500">{t('set.mora_rate')}</dt><dd className={gFixed ? 'font-medium text-slate-400' : 'font-semibold text-slate-800'}>{gFixed ? t('set.mora_na_short') : `${pctFromFraction(g.moraRateDaily)} %`}</dd></div>
           <div><dt className="text-slate-500">{t('set.mora_grace')}</dt><dd className="font-semibold text-slate-800">{g.moraGraceDays}</dd></div>
-          <div><dt className="text-slate-500">{t('set.mora_apply_on')}</dt><dd className="font-semibold text-slate-800">{baseLabel(g.moraBase)}</dd></div>
+          <div><dt className="text-slate-500">{t('set.mora_apply_on')}</dt><dd className={gFixed ? 'font-medium text-slate-400' : 'font-semibold text-slate-800'}>{gFixed ? t('set.mora_na_short') : baseLabel(g.moraBase)}</dd></div>
           <div><dt className="text-slate-500">{t('set.mora_fixed')}</dt><dd className="font-semibold text-slate-800">{g.moraFixedEnabled ? g.moraFixedAmount : t('set.disabled')}</dd></div>
         </dl>
       ) : (
@@ -68,12 +71,13 @@ const ProductMoraSection: React.FC<Props> = ({ value, onChange, globals }) => {
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">{t('set.mora_apply_on')}</label>
-            <select value={value.base} onChange={e => set({ base: e.target.value })} className={sel}>
+            <select value={value.base} onChange={e => set({ base: e.target.value })} className={sel} disabled={fixedOn}>
               {MORA_BASE_OPTIONS.map(b => <option key={b} value={b}>{baseLabel(b)}</option>)}
             </select>
+            {fixedOn && <p className="text-xs text-slate-500 mt-1">{t('set.mora_fixed_na')}</p>}
           </div>
           <Input label={t('set.mora_rate')} type="number" step="0.001" min="0" max="100" value={value.ratePct}
-            onChange={e => set({ ratePct: e.target.value })} />
+            onChange={e => set({ ratePct: e.target.value })} disabled={fixedOn} helperText={fixedOn ? t('set.mora_fixed_na') : undefined} />
           <Input label={t('set.mora_grace')} type="number" step="1" min="0" value={value.graceDays}
             onChange={e => set({ graceDays: e.target.value })} />
           <div>

@@ -323,7 +323,11 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
         )}
 
         {/* Tab: Mora */}
-        {activeTab === 'mora' && (
+        {activeTab === 'mora' && (() => {
+          // Con cargo fijo habilitado, la tasa % y la base NO participan (el cargo fijo las reemplaza). Se conservan
+          // sus valores (deshabilitados) para restaurarlos si el cargo fijo vuelve a deshabilitarse.
+          const fixedOn = parseInt(form.moraFixedEnabled) === 1
+          return (
           <div className="space-y-4">
             <p className="text-xs text-slate-500">{t('elm.mora_intro')}</p>
             <div className="grid grid-cols-2 gap-4">
@@ -333,11 +337,12 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   type="number" step="0.0001" min="0" max="10"
                   value={form.moraRateDaily}
                   onChange={e => set('moraRateDaily', e.target.value)}
-                  className={inputCls}
+                  className={fixedOn ? disabledInputCls : inputCls}
+                  disabled={fixedOn}
                   placeholder="0.1000"
                 />
                 <p className="text-xs text-slate-400 mt-1">
-                  {t('elm.mora_rate_hint').replace('{d}', form.moraRateDaily).replace('{m}', (parseFloat(form.moraRateDaily || '0') * 30).toFixed(2))}
+                  {fixedOn ? t('set.mora_fixed_na') : t('elm.mora_rate_hint').replace('{d}', form.moraRateDaily).replace('{m}', (parseFloat(form.moraRateDaily || '0') * 30).toFixed(2))}
                 </p>
               </div>
               <div>
@@ -357,13 +362,13 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>{t('elm.mora_base')}</label>
-                <select value={form.moraBase} onChange={e => set('moraBase', e.target.value)} className={inputCls}>
+                <select value={form.moraBase} onChange={e => set('moraBase', e.target.value)} className={fixedOn ? disabledInputCls : inputCls} disabled={fixedOn}>
                   <option value="cuota_vencida">{t('elm.mora_cuota')}</option>
                   <option value="capital_pendiente">{t('elm.mora_cap_pend')}</option>
                   <option value="capital_vencido">{t('elm.mora_cap_venc')}</option>
                 </select>
                 <p className="text-xs text-slate-400 mt-1">
-                  {t('elm.mora_base_hint')}
+                  {fixedOn ? t('set.mora_fixed_na') : t('elm.mora_base_hint')}
                 </p>
               </div>
               <div>
@@ -455,7 +460,8 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Tab: Otros */}
         {activeTab === 'otros' && (

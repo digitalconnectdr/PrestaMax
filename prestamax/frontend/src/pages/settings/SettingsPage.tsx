@@ -1000,15 +1000,15 @@ const SettingsPage: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">{tGen('set.mora_apply_on')}</label>
-                      <select value={moraSettings.moraBase} onChange={e=>setMoraSettings(p=>({...p,moraBase:e.target.value}))} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <select value={moraSettings.moraBase} onChange={e=>setMoraSettings(p=>({...p,moraBase:e.target.value}))} disabled={moraSettings.moraFixedEnabled === 1} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed">
                         <option value="cuota_vencida">{tGen('set.mora_cuota')}</option>
                         <option value="capital_pendiente">{tGen('set.mora_cap_pend')}</option>
                         <option value="capital_vencido">{tGen('set.mora_cap_venc')}</option>
                       </select>
-                      <p className="text-xs text-slate-400 mt-1">{tGen('set.mora_base_help')}</p>
+                      <p className="text-xs text-slate-400 mt-1">{moraSettings.moraFixedEnabled === 1 ? tGen('set.mora_fixed_na') : tGen('set.mora_base_help')}</p>
                     </div>
                     <Input label={tGen('set.mora_rate')} type="number" step="0.001" min="0" max="100" value={moraRateText}
-                      onChange={e=>setMoraRateText(e.target.value)} />
+                      onChange={e=>setMoraRateText(e.target.value)} disabled={moraSettings.moraFixedEnabled === 1} helperText={moraSettings.moraFixedEnabled === 1 ? tGen('set.mora_fixed_na') : undefined} />
                     <Input label={tGen('set.mora_grace')} type="number" value={moraSettings.moraGraceDays}
                       onChange={e=>setMoraSettings(p=>({...p,moraGraceDays:parseInt(e.target.value)||0}))} />
                     <div>
