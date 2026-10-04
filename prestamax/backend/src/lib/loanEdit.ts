@@ -1,13 +1,18 @@
-// Edición segura de préstamos (PUT /loans/:id): DELTA-BASED + guards por estado.
+// Edición segura de préstamos (PUT /loans/:id): DELTA-BASED + guards por LIFECYCLE.
+//
+// Modelo del lifecycle:
+//  - PRE-desembolso (draft, under_review, pending_manager_approval, approved): las condiciones del contrato se pueden
+//    configurar y corregir (monto, tasa, plazo, frecuencia, amortización, fechas, mora y cargo de prórroga). El
+//    calendario se regenera solo si cambia un campo que lo define.
+//  - POST-desembolso (disbursed, active, in_mora, restructured): las condiciones acordadas (incluida la mora, el cargo
+//    de prórroga y las fechas históricas) quedan FIJADAS. Solo se editan campos operativos que no tocan el contrato ni
+//    el calendario: cobrador, propósito y notas. Cambiar condiciones requerirá un flujo formal de reestructuración o
+//    modificación contractual (no existe todavía).
+//  - CERRADOS (rejected, cancelled, voided, written_off, liquidated, paid): solo notas.
+//  - maturity_date NO se edita nunca: se deriva del último vencimiento del calendario.
 //
 // Causa raíz del defecto anterior: el modal enviaba el formulario COMPLETO y el backend regeneraba el calendario
 // con solo ver campos de términos en el payload (aunque no hubieran cambiado), sin ninguna validación por estado.
-// Resultado: editar notas o mora recreaba cuotas (ids nuevos, se perdía deferred_due_date) y, en estados no
-// desembolsados (incluidos liquidated / written_off / voided...), borraba TODAS las cuotas y las dejaba 'pending'.
-//
-// Ahora: (1) solo cuentan los campos cuyo valor REALMENTE cambia; (2) los campos operativos nunca tocan el
-// calendario; (3) los campos estructurales solo se aceptan en estados pre-desembolso y sin historial de pagos;
-// (4) el calendario se regenera únicamente cuando cambió un campo que lo define.
 import { validateMoraInput, normalizeMoraBase } from './moraConfig';
 
 /** Estados previos al desembolso: aún se pueden modificar las condiciones (y regenerar el calendario). */
@@ -28,15 +33,25 @@ export const SCHEDULE_FIELDS = [
   'requested_amount', 'approved_amount', 'rate', 'rate_type', 'term', 'term_unit',
   'payment_frequency', 'amortization_type', 'first_payment_date',
 ] as const;
-/** Condiciones financieras / fechas estructurales: bloqueadas tras el desembolso, con pagos y en estados cerrados. */
-export const STRUCTURAL_FIELDS = [...SCHEDULE_FIELDS, 'disbursement_date', 'maturity_date'] as const;
-/** Campos operativos: nunca borran ni regeneran cuotas. */
-export const OPERATIONAL_FIELDS = [
-  'purpose', 'notes', 'collector_id', 'mora_rate_daily', 'mora_grace_days', 'mora_base', 'mora_fixed_enabled',
-  'mora_fixed_amount', 'mora_start_date', 'prorroga_fee', 'application_date', 'approval_date',
+/** Fecha de vencimiento: DERIVADA del último vencimiento del calendario (se calcula al desembolsar y al regenerar). */
+export const DERIVED_FIELDS = ['maturity_date'] as const;
+/** Mora específica del préstamo y cargo de prórroga: condiciones económicas acordadas. */
+export const ECONOMIC_TERM_FIELDS = [
+  'mora_rate_daily', 'mora_grace_days', 'mora_base', 'mora_fixed_enabled', 'mora_fixed_amount', 'mora_start_date', 'prorroga_fee',
 ] as const;
-/** En estados cerrados solo se admiten notas y propósito. */
-export const TERMINAL_EDITABLE_FIELDS = ['notes', 'purpose'] as const;
+/** Fechas históricas del contrato (solicitud, aprobación, desembolso). */
+export const CONTRACT_DATE_FIELDS = ['application_date', 'approval_date', 'disbursement_date'] as const;
+/**
+ * Condiciones contractuales: editables solo PRE-desembolso; fijadas después del desembolso y en estados cerrados.
+ * (maturity_date no está aquí: no es editable en ningún estado.)
+ */
+export const CONTRACT_FIELDS = [...SCHEDULE_FIELDS, ...CONTRACT_DATE_FIELDS, ...ECONOMIC_TERM_FIELDS] as const;
+/** Bloqueados además cuando el préstamo ya tiene pagos aunque siga pre-desembolso: lo que reescribiría el calendario. */
+export const HISTORY_LOCKED_FIELDS = [...SCHEDULE_FIELDS, 'disbursement_date'] as const;
+/** Campos operativos: no modifican el contrato ni el calendario; editables post-desembolso. */
+export const OPERATIONAL_FIELDS = ['collector_id', 'purpose', 'notes'] as const;
+/** En estados cerrados solo se admiten notas (el propósito es la finalidad original declarada del préstamo). */
+export const TERMINAL_EDITABLE_FIELDS = ['notes'] as const;
 
 type Kind = 'money' | 'rate' | 'int' | 'flag' | 'amount0' | 'text' | 'nulltext' | 'date' | 'moraBase';
 const KIND: Record<string, Kind> = {
@@ -116,28 +131,43 @@ export function diffLoanEdit(loan: any, body: any): LoanEditDiff {
   return out;
 }
 
-export interface LoanEditViolation { code: 'LOAN_TERMS_LOCKED' | 'LOAN_CLOSED_LOCKED'; error: string; locked_fields: string[] }
+export interface LoanEditViolation {
+  code: 'LOAN_TERMS_LOCKED' | 'LOAN_CLOSED_LOCKED' | 'LOAN_MATURITY_DERIVED';
+  error: string;
+  locked_fields: string[];
+}
 
 /** Guards por estado / historial. null = permitido. */
 export function checkLoanEditAllowed(phase: LoanEditPhase, changedFields: string[], hasPaymentHistory: boolean): LoanEditViolation | null {
+  // La fecha de vencimiento se deriva del calendario: nunca se edita de forma independiente (en ningún estado).
+  const derived = changedFields.filter(f => (DERIVED_FIELDS as readonly string[]).includes(f));
+  if (derived.length) return {
+    code: 'LOAN_MATURITY_DERIVED', locked_fields: derived,
+    error: 'La fecha de vencimiento se calcula a partir del calendario de cuotas y no se edita directamente. Se actualiza sola al cambiar las condiciones que definen el calendario antes del desembolso.',
+  };
   if (phase === 'terminal') {
     const blocked = changedFields.filter(f => !(TERMINAL_EDITABLE_FIELDS as readonly string[]).includes(f));
     if (blocked.length) return {
       code: 'LOAN_CLOSED_LOCKED', locked_fields: blocked,
-      error: 'Este préstamo está cerrado: solo se pueden editar las notas y el propósito.',
+      error: 'Este préstamo está cerrado: solo se pueden editar las notas.',
     };
     return null;
   }
-  const structural = changedFields.filter(f => (STRUCTURAL_FIELDS as readonly string[]).includes(f));
-  if (!structural.length) return null;
-  if (phase === 'post') return {
-    code: 'LOAN_TERMS_LOCKED', locked_fields: structural,
-    error: 'Las condiciones financieras de un préstamo desembolsado no se pueden editar directamente (monto, tasa, plazo, frecuencia, amortización y fechas estructurales). Usa la reestructuración o la consolidación de préstamos.',
-  };
-  if (hasPaymentHistory) return {
-    code: 'LOAN_TERMS_LOCKED', locked_fields: structural,
-    error: 'Este préstamo ya tiene pagos o cuotas pagadas: sus condiciones financieras no se pueden modificar con la edición ordinaria. Usa la reestructuración o la consolidación de préstamos.',
-  };
+  if (phase === 'post') {
+    const blocked = changedFields.filter(f => (CONTRACT_FIELDS as readonly string[]).includes(f));
+    if (blocked.length) return {
+      code: 'LOAN_TERMS_LOCKED', locked_fields: blocked,
+      error: 'Las condiciones acordadas de un préstamo desembolsado (monto, tasa, plazo, frecuencia, amortización, fechas, mora y cargo de prórroga) quedan fijadas y no se editan directamente. Solo se pueden editar el cobrador, el propósito y las notas.',
+    };
+    return null;
+  }
+  if (hasPaymentHistory) {
+    const blocked = changedFields.filter(f => (HISTORY_LOCKED_FIELDS as readonly string[]).includes(f));
+    if (blocked.length) return {
+      code: 'LOAN_TERMS_LOCKED', locked_fields: blocked,
+      error: 'Este préstamo ya tiene pagos o cuotas pagadas: sus condiciones financieras no se pueden modificar con la edición ordinaria. Usa la reestructuración o la consolidación de préstamos.',
+    };
+  }
   return null;
 }
 

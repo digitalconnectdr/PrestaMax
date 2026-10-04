@@ -1,4 +1,6 @@
-// Editar préstamo: payload DELTA (solo campos realmente modificados) y bloqueos por estado.
+// Editar préstamo: payload DELTA (solo campos realmente modificados) y bloqueos por LIFECYCLE.
+// Pre-desembolso: condiciones editables. Post-desembolso: condiciones acordadas fijadas (solo cobrador, propósito y
+// notas). Cerrados: solo notas. La fecha de vencimiento es derivada del calendario y nunca se edita.
 // Módulo puro (sin React). Espeja las reglas del backend (backend/src/lib/loanEdit.ts), que es quien decide:
 // el frontend solo evita enviar de más y deshabilita lo que el servidor rechazaría.
 
@@ -22,16 +24,21 @@ export function loanEditPhase(status: string): LoanEditPhase {
   return 'post'
 }
 
-/** Condiciones financieras y fechas estructurales (bloqueadas tras el desembolso, con pagos y en estados cerrados). */
-export const STRUCTURAL_FIELDS: LoanEditField[] = [
-  'requestedAmount', 'approvedAmount', 'rate', 'rateType', 'term', 'termUnit', 'paymentFrequency', 'amortizationType',
-  'disbursementDate', 'firstPaymentDate', 'maturityDate',
+/** Campos que definen el calendario. */
+const SCHEDULE_FIELDS: LoanEditField[] = [
+  'requestedAmount', 'approvedAmount', 'rate', 'rateType', 'term', 'termUnit', 'paymentFrequency', 'amortizationType', 'firstPaymentDate',
 ]
-const TERMINAL_EDITABLE: LoanEditField[] = ['notes', 'purpose']
-const ALL_FIELDS: LoanEditField[] = [
-  ...STRUCTURAL_FIELDS, 'applicationDate', 'approvalDate', 'moraRateDaily', 'moraGraceDays', 'moraBase', 'moraFixedEnabled',
-  'moraFixedAmount', 'moraStartDate', 'collectorId', 'purpose', 'notes', 'prorrogaFee',
+/** Condiciones contractuales: editables solo pre-desembolso (calendario, fechas históricas, mora y cargo de prórroga). */
+export const CONTRACT_FIELDS: LoanEditField[] = [
+  ...SCHEDULE_FIELDS, 'applicationDate', 'approvalDate', 'disbursementDate',
+  'moraRateDaily', 'moraGraceDays', 'moraBase', 'moraFixedEnabled', 'moraFixedAmount', 'moraStartDate', 'prorrogaFee',
 ]
+/** Con pagos registrados (aunque siga pre-desembolso) se bloquea lo que reescribiría el calendario. */
+const HISTORY_LOCKED: LoanEditField[] = [...SCHEDULE_FIELDS, 'disbursementDate']
+/** Derivada del calendario: nunca editable. */
+const DERIVED: LoanEditField[] = ['maturityDate']
+const TERMINAL_EDITABLE: LoanEditField[] = ['notes']
+const ALL_FIELDS: LoanEditField[] = [...CONTRACT_FIELDS, ...DERIVED, 'collectorId', 'purpose', 'notes']
 
 export type LoanLockReason = 'none' | 'closed' | 'disbursed' | 'has_payments'
 
@@ -39,9 +46,9 @@ export type LoanLockReason = 'none' | 'closed' | 'disbursed' | 'has_payments'
 export function loanEditLocks(status: string, hasPaymentHistory: boolean): { locked: Set<LoanEditField>; reason: LoanLockReason } {
   const phase = loanEditPhase(status)
   if (phase === 'terminal') return { locked: new Set(ALL_FIELDS.filter(f => !TERMINAL_EDITABLE.includes(f))), reason: 'closed' }
-  if (phase === 'post') return { locked: new Set(STRUCTURAL_FIELDS), reason: 'disbursed' }
-  if (hasPaymentHistory) return { locked: new Set(STRUCTURAL_FIELDS), reason: 'has_payments' }
-  return { locked: new Set(), reason: 'none' }
+  if (phase === 'post') return { locked: new Set([...CONTRACT_FIELDS, ...DERIVED]), reason: 'disbursed' }
+  if (hasPaymentHistory) return { locked: new Set([...HISTORY_LOCKED, ...DERIVED]), reason: 'has_payments' }
+  return { locked: new Set(DERIVED), reason: 'none' }
 }
 
 /** ¿Alguna cuota tiene pagos aplicados? (el backend también lo comprueba con los pagos registrados) */

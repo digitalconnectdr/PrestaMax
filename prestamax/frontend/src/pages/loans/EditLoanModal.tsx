@@ -283,7 +283,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
           const moraRo = ro('moraRateDaily')   // estados cerrados: toda la mora queda de solo lectura
           return (
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">{t('elm.mora_intro')}</p>
+            <p className="text-xs text-slate-500">{moraRo ? t('elm.mora_locked') : t('elm.mora_intro')}</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>{t('elm.mora_rate')}</label>
@@ -440,7 +440,8 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                 type="text"
                 value={form.purpose}
                 onChange={e => set('purpose', e.target.value)}
-                className={inputCls}
+                className={ro('purpose') ? disabledInputCls : inputCls}
+                disabled={ro('purpose')}
                 placeholder={t('elm.purpose_ph')}
               />
             </div>

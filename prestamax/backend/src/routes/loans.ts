@@ -17,7 +17,7 @@ import { notifyUsersWithPermission } from '../lib/notify';
 import { tenantAsOf } from '../lib/tz';
 import { resolveMoraConfig, validateMoraInput } from '../lib/moraConfig';
 import { isCurrencyEnabled, currencyNotEnabledError } from '../lib/currencies';
-import { loanEditPhase, diffLoanEdit, checkLoanEditAllowed, loanHasPaymentHistory, changesSchedule, auditSafe, STRUCTURAL_FIELDS, SCHEDULE_FIELDS } from '../lib/loanEdit';
+import { loanEditPhase, diffLoanEdit, checkLoanEditAllowed, loanHasPaymentHistory, changesSchedule, auditSafe, HISTORY_LOCKED_FIELDS, SCHEDULE_FIELDS } from '../lib/loanEdit';
 
 const router = Router();
 
@@ -854,7 +854,7 @@ router.put('/:id', authenticate, requireTenant, requirePermission('loans.edit'),
 
     // ── 2) Guards por estado / historial ──────────────────────────────────────
     const phase = loanEditPhase(loan.status);
-    const hasHistory = phase === 'pre' && diff.changedFields.some(f => (STRUCTURAL_FIELDS as readonly string[]).includes(f))
+    const hasHistory = phase === 'pre' && diff.changedFields.some(f => (HISTORY_LOCKED_FIELDS as readonly string[]).includes(f))
       ? loanHasPaymentHistory(db, req.params.id) : false;
     const violation = checkLoanEditAllowed(phase, diff.changedFields, hasHistory);
     if (violation) return res.status(409).json(violation);

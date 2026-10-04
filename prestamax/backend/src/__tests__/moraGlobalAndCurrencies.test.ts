@@ -409,7 +409,8 @@ describe('monedas: préstamos históricos en una moneda deshabilitada siguen ope
     // Histórico: intacto y operativo.
     expect(loanRow(id).currency).toBe('USD');
     expect((await call(t, 'GET', `/api/loans/${id}`)).status).toBe(200);
-    expect((await call(t, 'PUT', `/api/loans/${id}`, { mora_grace_days: 1 })).status).toBe(200);
+    expect((await call(t, 'PUT', `/api/loans/${id}`, { notes: 'editable aunque la moneda esté deshabilitada' })).status).toBe(200);   // operativo: permitido
+    expect((await call(t, 'PUT', `/api/loans/${id}`, { mora_grace_days: 1 })).status).toBe(409);                                  // mora: fijada tras el desembolso
     const bankId = crypto.randomUUID();
     app.db.prepare("INSERT INTO bank_accounts (id,tenant_id,bank_name,currency) VALUES (?,?,?,?)").run(bankId, t.tenantId, 'Banco USD', 'USD');
     const pay = await call(t, 'POST', '/api/payments', { loan_id: id, amount: 100, payment_method: 'transfer', bank_account_id: bankId });
