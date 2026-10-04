@@ -3,6 +3,7 @@ import { getDb, uuid, now, r2, nextDocNumber } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest } from '../middleware/auth';
 import { generateDraft } from '../services/whatsappService';
 import { notifyTenantAdmins } from '../lib/notify';
+import { localDate, tenantTz, tenantAsOf } from '../lib/tz';
 import { checkAndMarkActivation } from '../lib/activation';
 // FIX P0/P1 (Jun 2026): usar el motor UNIFICADO de calculations.ts.
 // Antes este archivo tenia copias locales de allocatePayment/calcMora con el
@@ -142,7 +143,7 @@ router.post('/preview', authenticate, requireTenant, requirePermission('payments
     if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
 
     const installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY due_date').all(loan_id) as any[];
-    const pDate = new Date();
+    const pDate = tenantAsOf(db, req.tenant.id);
     const moraPerInst = calcMoraPerInstallment(loan, installments, pDate);
     const mora = r2(Object.values(moraPerInst).reduce((s, v) => s + v, 0));
 
@@ -311,7 +312,8 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     }
 
     const installments = db.prepare('SELECT * FROM installments WHERE loan_id=? ORDER BY due_date').all(loan_id) as any[];
-    const moraPerInst = calcMoraPerInstallment(loan, installments, pDate);
+    // Sin payment_date explicito, "hoy" para la mora es el dia LOCAL del tenant.
+    const moraPerInst = calcMoraPerInstallment(loan, installments, payment_date ? pDate : tenantAsOf(db, req.tenant.id));
     const mora = r2(Object.values(moraPerInst).reduce((s, v) => s + v, 0));
 
     // ----------------------------------------------------------------
@@ -394,7 +396,8 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
       recalcClientScore(db, loan.client_id);
       db.exec('COMMIT');
       notifyTenantAdmins(db, req.tenant.id, 'payment_received', 'Pago registrado',
-        `${req.user.full_name} registró un cargo de prórroga de ${loanCurrency} ${totalCharge.toLocaleString()} en el préstamo ${loan.loan_number}.`, 'payment', payId2);
+        `${req.user.full_name} registró un cargo de prórroga de ${loanCurrency} ${totalCharge.toLocaleString()} en el préstamo ${loan.loan_number}.`,
+        { entityType: 'payment', entityId: payId2, requiredPermission: 'payments.view', dedupeKey: `payment:${payId2}`, excludeUserId: req.user.id });
 
       // Devolver el payment con registered_by_name resuelto (LEFT JOIN users)
       // para que el recibo en el frontend muestre "Registrado por: <Nombre>".
@@ -494,12 +497,14 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     const newStatus    = fullyPaid ? 'liquidated' : mora > totalMora ? 'in_mora' : 'active';
 
     // Recalculate days_overdue from remaining unpaid installments after this payment
+    // "Hoy" = dia local del tenant (no el dia UTC del servidor).
+    const payToday = localDate(new Date(), tenantTz(db, req.tenant.id));
     const remainingOverdue = db.prepare(`
-      SELECT MAX(CAST(julianday('now') - julianday(COALESCE(i.deferred_due_date, i.due_date)) AS INTEGER)) as oldest_overdue
+      SELECT MAX(CAST(julianday(?) - julianday(COALESCE(i.deferred_due_date, i.due_date)) AS INTEGER)) as oldest_overdue
       FROM installments i
       WHERE i.loan_id=? AND i.status IN ('pending','partial')
-        AND COALESCE(i.deferred_due_date, i.due_date) < date('now')
-    `).get(loan_id) as any;
+        AND COALESCE(i.deferred_due_date, i.due_date) < ?
+    `).get(payToday, loan_id, payToday) as any;
     const newDaysOverdue = Math.max(0, remainingOverdue?.oldest_overdue ?? 0);
 
     db.prepare(`UPDATE loans SET principal_balance=?,interest_balance=?,mora_balance=?,total_balance=?,
@@ -562,11 +567,11 @@ router.post('/', authenticate, requireTenant, requirePermission('payments.create
     // Fuera de la transaccion: un fallo aqui no debe revertir el pago.
     generateDraft(db, req.tenant.id, 'payment_received', { payment_id: payId, loan_id: loan.id, user_id: req.user.id });
 
-    // Antes ningun aviso in-app existia para "entro un pago" -- el dueño solo
-    // se enteraba si abria el sistema a revisar. Se avisa a los admins del
-    // tenant (no al que registro el pago, ya lo sabe).
+    // Aviso in-app a owner/admin activos, EXCLUYENDO a quien registro el pago (ya lo
+    // sabe). Idempotente por payment_id; solo visible a quien conserve payments.view.
     notifyTenantAdmins(db, req.tenant.id, 'payment_received', 'Pago registrado',
-      `${req.user.full_name} registró un pago de ${loanCurrency} ${Number(amount).toLocaleString()} en el préstamo ${loan.loan_number}.`, 'payment', payId);
+      `${req.user.full_name} registró un pago de ${loanCurrency} ${Number(amount).toLocaleString()} en el préstamo ${loan.loan_number}.`,
+      { entityType: 'payment', entityId: payId, requiredPermission: 'payments.view', dedupeKey: `payment:${payId}`, excludeUserId: req.user.id });
 
     // Devolver el payment con registered_by_name resuelto (LEFT JOIN users) para
     // que el recibo en el frontend muestre "Registrado por: <Nombre>" en vez de "—".
@@ -674,16 +679,18 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
       // post-reaplicacion. La aritmetica anterior restaba la mora del pago anulado
       // sobre loan.mora_balance que YA habia sido reducido en el pago original,
       // produciendo descuento DOBLE -> mora_balance subestimada.
-      const moraBalance = r2(calcMora(loan, finalInst, new Date()));
+      // "Hoy" = dia LOCAL del tenant (tenants.timezone), no el dia UTC del servidor.
+      const voidToday = localDate(new Date(), tenantTz(db, req.tenant.id));
+      const moraBalance = r2(calcMora(loan, finalInst, tenantAsOf(db, req.tenant.id)));
       const totalBalance = r2(principalBalance + interestBalance + moraBalance);
 
       // Recalculate days_overdue after void
       const voidedOverdue = db.prepare(`
-        SELECT MAX(CAST(julianday('now') - julianday(COALESCE(i.deferred_due_date, i.due_date)) AS INTEGER)) as oldest_overdue
+        SELECT MAX(CAST(julianday(?) - julianday(COALESCE(i.deferred_due_date, i.due_date)) AS INTEGER)) as oldest_overdue
         FROM installments i
         WHERE i.loan_id=? AND i.status IN ('pending','partial')
-          AND COALESCE(i.deferred_due_date, i.due_date) < date('now')
-      `).get(loan.id) as any;
+          AND COALESCE(i.deferred_due_date, i.due_date) < ?
+      `).get(voidToday, loan.id, voidToday) as any;
       const voidDaysOverdue = Math.max(0, voidedOverdue?.oldest_overdue ?? 0);
 
       // EXCEPCION INTENCIONAL al limite de prestamos activos (NO es un bypass
@@ -722,6 +729,11 @@ router.post('/:id/void', authenticate, requireTenant, requirePermission('payment
       JSON.stringify({ void_reason: voidReasonBody, amount: payment.amount })
     );
     db.exec('COMMIT');
+    // Alerta a owner/admin activos (reverso monetario). Excluye al actor; idempotente
+    // por pago anulado. Fuera de la transaccion: nunca revierte la anulacion.
+    notifyTenantAdmins(db, req.tenant.id, 'payment_voided', 'Pago anulado',
+      `${req.user.full_name} anuló un pago de ${loan?.currency || 'DOP'} ${Number(payment.amount).toLocaleString()} en el préstamo ${voidLoan?.loan_number || payment.loan_id}.`,
+      { entityType: 'payment', entityId: payment.id, requiredPermission: 'payments.view', dedupeKey: `payment_void:${payment.id}`, excludeUserId: req.user.id });
     res.json(db.prepare('SELECT * FROM payments WHERE id=?').get(payment.id));
   } catch (e: any) {
     try { getDb().exec('ROLLBACK'); } catch (_) { /* sin transaccion activa */ }

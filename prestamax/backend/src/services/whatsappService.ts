@@ -16,6 +16,7 @@
 
 import { uuid, now } from '../db/database';
 import { planAllows } from '../lib/access';
+import { localDate, addDaysStr, daysBetweenStr, safeTz } from '../lib/tz';
 
 export type WhatsAppEvent =
   | 'loan_created'
@@ -369,47 +370,71 @@ export function generateOverdueDraft(
   }
 }
 
-// runOverdueCron: detecta cuotas vencidas hace 1, 7 o 15 dias y crea drafts
-// Usado por el cron diario en index.ts.
-export function runOverdueCron(db: any): { generated: number; skipped: number } {
+// ── Hitos de mora / recordatorio (con recuperacion de dias perdidos) ─────────
+// Para una cuota con `d` dias de atraso (d<0 = faltan |d| dias), el hito aplicable es
+// UNO solo: el mas alto N tal que N <= d y d <= N + RECOVERY_DAYS (o, antes de
+// vencer, pre_due_3 con 1..3 dias restantes). Si el job de un dia se perdio, el hito
+// vencido que aun no tiene borrador se crea la proxima vez; nunca los tres a la vez
+// ni uno ya existente (generateOverdueDraft deduplica por prestamo+cuota+evento).
+const RECOVERY_DAYS = 6;
+const OVERDUE_MILESTONES: Array<{ days: number; event: WhatsAppEvent }> = [
+  { days: 15, event: 'overdue_15' },
+  { days: 7,  event: 'overdue_7' },
+  { days: 1,  event: 'overdue_1' },
+];
+
+export function milestoneEventForDays(d: number): WhatsAppEvent | null {
+  if (d < 0) return d >= -3 ? 'pre_due_3' : null;
+  for (const m of OVERDUE_MILESTONES) {
+    if (d >= m.days) return d <= m.days + RECOVERY_DAYS ? m.event : null;
+  }
+  return null;
+}
+
+/** Genera los borradores pendientes de UN tenant segun su dia local. */
+export function runOverdueCronForTenant(
+  db: any, tenantId: string, tz: string, now: Date = new Date(),
+): { generated: number; skipped: number } {
+  const stats = { generated: 0, skipped: 0 };
+  const today = localDate(now, tz);
+  const from = addDaysStr(today, -(15 + RECOVERY_DAYS));
+  const to = addDaysStr(today, 3);
+  const rows = db.prepare(
+    `SELECT i.id as installment_id, i.loan_id, l.client_id, l.tenant_id, i.due_date
+     FROM installments i
+     JOIN loans l ON l.id = i.loan_id
+     WHERE l.tenant_id = ?
+       AND i.due_date >= ? AND i.due_date <= ?
+       AND i.status IN ('pending','partial','overdue')
+       AND l.is_voided = 0
+       AND l.status IN ('active','disbursed','in_mora','overdue')`
+  ).all(tenantId, from, to + 'z') as any[]; // 'z' > cualquier hora: incluye due_date con sufijo de hora
+  for (const r of rows) {
+    const d = daysBetweenStr(String(r.due_date).slice(0, 10), today);
+    const event = milestoneEventForDays(d);
+    if (!event) continue;
+    const id = generateOverdueDraft(db, r.tenant_id, event, {
+      client_id: r.client_id, loan_id: r.loan_id, installment_id: r.installment_id,
+    });
+    if (id) stats.generated++; else stats.skipped++;
+  }
+  return stats;
+}
+
+// runOverdueCron: todos los tenants activos (cada uno con SU dia local). La
+// programacion (hora local, una vez por dia, recuperacion tras reinicios) vive en
+// services/scheduler.ts; esta funcion es idempotente y segura de repetir.
+export function runOverdueCron(db: any, now: Date = new Date()): { generated: number; skipped: number } {
   const stats = { generated: 0, skipped: 0 };
   try {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const targetDays: Array<{ days: number; event: WhatsAppEvent }> = [
-      { days: -3, event: 'pre_due_3' },  // 3 dias ANTES de vencer
-      { days: 1,  event: 'overdue_1' },
-      { days: 7,  event: 'overdue_7' },
-      { days: 15, event: 'overdue_15' },
-    ];
-
-    for (const { days, event } of targetDays) {
-      const dueDate = new Date(today); dueDate.setDate(dueDate.getDate() - days);
-      const dueDateStr = dueDate.toISOString().slice(0, 10);
-
-      // Buscar installments con due_date == dueDateStr y status pendiente
-      const rows = db.prepare(
-        `SELECT i.id as installment_id, i.loan_id, l.client_id, l.tenant_id
-         FROM installments i
-         JOIN loans l ON l.id = i.loan_id
-         WHERE i.due_date = ?
-           AND i.status IN ('pending','partial','overdue')
-           AND l.is_voided = 0
-           AND l.status IN ('active','disbursed','in_mora','overdue')`
-      ).all(dueDateStr) as any[];
-
-      for (const r of rows) {
-        const id = generateOverdueDraft(db, r.tenant_id, event, {
-          client_id: r.client_id,
-          loan_id: r.loan_id,
-          installment_id: r.installment_id,
-        });
-        if (id) stats.generated++;
-        else stats.skipped++;
-      }
+    const tenants = db.prepare('SELECT id, timezone FROM tenants WHERE is_active = 1').all() as any[];
+    for (const t of tenants) {
+      const s = runOverdueCronForTenant(db, t.id, safeTz(t.timezone), now);
+      stats.generated += s.generated; stats.skipped += s.skipped;
     }
     console.log(`[runOverdueCron] generated=${stats.generated} skipped=${stats.skipped}`);
   } catch (e: any) {
-    console.error('[runOverdueCron] error:', e?.message || e);
+    console.error('[runOverdueCron] error:', String(e?.message || e).slice(0, 160));
   }
   return stats;
 }

@@ -712,6 +712,31 @@ export function initializeDatabase(): void {
   // Registro de migraciones de datos de una sola vez (idempotente por clave).
   try { db.exec(`CREATE TABLE IF NOT EXISTS app_migrations (key TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))`); } catch(_) {}
 
+  // ── Notifications v2 (aditivo e idempotente; no borra datos) ─────────────
+  //  - dedupe_key: idempotencia por (tenant, usuario, clave) via indice unico parcial.
+  //  - required_permission: permiso efectivo (plan AND rol) para ver la notificacion.
+  try { db.exec(`ALTER TABLE notifications ADD COLUMN dedupe_key TEXT`); } catch(_) {}
+  try { db.exec(`ALTER TABLE notifications ADD COLUMN required_permission TEXT`); } catch(_) {}
+  try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_notifs_dedupe ON notifications(tenant_id, user_id, dedupe_key) WHERE dedupe_key IS NOT NULL`); } catch(_) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_notifs_user_read ON notifications(tenant_id, user_id, is_read, created_at)`); } catch(_) {}
+  // Historial: etiqueta cada tipo legado con el permiso de su feature para que un
+  // downgrade/cambio de rol no siga mostrando su contenido (no se borra nada).
+  try {
+    const bf = db.prepare(`UPDATE notifications SET required_permission=? WHERE required_permission IS NULL AND type=?`);
+    bf.run('requests.view', 'loan_request');
+    bf.run('payments.view', 'payment_received');
+    bf.run('loans.view', 'loan_overdue');
+    bf.run('collections.tasks', 'task_assigned');
+    bf.run('collections.tasks.manage', 'task_completed');
+  } catch(_) {}
+  // Registro de ejecuciones de jobs programados (idempotencia entre reinicios).
+  try { db.exec(`CREATE TABLE IF NOT EXISTS job_runs (
+    job TEXT NOT NULL, scope TEXT NOT NULL, run_key TEXT NOT NULL,
+    ran_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (job, scope, run_key)
+  )`); } catch(_) {}
+  try { db.exec(`ALTER TABLE tenants ADD COLUMN timezone TEXT NOT NULL DEFAULT 'America/Santo_Domingo'`); } catch(_) {}
+
   // -- Cargo de Prorroga: fixed extension fee per loan --
   try { db.exec(`ALTER TABLE loans ADD COLUMN prorroga_fee REAL NOT NULL DEFAULT 0`); } catch(_) {}
   try { db.exec(`ALTER TABLE installments ADD COLUMN prorroga_count INTEGER NOT NULL DEFAULT 0`); } catch(_) {}

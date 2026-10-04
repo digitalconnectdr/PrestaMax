@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
 import { sendInquiryNotification } from '../services/emailService';
 import { getClientIp, geolocateIp } from '../services/geoService';
-import { notifyTenantAdmins } from '../lib/notify';
+import { notifyUsersWithPermission, notifyPlatformOwner } from '../lib/notify';
 import { ALLOWED_EVENT_NAMES, normalizeSignupErrorType } from '../lib/analyticsHelpers';
 import { readTrackingContext, insertAnalyticsEvent } from '../lib/analyticsServer';
 import { tenantPlanIncludes, tenantSubscriptionIsValid } from '../lib/planLimits';
@@ -157,10 +157,14 @@ router.post('/apply/:token', (req: Request, res: Response) => {
       occupation || null, employer || null, workAddress || null, monthlyIncome || null, economicActivity || null,
     );
 
-    // Antes ninguna notificacion in-app avisaba de una solicitud nueva del
-    // enlace publico -- solo se veia si alguien entraba a revisar la lista.
-    notifyTenantAdmins(db, tenant.id, 'loan_request', 'Nueva solicitud de préstamo',
-      `${clientName} solicitó un préstamo${loanAmount ? ` de ${loanAmount}` : ''} desde tu enlace público.`, 'loan_request', id);
+    // Aviso in-app a quien realmente puede VER solicitudes (permiso efectivo
+    // requests.view: plan AND rol — owner/admin y oficiales con acceso). Idempotente
+    // por solicitud. Texto acotado: es contenido de un formulario publico.
+    const safeName = String(clientName).slice(0, 80);
+    const safeAmount = loanAmount ? String(loanAmount).slice(0, 20) : '';
+    notifyUsersWithPermission(db, tenant.id, 'requests.view', 'loan_request', 'Nueva solicitud de préstamo',
+      `${safeName} solicitó un préstamo${safeAmount ? ` de ${safeAmount}` : ''} desde tu enlace público.`,
+      { entityType: 'loan_request', entityId: id, dedupeKey: `loan_request:${id}` });
 
     res.status(201).json({
       success: true,
@@ -239,38 +243,15 @@ router.post('/plan-inquiry', async (req: Request, res: Response) => {
       message || null, ip_address, user_agent, now(), now()
     );
 
-    // Notificacion campanita: insertar para cada admin de plataforma en cada
-    // uno de sus tenants. Asi sale el badge sin importar qué tenant esté
-    // viendo el admin al recibir el lead.
-    try {
-      // SOLO el owner de la app recibe la notif (configurable via OWNER_USER_EMAIL,
-      // default = jcpenalo@gmail.com). Asi el resto de admins no ven notifs duplicadas.
-      const ownerEmail = (process.env.OWNER_USER_EMAIL || 'jcpenalo@gmail.com').toLowerCase();
-      const platformAdmins = db.prepare(`
-        SELECT u.id as user_id, tm.tenant_id
-        FROM users u
-        JOIN tenant_memberships tm ON tm.user_id = u.id AND tm.is_active = 1
-        WHERE lower(u.email) = ? AND u.is_active = 1
-      `).all(ownerEmail) as any[];
-      const notifTitle = `Nueva solicitud de plan: ${full_name}`;
-      const notifMsg = business_name
+    // Campanita del owner de la plataforma (OWNER_USER_EMAIL): helper estandar,
+    // idempotente por lead y que nunca rompe el alta del lead.
+    notifyPlatformOwner(
+      db, 'plan_inquiry', `Nueva solicitud de plan: ${full_name}`,
+      business_name
         ? `${business_name} (${country}) — Plan: ${plan_interest || 'asesorar'}`
-        : `${country} — Plan: ${plan_interest || 'asesorar'}`;
-      const insertNotif = db.prepare(`
-        INSERT INTO notifications (id, tenant_id, user_id, type, title, message, entity_type, entity_id, is_read, created_at)
-        VALUES (?,?,?,?,?,?,?,?,0,datetime('now'))
-      `);
-      const crypto = require('crypto');
-      for (const pa of platformAdmins) {
-        insertNotif.run(
-          crypto.randomUUID(), pa.tenant_id, pa.user_id,
-          'plan_inquiry', notifTitle, notifMsg,
-          'plan_inquiry', id
-        );
-      }
-    } catch (e: any) {
-      console.error('[plan-inquiry] notif admin fallo:', e?.message || e);
-    }
+        : `${country} — Plan: ${plan_interest || 'asesorar'}`,
+      { entityType: 'plan_inquiry', entityId: id, dedupeKey: `plan_inquiry:${id}` },
+    );
 
     sendInquiryNotification({
       id, full_name, business_name, whatsapp, email, country,

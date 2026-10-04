@@ -3335,6 +3335,22 @@ const TR: Record<string, Tri> = {
   'sub.banner.view_plans':       { es: 'Ver planes', en: 'View plans', pt: 'Ver planos' },
   'sub.banner.dismiss':          { es: 'Ahora no', en: 'Not now', pt: 'Agora não' },
 
+  // ── Campana de notificaciones (NotificationBell) ─────────────────────────────
+  'notif.title':          { es: 'Notificaciones', en: 'Notifications', pt: 'Notificações' },
+  'notif.bell_aria':      { es: 'Notificaciones', en: 'Notifications', pt: 'Notificações' },
+  'notif.unread_aria':    { es: 'sin leer', en: 'unread', pt: 'não lidas' },
+  'notif.empty':          { es: 'Sin notificaciones', en: 'No notifications', pt: 'Sem notificações' },
+  'notif.loading':        { es: 'Cargando...', en: 'Loading...', pt: 'Carregando...' },
+  'notif.error':          { es: 'No pudimos cargar tus notificaciones.', en: "We couldn't load your notifications.", pt: 'Não foi possível carregar suas notificações.' },
+  'notif.retry':          { es: 'Reintentar', en: 'Retry', pt: 'Tentar novamente' },
+  'notif.mark_all':       { es: 'Leer todo', en: 'Mark all read', pt: 'Ler tudo' },
+  'notif.mark_all_title': { es: 'Marcar todas como leídas', en: 'Mark all as read', pt: 'Marcar todas como lidas' },
+  'notif.close':          { es: 'Cerrar', en: 'Close', pt: 'Fechar' },
+  'notif.load_more':      { es: 'Cargar más', en: 'Load more', pt: 'Carregar mais' },
+  'notif.loading_more':   { es: 'Cargando más...', en: 'Loading more...', pt: 'Carregando mais...' },
+  'notif.go_tasks':       { es: 'Ver tareas de cobranza →', en: 'View collection tasks →', pt: 'Ver tarefas de cobrança →' },
+  'notif.row_unread':     { es: 'No leída', en: 'Unread', pt: 'Não lida' },
+
   // ── Popup de confirmación de pago (regreso desde Whop, en Dashboard) ─────────
   'dash.whop_thanks_title':      { es: '¡Gracias, suscripción activada!', en: 'Thank you, subscription activated!', pt: 'Obrigado, assinatura ativada!' },
   'dash.whop_thanks_desc':       { es: 'Tu pago se procesó correctamente. La activación puede tardar unos segundos en reflejarse.', en: 'Your payment was processed successfully. Activation may take a few seconds to show up.', pt: 'Seu pagamento foi processado com sucesso. A ativação pode levar alguns segundos para aparecer.' },

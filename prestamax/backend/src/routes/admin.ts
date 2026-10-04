@@ -10,6 +10,7 @@ import { validatePlanFeatures, PERM_DEFS } from '../lib/permissions';
 import { getPlanFeatures, findExplicitOutsidePlan, PERMISSION_OUTSIDE_PLAN } from '../lib/access';
 import { checkMembershipLimits, membershipDelta, countActiveLoans } from '../lib/planLimits';
 import { PLAN_CATALOG } from '../db/planCatalog';
+import { notifyTenantBilling } from '../lib/billingNotifications';
 import { PRICING_FUNNEL_STEPS, ALL_FUNNEL_EVENTS, computeSequentialFunnel, computeGlobalCounts, computeSignupSources, FunnelEventRow } from '../lib/analyticsFunnel';
 
 // Helper: valida el campo `features` de un plan (string JSON o array) contra
@@ -328,6 +329,9 @@ router.put('/tenants/:id', authenticate, requirePlatformAdmin, (req: AuthRequest
         const { applyPlanChange } = require('./billing');
         applyPlanChange(db, req.params.id, d.plan_id);
       } catch (e) { console.error('Error limpiando permisos al cambiar plan:', e); }
+      // Aviso persistente a owner/admin del tenant (cambio identificable: lo hizo el panel).
+      const newPlan = db.prepare('SELECT name FROM plans WHERE id=?').get(d.plan_id) as any;
+      notifyTenantBilling(db, req.params.id, 'plan_changed', { key: `${before?.plan_id || 'none'}>${d.plan_id}:${now()}`, planName: newPlan?.name });
     }
 
     res.json(db.prepare('SELECT * FROM tenants WHERE id=?').get(req.params.id));
@@ -348,6 +352,9 @@ router.post('/tenants/:id/renew', authenticate, requirePlatformAdmin, (req: Auth
       subscription_status='active', subscription_start=?, subscription_end=?,
       billing_cycle=?, subscription_notes=COALESCE(?,subscription_notes), updated_at=?
     WHERE id=?`).run(start, end, billing_cycle, notes||null, now(), req.params.id);
+    // Renovacion manual por el panel (identificable sin ambiguedad): avisa a owner/admin.
+    const renewedPlan = db.prepare('SELECT p.name FROM tenants t LEFT JOIN plans p ON p.id=t.plan_id WHERE t.id=?').get(req.params.id) as any;
+    notifyTenantBilling(db, req.params.id, 'subscription_renewed', { key: `${end}`, planName: renewedPlan?.name });
     res.json(db.prepare('SELECT * FROM tenants WHERE id=?').get(req.params.id));
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });

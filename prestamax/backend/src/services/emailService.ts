@@ -15,6 +15,15 @@
 //   FROM_EMAIL=CredyTek <noreply@prestamax.com>   — opcional, default usa onboarding@resend.dev
 //   FRONTEND_URL=https://credytek.vercel.app — para link al admin
 
+// Escapa texto que puede venir de formularios publicos o de usuarios antes de
+// interpolarlo en HTML de email (evita inyeccion de enlaces/markup en el buzon).
+export function escapeHtml(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+const esc = escapeHtml;
+
 interface InquiryPayload {
   id: string;
   full_name: string;
@@ -84,25 +93,25 @@ function buildHtml(p: InquiryPayload): string {
 <html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0;">
     <h1 style="margin:0;font-size:20px;">🎯 Nuevo lead de CredyTek</h1>
-    <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">${planLbl}</p>
+    <p style="margin:4px 0 0;opacity:0.85;font-size:14px;">${esc(planLbl)}</p>
   </div>
   <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
-      <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Nombre</td><td style="padding:8px 0;font-weight:600;">${p.full_name}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;width:140px;">Nombre</td><td style="padding:8px 0;font-weight:600;">${esc(p.full_name)}</td></tr>
       ${p.business_name ? `<tr><td style="padding:8px 0;color:#6b7280;">Empresa</td><td style="padding:8px 0;">${p.business_name}</td></tr>` : ''}
-      <tr><td style="padding:8px 0;color:#6b7280;">WhatsApp</td><td style="padding:8px 0;font-family:monospace;">${p.whatsapp}</td></tr>
-      <tr><td style="padding:8px 0;color:#6b7280;">Email</td><td style="padding:8px 0;"><a href="mailto:${p.email}" style="color:#1e3a5f;">${p.email}</a></td></tr>
-      <tr><td style="padding:8px 0;color:#6b7280;">Pais</td><td style="padding:8px 0;">${countryLbl}</td></tr>
-      <tr><td style="padding:8px 0;color:#6b7280;">Plan</td><td style="padding:8px 0;">${planLbl}</td></tr>
-      <tr><td style="padding:8px 0;color:#6b7280;">Cartera</td><td style="padding:8px 0;">${sizeLbl}</td></tr>
-      <tr><td style="padding:8px 0;color:#6b7280;">Fuente</td><td style="padding:8px 0;">${sourceLbl}</td></tr>
-      ${p.message ? `<tr><td style="padding:8px 0;color:#6b7280;vertical-align:top;">Mensaje</td><td style="padding:8px 0;white-space:pre-wrap;">${p.message}</td></tr>` : ''}
+      <tr><td style="padding:8px 0;color:#6b7280;">WhatsApp</td><td style="padding:8px 0;font-family:monospace;">${esc(p.whatsapp)}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Email</td><td style="padding:8px 0;"><a href="mailto:${esc(p.email)}" style="color:#1e3a5f;">${esc(p.email)}</a></td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Pais</td><td style="padding:8px 0;">${esc(countryLbl)}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Plan</td><td style="padding:8px 0;">${esc(planLbl)}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Cartera</td><td style="padding:8px 0;">${esc(sizeLbl)}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Fuente</td><td style="padding:8px 0;">${esc(sourceLbl)}</td></tr>
+      ${p.message ? `<tr><td style="padding:8px 0;color:#6b7280;vertical-align:top;">Mensaje</td><td style="padding:8px 0;white-space:pre-wrap;">${esc(p.message)}</td></tr>` : ''}
     </table>
     <div style="margin-top:20px;display:flex;gap:8px;">
-      <a href="${waLink}" style="background:#25D366;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">💬 Abrir WhatsApp</a>
+      <a href="${esc(waLink)}" style="background:#25D366;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">💬 Abrir WhatsApp</a>
       <a href="${frontUrl}/admin?tab=inquiries" style="background:#1e3a5f;color:white;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">📋 Ver en Admin</a>
     </div>
-    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">ID: ${p.id} · Sistema CredyTek · Notificacion automatica</p>
+    <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">ID: ${esc(p.id)} · Sistema CredyTek · Notificacion automatica</p>
   </div>
 </body></html>`.trim();
 }
@@ -135,6 +144,7 @@ function buildText(p: InquiryPayload): string {
 
 // Envio generico via Resend, con el mismo manejo de lazy-off + reintento que
 // ya usaba sendInquiryNotification. Compartido por todos los emails salientes.
+let warnedNoFrom = false;
 async function sendViaResend(to: string[], subject: string, html: string, text: string, logLabel: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -142,6 +152,10 @@ async function sendViaResend(to: string[], subject: string, html: string, text: 
     return false;
   }
   const from = process.env.FROM_EMAIL || 'CredyTek <onboarding@resend.dev>';
+  if (!process.env.FROM_EMAIL && !warnedNoFrom) {
+    warnedNoFrom = true;
+    console.warn('[email] FROM_EMAIL no configurada: se usa onboarding@resend.dev (Resend solo entrega a la cuenta titular). Configura un remitente de dominio verificado.');
+  }
   const payload = { from, to, subject, html, text };
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -155,7 +169,7 @@ async function sendViaResend(to: string[], subject: string, html: string, text: 
         body: JSON.stringify(payload),
       });
       if (resp.ok) {
-        console.log(`[email] ${logLabel} enviado a ${to.join(',')}`);
+        console.log(`[email] ${logLabel} enviado (${to.length} destinatario${to.length === 1 ? '' : 's'})`);
         return true;
       }
       const err = await resp.text();
@@ -198,10 +212,10 @@ interface WelcomePayload {
 
 function buildWelcomeHtml(p: WelcomePayload): string {
   const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
-  const firstName = (p.adminName || '').trim().split(/\s+/)[0] || p.adminName;
+  const firstName = esc((p.adminName || '').trim().split(/\s+/)[0] || p.adminName);
   const intro = p.trialDays > 0
-    ? `Tu cuenta de <strong>${p.tenantName}</strong> ya está activa, con ${p.trialDays} días de prueba gratis y sin tarjeta de crédito.`
-    : `Tu cuenta de <strong>${p.tenantName}</strong> ya está activa.`;
+    ? `Tu cuenta de <strong>${esc(p.tenantName)}</strong> ya está activa, con ${p.trialDays} días de prueba gratis y sin tarjeta de crédito.`
+    : `Tu cuenta de <strong>${esc(p.tenantName)}</strong> ya está activa.`;
   return `
 <!DOCTYPE html>
 <html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
@@ -261,15 +275,20 @@ interface TrialReminderPayload {
   tenantName: string;
   toEmail: string;
   daysLeft: number;
+  /** true = el trial ya termino (hito 'vencido'). */
+  expired?: boolean;
+}
+
+function trialHeadline(p: TrialReminderPayload, plain: boolean): string {
+  if (p.expired) return 'Tu prueba gratis de CredyTek terminó';
+  if (p.daysLeft <= 0) return 'Tu prueba gratis de CredyTek vence hoy';
+  if (p.daysLeft === 1) return 'Tu prueba gratis de CredyTek vence mañana';
+  return `Tu prueba gratis de CredyTek vence en ${p.daysLeft} ${plain ? 'dias' : 'días'}`;
 }
 
 function buildTrialReminderHtml(p: TrialReminderPayload): string {
   const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
-  const headline = p.daysLeft <= 0
-    ? 'Tu prueba gratis de CredyTek termina hoy'
-    : p.daysLeft === 1
-    ? 'Tu prueba gratis de CredyTek termina mañana'
-    : `Tu prueba gratis de CredyTek termina en ${p.daysLeft} días`;
+  const headline = trialHeadline(p, false);
   return `
 <!DOCTYPE html>
 <html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
@@ -278,7 +297,7 @@ function buildTrialReminderHtml(p: TrialReminderPayload): string {
   </div>
   <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
     <p>Hola,</p>
-    <p><strong>${p.tenantName}</strong> ha estado usando CredyTek durante tu período de prueba. Para no perder acceso a tus clientes, préstamos y pagos ya cargados, elige un plan antes de que termine.</p>
+    <p><strong>${esc(p.tenantName)}</strong> ha estado usando CredyTek durante tu período de prueba. ${p.expired ? 'Tu acceso está en pausa; elige un plan para reactivarlo (tus datos se conservan).' : 'Para no perder acceso a tus clientes, préstamos y pagos ya cargados, elige un plan antes de que termine.'}</p>
     <div style="margin-top:20px;">
       <a href="${frontUrl}/settings/subscription" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Ver planes y continuar</a>
     </div>
@@ -290,16 +309,14 @@ function buildTrialReminderHtml(p: TrialReminderPayload): string {
 
 function buildTrialReminderText(p: TrialReminderPayload): string {
   const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
-  const headline = p.daysLeft <= 0
-    ? 'Tu prueba gratis de CredyTek termina hoy'
-    : p.daysLeft === 1
-    ? 'Tu prueba gratis de CredyTek termina mañana'
-    : `Tu prueba gratis de CredyTek termina en ${p.daysLeft} dias`;
+  const headline = trialHeadline(p, true);
   return [
     headline.toUpperCase(),
     '',
     `${p.tenantName} ha estado usando CredyTek durante tu periodo de prueba.`,
-    'Para no perder acceso a tus clientes, prestamos y pagos ya cargados, elige un plan antes de que termine.',
+    p.expired
+      ? 'Tu acceso esta en pausa; elige un plan para reactivarlo (tus datos se conservan).'
+      : 'Para no perder acceso a tus clientes, prestamos y pagos ya cargados, elige un plan antes de que termine.',
     '',
     `Ver planes: ${frontUrl}/settings/subscription`,
     '',
@@ -309,10 +326,14 @@ function buildTrialReminderText(p: TrialReminderPayload): string {
 
 export async function sendTrialReminderEmail(p: TrialReminderPayload): Promise<boolean> {
   if (!p.toEmail) return false;
-  const subject = p.daysLeft <= 0
-    ? 'Tu prueba de CredyTek termina hoy'
-    : `Tu prueba de CredyTek termina en ${p.daysLeft} día${p.daysLeft === 1 ? '' : 's'}`;
-  return sendViaResend([p.toEmail], subject, buildTrialReminderHtml(p), buildTrialReminderText(p), `trial-reminder ${p.tenantId}/${p.daysLeft}d`);
+  const subject = p.expired
+    ? 'Tu prueba de CredyTek terminó'
+    : p.daysLeft <= 0
+    ? 'Tu prueba de CredyTek vence hoy'
+    : p.daysLeft === 1
+    ? 'Tu prueba de CredyTek vence mañana'
+    : `Tu prueba de CredyTek vence en ${p.daysLeft} días`;
+  return sendViaResend([p.toEmail], subject, buildTrialReminderHtml(p), buildTrialReminderText(p), `trial-reminder ${p.tenantId}/${p.expired ? 'expired' : p.daysLeft + 'd'}`);
 }
 
 // ─── Recuperacion de contraseña ──────────────────────────────────────────
@@ -325,10 +346,10 @@ export async function sendPasswordResetEmail(p: { toEmail: string; fullName: str
     <h1 style="margin:0;font-size:20px;">🔑 Restablece tu contraseña</h1>
   </div>
   <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
-    <p>Hola ${p.fullName || ''},</p>
+    <p>Hola ${esc(p.fullName || '')},</p>
     <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta de CredyTek. Este enlace expira en 2 horas.</p>
     <div style="margin-top:20px;">
-      <a href="${p.resetUrl}" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Restablecer contraseña</a>
+      <a href="${esc(p.resetUrl)}" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Restablecer contraseña</a>
     </div>
     <p style="margin-top:20px;color:#6b7280;font-size:13px;">Si no solicitaste esto, ignora este correo — tu contraseña actual sigue siendo válida.</p>
     <p style="margin-top:20px;color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;padding-top:12px;">CredyTek · Notificación automática de seguridad</p>
@@ -350,8 +371,8 @@ export async function sendNewLoginAlertEmail(p: { toEmail: string; fullName: str
     <h1 style="margin:0;font-size:20px;">🛡️ Nuevo inicio de sesión</h1>
   </div>
   <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
-    <p>Hola ${p.fullName || ''},</p>
-    <p>Detectamos un inicio de sesión en tu cuenta de CredyTek desde <strong>${where}</strong>${p.ip ? ` (IP ${p.ip})` : ''}.</p>
+    <p>Hola ${esc(p.fullName || '')},</p>
+    <p>Detectamos un inicio de sesión en tu cuenta de CredyTek desde <strong>${esc(where)}</strong>${p.ip ? ` (IP ${esc(p.ip)})` : ''}.</p>
     <p>Si fuiste tú, no necesitas hacer nada. Si no reconoces este acceso, cambia tu contraseña de inmediato.</p>
     <div style="margin-top:20px;">
       <a href="${frontUrl}/settings" style="background:#1e3a5f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Ir a mi cuenta</a>
@@ -395,7 +416,7 @@ export async function sendDashboardDigestEmail(p: DashboardDigestPayload): Promi
 <!DOCTYPE html>
 <html><body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:20px;">
   <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0;">
-    <h1 style="margin:0;font-size:20px;">📊 Resumen ${freqLabel[p.frequency] || ''} — ${p.tenantName}</h1>
+    <h1 style="margin:0;font-size:20px;">📊 Resumen ${freqLabel[p.frequency] || ''} — ${esc(p.tenantName)}</h1>
   </div>
   <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
     <table style="width:100%;border-collapse:collapse;font-size:14px;">

@@ -67,13 +67,15 @@ export const requireTenant = async (req: AuthRequest, res: Response, next: NextF
         // Whitelist: endpoints de billing y notificaciones SIEMPRE accesibles
         // aunque la suscripcion este expirada/pendiente, sino es imposible pagar.
         // Tambien /auth/* para que el user pueda revisar su estado y cerrar sesion.
-        const url = req.originalUrl || req.url || '';
+        // Se compara el PATH sin query string: '/api/notifications', '/api/notifications?limit=20'
+        // y '/api/notifications/<...>' deben pasar (solo estos 3 modulos, nada mas).
+        const url = (req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, '');
         const allowedWhenExpired = [
-          '/api/billing/',
-          '/api/auth/',
-          '/api/notifications/',
+          '/api/billing',
+          '/api/auth',
+          '/api/notifications',
         ];
-        const isAllowed = allowedWhenExpired.some(p => url.startsWith(p));
+        const isAllowed = allowedWhenExpired.some(p => url === p || url.startsWith(p + '/'));
         if (!isAllowed) {
           return res.status(402).json({
             error: isPending

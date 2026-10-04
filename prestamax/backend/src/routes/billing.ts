@@ -25,6 +25,8 @@ import {
   verifyWhopWebhook,
 } from '../services/whopService';
 import { insertServerAnalyticsEvent } from '../lib/analyticsEvents';
+import { notifyPlatformOwner } from '../lib/notify';
+import { notifyBillingEvent, notifyTenantBilling } from '../lib/billingNotifications';
 
 // Fase 3: mensual (único período aceptado hasta hoy) o anual (requiere IDs de
 // plan/precio anuales configurados en el proveedor activo — ver whopService/
@@ -455,36 +457,12 @@ router.post('/request-plan-change', authenticate, requireTenant, (req: AuthReque
       (req.headers['user-agent'] as string || '').slice(0, 500),
     );
 
-    // Notificacion campanita al owner (mismo patron que /public/plan-inquiry)
-    try {
-      const ownerEmail = (process.env.OWNER_USER_EMAIL || 'jcpenalo@gmail.com').toLowerCase();
-      const platformAdmins = db.prepare(`
-        SELECT u.id as user_id, tm.tenant_id
-        FROM users u
-        JOIN tenant_memberships tm ON tm.user_id = u.id AND tm.is_active = 1
-        WHERE lower(u.email) = ? AND u.is_active = 1
-      `).all(ownerEmail) as any[];
-      const notifTitle = `Cambio de plan solicitado: ${business || fullName}`;
-      const notifMsg = `${fullName} (${email}) quiere cambiar al plan ${plan.name}. Plan actual: ${currentPlan}.`;
-      // Columnas reales de notifications: id, tenant_id, user_id, type, title,
-      // message, entity_type, entity_id, is_read, created_at (NO existe 'link').
-      const insertNotif = db.prepare(`
-        INSERT INTO notifications (id, tenant_id, user_id, type, title, message, entity_type, entity_id, is_read, created_at)
-        VALUES (?,?,?,?,?,?,?,?,0,datetime('now'))
-      `);
-      for (const a of platformAdmins) {
-        try {
-          insertNotif.run(
-            require('../db/database').uuid(),
-            a.tenant_id, a.user_id,
-            'plan_inquiry', notifTitle, notifMsg,
-            'plan_inquiry', inqId
-          );
-        } catch (notifErr: any) {
-          console.error('[billing] notif insert fallo:', notifErr?.message || notifErr);
-        }
-      }
-    } catch(_) {}
+    // Campanita del owner de la plataforma: helper estandar (idempotente, no rompe la solicitud)
+    notifyPlatformOwner(
+      db, 'plan_inquiry', `Cambio de plan solicitado: ${business || fullName}`,
+      `${fullName} (${email}) quiere cambiar al plan ${plan.name}. Plan actual: ${currentPlan}.`,
+      { entityType: 'plan_inquiry', entityId: inqId, dedupeKey: `plan_inquiry:${inqId}`, fallbackTenantId: req.tenant!.id },
+    );
 
     try {
       db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(
@@ -680,7 +658,15 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
       ? (data.membership?.id || data.membership_id || null)
       : (data.id || data.membership?.id || data.membership_id || null);
 
+    // Clave de evento para dedupe de avisos: id del webhook del proveedor (se repite
+    // igual en cada reentrega) o, si falta, una clave determinista por membresia+tipo.
+    const hdrId = req.headers['webhook-id'];
+    const eventKey = (Array.isArray(hdrId) ? hdrId[0] : hdrId) || `${eventMembershipId || 'sin-membresia'}:${rawType}`;
+
     if (isActivation && tenantId) {
+      // Estado previo: los avisos se emiten SOLO en la transicion real (un webhook
+      // repetido, o went_valid + payment_succeeded de la misma compra, no duplican).
+      const prevTenant = db.prepare('SELECT subscription_status, plan_id FROM tenants WHERE id=?').get(tenantId) as any;
       // Resolver el plan interno de CredyTek
       let newPlanId: string | null = null;
       if (planSlug) {
@@ -717,6 +703,18 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
         plan: planSlug,
         billingPeriod,
       });
+      if (prevTenant) {
+        const planRowName = (newPlanId || prevTenant.plan_id)
+          ? (db.prepare('SELECT name FROM plans WHERE id=?').get(newPlanId || prevTenant.plan_id) as any)?.name
+          : null;
+        if (prevTenant.subscription_status !== 'active') {
+          notifyBillingEvent(db, tenantId, 'subscription_activated', { key: eventKey, planName: planRowName });
+        } else if (newPlanId && prevTenant.plan_id !== newPlanId) {
+          notifyTenantBilling(db, tenantId, 'plan_changed', { key: eventKey, planName: planRowName });
+        }
+        // Renovacion: Whop no distingue de forma fiable payment_succeeded inicial vs
+        // recurrente (llegan ambos en la compra), asi que NO se emite "renovada" desde aqui.
+      }
       console.log(`[Whop] Tenant ${tenantId} suscripción ACTIVADA (plan: ${newPlanId || 'sin cambio'}, periodo: ${billingPeriod}, hasta ${subEnd})`);
     } else if (isDeactivation) {
       // Localizar tenant por metadata o por whop_membership_id
@@ -736,6 +734,7 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
         } else {
           db.prepare(`UPDATE tenants SET subscription_status='cancelled', updated_at=datetime('now') WHERE id=?`).run(t.id);
         }
+        notifyBillingEvent(db, t.id, 'subscription_cancelled', { key: eventKey });
         console.log(`[Whop] Tenant ${t.id} suscripción CANCELADA -> plan trial`);
       } else if (t?.id) {
         console.log(`[Whop] Desactivación IGNORADA para tenant ${t.id}: la membresía del evento (${membershipId || 'sin id'}) no es la actual (${t.whop_membership_id || 'ninguna'})`);
@@ -749,7 +748,11 @@ const whopWebhookHandler = async (req: Request, res: Response) => {
       // gracia a la suscripción vigente.
       const isStale = !!(t && membershipId && t.whop_membership_id && t.whop_membership_id !== membershipId);
       if (t?.id && !isStale) {
+        const prevStatus = (db.prepare('SELECT subscription_status FROM tenants WHERE id=?').get(t.id) as any)?.subscription_status;
         applyPastDueGrace(db, t.id);
+        if (prevStatus !== 'past_due') {
+          notifyBillingEvent(db, t.id, 'payment_failed', { key: eventKey, graceDays: PAST_DUE_GRACE_DAYS });
+        }
         console.log(`[Whop] Tenant ${t.id} pago fallido -> periodo de gracia ${PAST_DUE_GRACE_DAYS}d`);
       } else if (t?.id) {
         console.log(`[Whop] Pago fallido IGNORADO para tenant ${t.id}: membresía distinta de la actual`);

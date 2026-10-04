@@ -13,6 +13,8 @@ import { sendReport, ExportColumn } from '../lib/exportHelpers';
 import { checkAndMarkActivation } from '../lib/activation';
 import { checkActiveLoanLimit, ACTIVE_LOAN_STATUSES, PLAN_LIMIT_ACTIVE_LOANS } from '../lib/planLimits';
 import { planAllows } from '../lib/access';
+import { notifyUsersWithPermission } from '../lib/notify';
+import { tenantAsOf } from '../lib/tz';
 
 const router = Router();
 
@@ -345,7 +347,7 @@ router.get('/:id', authenticate, requireTenant, requirePermission('loans.view'),
     // FIX P0/P1 (Jun 2026): la version inline anterior contaba dias con fechas
     // locales (variaba segun zona horaria del servidor) e IGNORABA
     // mora_start_date, mostrando mora retroactiva en prestamos migrados.
-    const moraDetails = calcMoraDetails(loan, loan.installments as any[], new Date());
+    const moraDetails = calcMoraDetails(loan, loan.installments as any[], tenantAsOf(db, req.tenant.id));
     let computedMora = 0;
 
     loan.installments = (loan.installments as any[]).map((inst: any) => {
@@ -411,6 +413,12 @@ router.post('/:id/approve', authenticate, requireTenant, requirePermission('loan
         .run('pending_manager_approval', req.body.approved_amount||null, now(), req.params.id, req.tenant.id);
       const pendingLoan = db.prepare('SELECT loan_number FROM loans WHERE id=?').get(req.params.id) as any;
       db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description) VALUES (?,?,?,?,?,?,?,?)').run(uuid(),req.tenant.id,req.user.id,req.user.full_name,'first_approval','loan',req.params.id,`Dio la primera aprobación al préstamo ${pendingLoan?.loan_number||req.params.id}; requiere aprobación gerencial por superar el umbral de RD$${threshold}`);
+      // Aviso a quienes pueden dar la 2.ª aprobacion (permiso efectivo plan AND rol).
+      // Episodio = estado del prestamo antes de entrar a pending_manager_approval.
+      notifyUsersWithPermission(db, req.tenant.id, 'loans.approve_high_value', 'manager_approval_pending',
+        'Aprobación gerencial pendiente',
+        `El préstamo ${pendingLoan?.loan_number||''} requiere tu aprobación gerencial (supera el umbral configurado).`,
+        { entityType: 'loan', entityId: req.params.id, dedupeKey: `manager_approval:${req.params.id}:${loanForApproval.updated_at || 'na'}`, excludeUserId: req.user.id });
       return res.json(db.prepare('SELECT * FROM loans WHERE id=?').get(req.params.id));
     }
     if (needsManagerApproval && !hasHighValuePerm && loanForApproval.status === 'pending_manager_approval') {

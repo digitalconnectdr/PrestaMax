@@ -199,78 +199,16 @@ app.use(sentryErrorHandler());
 app.use(errorHandler);
 
 
-// ── Cron diario WhatsApp transaccional (overdue 1/7/15 dias) ──
-// Corre cada hora; internamente solo genera drafts cuando es 8am hora local
-// del servidor. Evita doble-corrida usando una bandera en memoria.
-import { runOverdueCron } from './services/whatsappService';
+// ── Scheduler de jobs diarios (Notifications v2) ──
+// Sync de mora, WhatsApp de mora (borradores), alertas de promesas, recordatorios de
+// trial, resumen programado y backup. Idempotente y resiliente a reinicios: tick de
+// recuperacion al arrancar + cada 30 min; "una vez al dia" persistido en job_runs y
+// decidido con la zona horaria del tenant. Ver services/scheduler.ts.
 import { createBackup, BACKUP_CONFIG } from './services/backupService';
-import { syncLoanStatuses } from './services/loanStatusSync';
-import { runTrialReminderCron } from './services/trialReminderService';
-import { runScheduledReportsCron } from './services/reportSubscriptionService';
-let lastCronDate = '';
-let lastBackupDate = '';
-let lastStatusSyncDate = '';
-let lastTrialReminderDate = '';
-let lastReportDigestDate = '';
-
-// FIX P2 (Jun 2026): sincronizar estados (in_mora/days_overdue/mora_balance)
-// al arrancar, para que listas y dashboards reflejen la realidad tras un deploy
-// o reinicio sin esperar a que alguien abra cada prestamo.
-setTimeout(() => {
-  try {
-    const r = syncLoanStatuses(getDb());
-    console.log(`[loan-status-sync] arranque: ${r.updated}/${r.checked} prestamos actualizados`);
-  } catch (e) { console.error('[loan-status-sync] arranque fallo:', e); }
-}, 5000);
-
-setInterval(() => {
-  try {
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const hour = now.getHours();
-
-    // 1am: sincronizar status/days_overdue/mora_balance de prestamos vivos
-    if (hour === 1 && lastStatusSyncDate !== todayStr) {
-      lastStatusSyncDate = todayStr;
-      const r = syncLoanStatuses(getDb());
-      console.log(`[loan-status-sync] cron OK: ${r.updated}/${r.checked} prestamos actualizados`);
-    }
-
-    // 8am: WhatsApp mora cron
-    if (hour === 8 && lastCronDate !== todayStr) {
-      lastCronDate = todayStr;
-      const { getDb } = require('./db/database');
-      runOverdueCron(getDb());
-    }
-
-    // 3am: Backup automatico SQLite
-    if (hour === 3 && lastBackupDate !== todayStr) {
-      lastBackupDate = todayStr;
-      createBackup()
-        .then(info => console.log(`[backup] cron OK: ${info.filename}`))
-        .catch(e => console.error('[backup] cron fallo:', e?.message || e));
-    }
-
-    // 9am: recordatorio de trial por vencer (3, 1 y 0 dias restantes)
-    if (hour === 9 && lastTrialReminderDate !== todayStr) {
-      lastTrialReminderDate = todayStr;
-      runTrialReminderCron(getDb())
-        .then(r => console.log(`[trial-reminder] cron OK: ${r.sent}/${r.checked} enviados`))
-        .catch(e => console.error('[trial-reminder] cron fallo:', e?.message || e));
-    }
-
-    // 7am: resumen de dashboard programado (diario/semanal/mensual)
-    if (hour === 7 && lastReportDigestDate !== todayStr) {
-      lastReportDigestDate = todayStr;
-      runScheduledReportsCron(getDb())
-        .then(r => console.log(`[report-digest] cron OK: ${r.sent}/${r.checked} enviados`))
-        .catch(e => console.error('[report-digest] cron fallo:', e?.message || e));
-    }
-  } catch (e) { console.error('[cron tick]', e); }
-}, 60 * 60 * 1000); // cada hora
-console.log('[whatsapp] cron de mora programado (chequeo cada hora, dispara a las 8am)');
-console.log(`[backup] cron diario programado (dispara a las 3am) | dir=${BACKUP_CONFIG.dir} | keep=${BACKUP_CONFIG.keepLast} | s3=${BACKUP_CONFIG.s3Enabled}`);
-console.log('[trial-reminder] cron programado (dispara a las 9am, hitos 3/1/0 dias)');
+import { startScheduler } from './services/scheduler';
+startScheduler(getDb, () => createBackup().then(info => console.log(`[backup] cron OK: ${info.filename}`)));
+console.log('[scheduler] jobs diarios programados (recuperacion al arrancar + tick cada 30 min)');
+console.log(`[backup] cron diario programado (a partir de las 03:00 UTC) | dir=${BACKUP_CONFIG.dir} | keep=${BACKUP_CONFIG.keepLast} | s3=${BACKUP_CONFIG.s3Enabled}`);
 
 app.listen(PORT, () => {
   console.log(`PrestaMax API running on port ${PORT} [${IS_PROD ? 'PRODUCTION' : 'development'}]`);

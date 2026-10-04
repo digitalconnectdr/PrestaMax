@@ -1,18 +1,11 @@
 import { Router, Response } from 'express';
 import { getDb, uuid, now } from '../db/database';
 import { authenticate, requireTenant, requirePermission, AuthRequest, isPlatformStaff } from '../middleware/auth';
+import { notifyUser, deleteNotificationsForEntity } from '../lib/notify';
+import { validateTaskAssignee } from '../lib/taskAssignee';
+import { hasPermission } from '../lib/permissions';
 
 const router = Router();
-
-// ─── Helper: create notification for a user ──────────────────────────────────
-function createNotification(db: any, tenantId: string, userId: string, type: string, title: string, message: string, entityId?: string) {
-  try {
-    db.prepare(
-      `INSERT INTO notifications (id,tenant_id,user_id,type,title,message,entity_type,entity_id)
-       VALUES (?,?,?,?,?,?,?,?)`
-    ).run(uuid(), tenantId, userId, type, title, message, 'collection_task', entityId || null);
-  } catch (_) { /* non-critical */ }
-}
 
 // ─── GET /collection-tasks — list tasks ──────────────────────────────────────
 // Supervisors (collections.tasks.manage) see all tasks for the tenant.
@@ -27,7 +20,6 @@ router.get('/', authenticate, requireTenant, requirePermission('collections.task
     const planFeatures: string[] = (() => { try { return JSON.parse(planRow?.features || '[]'); } catch(_) { return []; } })();
     const roles: string[] = (() => { try { return JSON.parse(req.membership?.roles || '[]'); } catch(_) { return []; } })();
     const explicit: Record<string,boolean> = (() => { try { return JSON.parse(req.membership?.permissions || '{}'); } catch(_) { return {}; } })();
-    const { hasPermission } = require('../lib/permissions');
     const canManage = hasPermission(roles, explicit, 'collections.tasks.manage', planFeatures);
     const isPlatform = isPlatformStaff(req.user);
 
@@ -93,9 +85,9 @@ router.post('/', authenticate, requireTenant, requirePermission('collections.tas
     if (!d.assigned_to) return res.status(400).json({ error: 'Debe asignar la tarea a un cobrador.' });
     if (!d.due_date) return res.status(400).json({ error: 'La fecha límite es requerida.' });
 
-    // Verify assigned user belongs to this tenant
-    const membership = db.prepare('SELECT id FROM tenant_memberships WHERE user_id=? AND tenant_id=? AND is_active=1').get(d.assigned_to, req.tenant.id);
-    if (!membership) return res.status(400).json({ error: 'El cobrador seleccionado no pertenece a esta empresa.' });
+    // Validacion unica (POST y PUT): mismo tenant + membership activa + elegible por RBAC.
+    const assignee = validateTaskAssignee(db, req.tenant.id, d.assigned_to);
+    if (!assignee.ok) return res.status(400).json({ error: assignee.error, code: 'INVALID_ASSIGNEE' });
 
     const id = uuid();
     db.prepare(`
@@ -113,12 +105,17 @@ router.post('/', authenticate, requireTenant, requirePermission('collections.tas
     const assignedUser = db.prepare('SELECT full_name FROM users WHERE id=?').get(d.assigned_to) as any;
     const loan = d.loan_id ? db.prepare('SELECT loan_number FROM loans WHERE id=?').get(d.loan_id) as any : null;
     const loanSuffix = loan ? ` — Préstamo ${loan.loan_number}` : '';
-    createNotification(
+    notifyUser(
       db, req.tenant.id, d.assigned_to,
       'task_assigned',
       `Nueva tarea asignada: ${d.title}`,
       `${req.user.full_name} te asignó una tarea para el ${d.due_date.slice(0,10)}${loanSuffix}.`,
-      id
+      {
+        entityType: 'collection_task', entityId: id,
+        requiredPermission: 'collections.tasks',
+        dedupeKey: `task_assigned:${id}:${d.assigned_to}:created`,
+        excludeUserId: req.user.id,
+      }
     );
 
     const task = db.prepare(`
@@ -144,6 +141,12 @@ router.put('/:id', authenticate, requireTenant, requirePermission('collections.t
     if (['completed','cancelled'].includes(task.status)) return res.status(400).json({ error: 'No se puede editar una tarea completada o cancelada.' });
 
     const d = req.body;
+    // Solo si CAMBIA el responsable se valida (misma regla que POST) y se notifica.
+    const assigneeChanged = !!d.assigned_to && d.assigned_to !== task.assigned_to;
+    if (assigneeChanged) {
+      const assignee = validateTaskAssignee(db, req.tenant.id, d.assigned_to);
+      if (!assignee.ok) return res.status(400).json({ error: assignee.error, code: 'INVALID_ASSIGNEE' });
+    }
     db.prepare(`
       UPDATE collection_tasks SET
         title=COALESCE(?,title), description=?, task_type=COALESCE(?,task_type),
@@ -160,14 +163,21 @@ router.put('/:id', authenticate, requireTenant, requirePermission('collections.t
       now(), req.params.id, req.tenant.id
     );
 
-    // If reassigned to a different user, notify the new assignee
-    if (d.assigned_to && d.assigned_to !== task.assigned_to) {
-      createNotification(
+    // Reasignada a otro usuario (validado arriba): notifica al nuevo responsable.
+    // La clave incluye el estado de edicion previo, asi A→B→A vuelve a notificar a A
+    // y reintentar el mismo PUT (que ya no cambia nada) no duplica.
+    if (assigneeChanged) {
+      notifyUser(
         db, req.tenant.id, d.assigned_to,
         'task_assigned',
         `Tarea reasignada: ${d.title || task.title}`,
         `${req.user.full_name} te reasignó una tarea.`,
-        req.params.id
+        {
+          entityType: 'collection_task', entityId: req.params.id,
+          requiredPermission: 'collections.tasks',
+          dedupeKey: `task_assigned:${req.params.id}:${d.assigned_to}:${task.updated_at || 'na'}`,
+          excludeUserId: req.user.id,
+        }
       );
     }
 
@@ -201,7 +211,6 @@ router.patch('/:id/status', authenticate, requireTenant, requirePermission('coll
     const planFeatures: string[] = (() => { try { return JSON.parse(planRow?.features || '[]'); } catch(_) { return []; } })();
     const roles: string[] = (() => { try { return JSON.parse(req.membership?.roles || '[]'); } catch(_) { return []; } })();
     const explicit: Record<string,boolean> = (() => { try { return JSON.parse(req.membership?.permissions || '{}'); } catch(_) { return {}; } })();
-    const { hasPermission } = require('../lib/permissions');
     const canManage = hasPermission(roles, explicit, 'collections.tasks.manage', planFeatures);
     const isPlatform = isPlatformStaff(req.user);
 
@@ -223,14 +232,20 @@ router.patch('/:id/status', authenticate, requireTenant, requirePermission('coll
       now(), req.params.id, req.tenant.id
     );
 
-    // If completed, notify the task creator (supervisor)
-    if (isCompleting && task.created_by !== req.user.id) {
-      createNotification(
+    // Notifica al creador SOLO en la transicion (estado previo != completed).
+    // Repetir el mismo PATCH no vuelve a notificar.
+    if (isCompleting && task.status !== 'completed') {
+      notifyUser(
         db, req.tenant.id, task.created_by,
         'task_completed',
         `Tarea completada: ${task.title}`,
         `${req.user.full_name} marcó la tarea como completada.${result_notes ? ` Resultado: ${result_notes}` : ''}`,
-        req.params.id
+        {
+          entityType: 'collection_task', entityId: req.params.id,
+          requiredPermission: 'collections.tasks.manage',
+          dedupeKey: `task_completed:${req.params.id}:${task.updated_at || 'na'}`,
+          excludeUserId: req.user.id,
+        }
       );
     }
 
@@ -255,6 +270,7 @@ router.delete('/:id', authenticate, requireTenant, requirePermission('collection
     const task = db.prepare('SELECT * FROM collection_tasks WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id) as any;
     if (!task) return res.status(404).json({ error: 'Tarea no encontrada.' });
     db.prepare('DELETE FROM collection_tasks WHERE id=? AND tenant_id=?').run(req.params.id, req.tenant.id);
+    deleteNotificationsForEntity(db, req.tenant.id, 'collection_task', req.params.id);
     res.json({ success: true });
   } catch(e:any) { res.status(500).json({ error: e.message || 'Failed' }); }
 });

@@ -438,7 +438,17 @@ describe('reportes programados, exportación contable y plantillas (Básico+)', 
     const starter = mk('starter'); const basic = mk('basico');
     // import dinámico: el servicio carga db/database y debe hacerlo DESPUÉS de bootTestApp()
     const { runScheduledReportsCron } = await import('../services/reportSubscriptionService');
-    await runScheduledReportsCron(app.db);
+    // Notifications v2: last_sent_at solo se marca si el email salio de verdad -> se
+    // simula un Resend que responde OK (sin red real) y un reloj fijo (11:00 hora local).
+    const prevKey = process.env.RESEND_API_KEY; const prevFetch = globalThis.fetch;
+    process.env.RESEND_API_KEY = 're_test';
+    (globalThis as any).fetch = async () => ({ ok: true, status: 200, text: async () => '' });
+    try {
+      await runScheduledReportsCron(app.db, new Date('2030-03-05T15:00:00Z'));
+    } finally {
+      globalThis.fetch = prevFetch;
+      if (prevKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = prevKey;
+    }
     const last = (id: string) => (app.db.prepare('SELECT last_sent_at FROM report_subscriptions WHERE tenant_id=?').get(id) as any).last_sent_at;
     expect(last(starter)).toBeNull();
     expect(last(basic)).not.toBeNull();
