@@ -595,7 +595,7 @@ describe('cargo fijo de mora: semántica del motor real y UX consistente', () =>
     expect((settings.match(/set\.mora_fixed_na/g) || []).length).toBeGreaterThanOrEqual(2);       // base + tasa
     expect(section).toContain('disabled={fixedOn}');
     expect((section.match(/set\.mora_fixed_na/g) || []).length).toBeGreaterThanOrEqual(2);
-    expect(modal).toContain('disabled={fixedOn}');
+    expect(modal).toContain('disabled={fixedOn || moraRo}');          // además del bloqueo por cargo fijo, estados cerrados dejan la mora de solo lectura
     expect((modal.match(/set\.mora_fixed_na/g) || []).length).toBeGreaterThanOrEqual(2);
     // no se borran los valores: ningún handler vacía tasa/base al habilitar el cargo fijo
     expect(modal).not.toContain("set('moraRateDaily', '')");

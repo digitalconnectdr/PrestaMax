@@ -158,7 +158,7 @@ const LoanDetailPage: React.FC = () => {
   }
   const { state: authState } = useContext(AuthContext)
   const { state: tenantState } = useContext(TenantContext)
-  const { can } = usePermission()
+  const { can, isOwner } = usePermission()
   const [loan, setLoan] = useState<LoanDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'installments' | 'info' | 'payments'>('installments')
@@ -187,11 +187,9 @@ const LoanDetailPage: React.FC = () => {
   // Permission: can edit loan if platform owner/admin or tenant owner
   const platformRole: string = (authState.user as any)?.platform_role || (authState.user as any)?.platformRole || ''
   const isPlatformAdmin = ['platform_owner', 'platform_admin'].includes(platformRole)
-  const currentMembershipRoles: string[] = (() => {
-    try { return JSON.parse((tenantState.currentTenant as any)?.roles || '[]') } catch(_) { return [] }
-  })()
-  const isTenantOwner = currentMembershipRoles.includes('tenant_owner')
-  const canEditLoan = isPlatformAdmin || isTenantOwner
+  // Los roles del tenant llegan como ARRAY (no como string JSON): se toman de usePermission, igual que el resto de la app.
+  // Espejo de la autorización real de PUT /loans/:id: propietario del tenant o plataforma (platform_owner / platform_admin).
+  const canEditLoan = isPlatformAdmin || isOwner
   const [paymentData, setPaymentData] = useState({
     amount: '', paymentMethod: 'cash', bankAccountId: '', reference: '',
     notes: '', paymentDate: new Date().toISOString().split('T')[0],
@@ -1045,7 +1043,8 @@ const LoanDetailPage: React.FC = () => {
           <Card>
             <h3 className="section-title mb-3">{t('ld.actions')}</h3>
             <div className="space-y-2">
-              {can('loans.edit') && (
+              {/* Transitorio: el botón solo aparece para quien realmente puede guardar (propietario o plataforma; igual que el backend) */}
+              {can('loans.edit') && canEditLoan && (
                 <Button
                   size="md"
                   variant="outline"

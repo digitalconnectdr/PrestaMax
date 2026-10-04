@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { AMORTIZATION_TYPES } from '@/lib/amortization'
 import { useT } from '@/lib/i18n'
+import { LoanEditForm, LoanEditField, buildLoanEditPayload, loanEditLocks, installmentsHavePayments } from '@/lib/loanEdit'
 
 interface EditLoanModalProps {
   loan: any
@@ -34,14 +35,16 @@ type Tab = 'terminos' | 'fechas' | 'mora' | 'otros'
 
 const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved }) => {
   const t = useT()
-  const isDisbursed = ['active', 'in_mora', 'disbursed', 'restructured', 'liquidated'].includes(loan.status)
+  // Bloqueos por estado / historial (espejo de las reglas del backend): condiciones financieras solo pre-desembolso y sin pagos.
+  const { locked, reason: lockReason } = loanEditLocks(loan.status, installmentsHavePayments(loan.installments))
+  const ro = (f: LoanEditField) => locked.has(f)
   const [activeTab, setActiveTab] = useState<Tab>('terminos')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
   const [collectors, setCollectors] = useState<any[]>([])
 
   // Form state — pre-populate from loan
-  const [form, setForm] = useState({
+  const [initialForm] = useState<LoanEditForm>(() => ({
     // Términos
     requestedAmount:   String(loan.requestedAmount   ?? loan.requested_amount   ?? ''),
     approvedAmount:    String(loan.approvedAmount    ?? loan.approved_amount    ?? ''),
@@ -69,9 +72,10 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
     purpose:           loan.purpose ?? '',
     notes:             loan.notes   ?? '',
     prorrogaFee:       String(loan.prorrogaFee ?? loan.prorroga_fee ?? 0),
-  })
+  }))
+  const [form, setForm] = useState<LoanEditForm>(initialForm)
 
-  const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }))
+  const set = (field: LoanEditField, value: string) => setForm(f => ({ ...f, [field]: value }))
 
   useEffect(() => {
     api.get('/settings/users').then(r => {
@@ -80,56 +84,14 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
     }).catch(() => {})
   }, [])
 
-  // Detecta si el usuario cambio algun campo del schedule
-  const scheduleFieldsChanged = (): boolean => {
-    return (
-      parseFloat(form.rate) !== (loan.rate ?? 0) ||
-      form.rateType !== (loan.rateType ?? loan.rate_type) ||
-      parseInt(form.term) !== (loan.term ?? 0) ||
-      form.termUnit !== (loan.termUnit ?? loan.term_unit) ||
-      form.paymentFrequency !== (loan.paymentFrequency ?? loan.payment_frequency) ||
-      form.amortizationType !== (loan.amortizationType ?? loan.amortization_type)
-    )
-  }
-
   const handleSave = async () => {
-    // Confirmacion extra si vamos a reestructurar un prestamo activo
-    if (isDisbursed && scheduleFieldsChanged()) {
-      const ok = window.confirm(t('elm.restructure_confirm'))
-      if (!ok) return
-    }
+    // Solo se envía lo que realmente cambió (nunca el formulario completo); los campos bloqueados no se envían.
+    const { payload, changed, invalid } = buildLoanEditPayload(initialForm, form, locked)
+    if (invalid.length) { toast.error(t('elm.invalid_values')); return }
+    if (!changed.length) { toast(t('elm.no_changes')); return }
     setIsSubmitting(true)
     try {
-      const payload: Record<string, any> = {
-        // Términos
-        requestedAmount:  parseFloat(form.requestedAmount)  || undefined,
-        approvedAmount:   parseFloat(form.approvedAmount)   || undefined,
-        rate:             parseFloat(form.rate)             || undefined,
-        rateType:         form.rateType,
-        term:             parseInt(form.term)               || undefined,
-        termUnit:         form.termUnit,
-        paymentFrequency: form.paymentFrequency,
-        amortizationType: form.amortizationType,
-        // Fechas
-        applicationDate:  form.applicationDate  || null,
-        approvalDate:     form.approvalDate     || null,
-        disbursementDate: form.disbursementDate || null,
-        firstPaymentDate: form.firstPaymentDate || null,
-        maturityDate:     form.maturityDate     || null,
-        // Mora
-        moraRateDaily:       parseFloat(form.moraRateDaily) / 100,
-        moraGraceDays:       parseInt(form.moraGraceDays),
-        moraBase:            form.moraBase,
-        moraFixedEnabled:    parseInt(form.moraFixedEnabled),
-        moraFixedAmount:     parseFloat(form.moraFixedAmount) || 0,
-        moraStartDate:       form.moraStartDate || null,
-        // Otros
-        collectorId:      form.collectorId || null,
-        purpose:          form.purpose,
-        notes:            form.notes,
-        prorrogaFee:      parseFloat(form.prorrogaFee) || 0,
-      }
-      const res = await api.put(`/loans/${loan.id}`, payload)
+      await api.put(`/loans/${loan.id}`, payload)
       toast.success(t('elm.updated_ok'))
       onSaved()
       onClose()
@@ -184,23 +146,14 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
           </div>
         )}
 
-        {/* Warning for active loans — reestructuración */}
-        {isDisbursed && !permissionDenied && (
+        {/* Condiciones bloqueadas: desembolsado, con pagos o cerrado */}
+        {lockReason !== 'none' && !permissionDenied && (
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4 text-xs text-amber-800">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
             <div>
-              <p className="font-semibold">{t('elm.warn_title')}</p>
+              <p className="font-semibold">{t('elm.locked_title')}</p>
               <p className="mt-0.5 text-amber-700">
-                {t('elm.warn_intro')} <strong>{t('elm.warn_fields')}</strong>{t('elm.warn_the_system')}
-              </p>
-              <ul className="mt-1 ml-4 list-disc text-amber-700 space-y-0.5">
-                <li>{t('elm.warn_li1_a')} <strong>{t('elm.warn_li1_b')}</strong> {t('elm.warn_li1_c')}</li>
-                <li>{t('elm.warn_li2_a')} <strong>{t('elm.warn_li2_b')}</strong>.</li>
-                <li>{t('elm.warn_li3')}</li>
-                <li>{t('elm.warn_li4')}</li>
-              </ul>
-              <p className="mt-1 text-amber-700">
-                {t('elm.warn_footer_a')} <strong>{t('elm.warn_footer_b')}</strong>.
+                {lockReason === 'closed' ? t('elm.locked_closed') : lockReason === 'has_payments' ? t('elm.locked_payments') : t('elm.locked_disbursed')}
               </p>
             </div>
           </div>
@@ -233,21 +186,21 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>{t('elm.requested_amount')}</label>
-                <input type="number" step="0.01" value={form.requestedAmount} onChange={e => set('requestedAmount', e.target.value)} className={inputCls} />
+                <input type="number" step="0.01" value={form.requestedAmount} onChange={e => set('requestedAmount', e.target.value)} className={ro('requestedAmount') ? disabledInputCls : inputCls} disabled={ro('requestedAmount')} />
               </div>
               <div>
                 <label className={labelCls}>{t('elm.approved_amount')}</label>
-                <input type="number" step="0.01" value={form.approvedAmount} onChange={e => set('approvedAmount', e.target.value)} className={inputCls} />
+                <input type="number" step="0.01" value={form.approvedAmount} onChange={e => set('approvedAmount', e.target.value)} className={ro('approvedAmount') ? disabledInputCls : inputCls} disabled={ro('approvedAmount')} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>{t('elm.rate')}</label>
-                <input type="number" step="0.01" value={form.rate} onChange={e => set('rate', e.target.value)} className={inputCls} placeholder={t('elm.rate_ph')} />
+                <input type="number" step="0.01" value={form.rate} onChange={e => set('rate', e.target.value)} className={ro('rate') ? disabledInputCls : inputCls} disabled={ro('rate')} placeholder={t('elm.rate_ph')} />
               </div>
               <div>
                 <label className={labelCls}>{t('elm.rate_type')}</label>
-                <select value={form.rateType} onChange={e => set('rateType', e.target.value)} className={inputCls}>
+                <select value={form.rateType} onChange={e => set('rateType', e.target.value)} className={ro('rateType') ? disabledInputCls : inputCls} disabled={ro('rateType')}>
                   {RATE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
                 </select>
               </div>
@@ -256,13 +209,13 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
               <div>
                 <label className={labelCls}>{t('elm.term')}</label>
                 <div className="flex gap-2">
-                  <input type="number" value={form.term} onChange={e => set('term', e.target.value)} className={`${inputCls} flex-1`} placeholder="12" />
+                  <input type="number" value={form.term} onChange={e => set('term', e.target.value)} className={`${inputCls.replace('w-full ', '')} flex-1 min-w-0 ${ro('term') ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`} disabled={ro('term')} placeholder="12" />
                   <select value={form.termUnit} onChange={e => {
                       const u = e.target.value
                       const freqMap: Record<string, string> = { months: 'monthly', biweekly: 'biweekly', weeks: 'weekly', days: 'daily' }
                       set('termUnit', u)
                       if (freqMap[u]) set('paymentFrequency', freqMap[u])
-                    }} className={`${inputCls} w-auto`}>
+                    }} className={`${inputCls.replace('w-full ', '')} w-auto ${ro('termUnit') ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`} disabled={ro('termUnit')}>
                     <option value="months">{t('elm.u_months')}</option>
                     <option value="biweekly">{t('elm.u_biweekly')}</option>
                     <option value="weeks">{t('elm.u_weeks')}</option>
@@ -272,18 +225,18 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
               </div>
               <div>
                 <label className={labelCls}>{t('elm.pay_freq')}</label>
-                <select value={form.paymentFrequency} onChange={e => set('paymentFrequency', e.target.value)} className={inputCls}>
+                <select value={form.paymentFrequency} onChange={e => set('paymentFrequency', e.target.value)} className={ro('paymentFrequency') ? disabledInputCls : inputCls} disabled={ro('paymentFrequency')}>
                   {FREQ_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
                 </select>
               </div>
             </div>
             <div>
               <label className={labelCls}>{t('elm.amort_type')}</label>
-              <select value={form.amortizationType} onChange={e => set('amortizationType', e.target.value)} className={inputCls}>
+              <select value={form.amortizationType} onChange={e => set('amortizationType', e.target.value)} className={ro('amortizationType') ? disabledInputCls : inputCls} disabled={ro('amortizationType')}>
                 {AMORTIZATION_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-            {!isDisbursed && (
+            {lockReason === 'none' && (
               <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
                 <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-blue-600" />
                 <p>{t('elm.schedule_regen')}</p>
@@ -299,23 +252,23 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>{t('elm.application_date')}</label>
-                <input type="date" value={form.applicationDate} onChange={e => set('applicationDate', e.target.value)} className={inputCls} />
+                <input type="date" value={form.applicationDate} onChange={e => set('applicationDate', e.target.value)} className={ro('applicationDate') ? disabledInputCls : inputCls} disabled={ro('applicationDate')} />
               </div>
               <div>
                 <label className={labelCls}>{t('elm.approval_date')}</label>
-                <input type="date" value={form.approvalDate} onChange={e => set('approvalDate', e.target.value)} className={inputCls} />
+                <input type="date" value={form.approvalDate} onChange={e => set('approvalDate', e.target.value)} className={ro('approvalDate') ? disabledInputCls : inputCls} disabled={ro('approvalDate')} />
               </div>
               <div>
                 <label className={labelCls}>{t('elm.disbursement_date')}</label>
-                <input type="date" value={form.disbursementDate} onChange={e => set('disbursementDate', e.target.value)} className={inputCls} />
+                <input type="date" value={form.disbursementDate} onChange={e => set('disbursementDate', e.target.value)} className={ro('disbursementDate') ? disabledInputCls : inputCls} disabled={ro('disbursementDate')} />
               </div>
               <div>
                 <label className={labelCls}>{t('elm.first_payment_date')}</label>
-                <input type="date" value={form.firstPaymentDate} onChange={e => set('firstPaymentDate', e.target.value)} className={inputCls} />
+                <input type="date" value={form.firstPaymentDate} onChange={e => set('firstPaymentDate', e.target.value)} className={ro('firstPaymentDate') ? disabledInputCls : inputCls} disabled={ro('firstPaymentDate')} />
               </div>
               <div className="col-span-2">
                 <label className={labelCls}>{t('elm.maturity_date')}</label>
-                <input type="date" value={form.maturityDate} onChange={e => set('maturityDate', e.target.value)} className={inputCls} />
+                <input type="date" value={form.maturityDate} onChange={e => set('maturityDate', e.target.value)} className={ro('maturityDate') ? disabledInputCls : inputCls} disabled={ro('maturityDate')} />
                 <p className="text-xs text-slate-400 mt-1">{t('elm.maturity_hint')}</p>
               </div>
             </div>
@@ -327,6 +280,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
           // Con cargo fijo habilitado, la tasa % y la base NO participan (el cargo fijo las reemplaza). Se conservan
           // sus valores (deshabilitados) para restaurarlos si el cargo fijo vuelve a deshabilitarse.
           const fixedOn = parseInt(form.moraFixedEnabled) === 1
+          const moraRo = ro('moraRateDaily')   // estados cerrados: toda la mora queda de solo lectura
           return (
           <div className="space-y-4">
             <p className="text-xs text-slate-500">{t('elm.mora_intro')}</p>
@@ -337,8 +291,8 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   type="number" step="0.0001" min="0" max="10"
                   value={form.moraRateDaily}
                   onChange={e => set('moraRateDaily', e.target.value)}
-                  className={fixedOn ? disabledInputCls : inputCls}
-                  disabled={fixedOn}
+                  className={fixedOn || moraRo ? disabledInputCls : inputCls}
+                  disabled={fixedOn || moraRo}
                   placeholder="0.1000"
                 />
                 <p className="text-xs text-slate-400 mt-1">
@@ -351,7 +305,8 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   type="number" step="1" min="0"
                   value={form.moraGraceDays}
                   onChange={e => set('moraGraceDays', e.target.value)}
-                  className={inputCls}
+                  className={moraRo ? disabledInputCls : inputCls}
+                  disabled={moraRo}
                   placeholder="3"
                 />
                 <p className="text-xs text-slate-400 mt-1">
@@ -362,7 +317,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>{t('elm.mora_base')}</label>
-                <select value={form.moraBase} onChange={e => set('moraBase', e.target.value)} className={fixedOn ? disabledInputCls : inputCls} disabled={fixedOn}>
+                <select value={form.moraBase} onChange={e => set('moraBase', e.target.value)} className={fixedOn || moraRo ? disabledInputCls : inputCls} disabled={fixedOn || moraRo}>
                   <option value="cuota_vencida">{t('elm.mora_cuota')}</option>
                   <option value="capital_pendiente">{t('elm.mora_cap_pend')}</option>
                   <option value="capital_vencido">{t('elm.mora_cap_venc')}</option>
@@ -373,7 +328,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
               </div>
               <div>
                 <label className={labelCls}>{t('elm.mora_fixed')}</label>
-                <select value={form.moraFixedEnabled} onChange={e => set('moraFixedEnabled', e.target.value)} className={inputCls}>
+                <select value={form.moraFixedEnabled} onChange={e => set('moraFixedEnabled', e.target.value)} className={moraRo ? disabledInputCls : inputCls} disabled={moraRo}>
                   <option value="0">{t('elm.disabled')}</option>
                   <option value="1">{t('elm.enabled')}</option>
                 </select>
@@ -389,7 +344,8 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   type="number" step="0.01" min="0"
                   value={form.moraFixedAmount}
                   onChange={e => set('moraFixedAmount', e.target.value)}
-                  className={inputCls}
+                  className={moraRo ? disabledInputCls : inputCls}
+                  disabled={moraRo}
                   placeholder="50.00"
                 />
                 <p className="text-xs text-slate-400 mt-1">
@@ -409,9 +365,10 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   type="date"
                   value={form.moraStartDate}
                   onChange={e => set('moraStartDate', e.target.value)}
-                  className={inputCls + ' flex-1'}
+                  className={(moraRo ? disabledInputCls : inputCls) + ' flex-1'}
+                  disabled={moraRo}
                 />
-                {form.moraStartDate ? (
+                {form.moraStartDate && !moraRo ? (
                   <button
                     type="button"
                     onClick={() => set('moraStartDate', '')}
@@ -419,7 +376,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   >
                     {t('elm.clear')}
                   </button>
-                ) : (
+                ) : moraRo ? null : (
                   <button
                     type="button"
                     onClick={() => set('moraStartDate', new Date().toISOString().split('T')[0])}
@@ -468,7 +425,7 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
           <div className="space-y-4">
             <div>
               <label className={labelCls}>{t('elm.collector')}</label>
-              <select value={form.collectorId} onChange={e => set('collectorId', e.target.value)} className={inputCls}>
+              <select value={form.collectorId} onChange={e => set('collectorId', e.target.value)} className={ro('collectorId') ? disabledInputCls : inputCls} disabled={ro('collectorId')}>
                 <option value="">{t('elm.no_collector')}</option>
                 {collectors.map((c: any) => (
                   <option key={c.userId ?? c.user_id} value={c.userId ?? c.user_id}>
@@ -507,7 +464,8 @@ const EditLoanModal: React.FC<EditLoanModalProps> = ({ loan, onClose, onSaved })
                   min="0"
                   value={form.prorrogaFee}
                   onChange={e => set('prorrogaFee', e.target.value)}
-                  className={`${inputCls} pl-8`}
+                  className={`${ro('prorrogaFee') ? disabledInputCls : inputCls} pl-8`}
+                  disabled={ro('prorrogaFee')}
                   placeholder="0.00"
                 />
               </div>
