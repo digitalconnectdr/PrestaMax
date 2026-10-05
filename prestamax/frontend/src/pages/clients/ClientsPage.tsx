@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePermission } from '@/hooks/usePermission'
 import Card from '@/components/ui/Card'
@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { PageLoadingState } from '@/components/ui/Loading'
 import EmptyState from '@/components/ui/EmptyState'
+import Pagination from '@/components/ui/Pagination'
 import ScoreBadge from '@/components/shared/ScoreBadge'
 import { Users, Search, Plus, Eye, Edit, Trash2, Download } from 'lucide-react'
 import { Client } from '@/types'
@@ -15,12 +16,24 @@ import { downloadServerExport } from '@/lib/exportUtils'
 import toast from 'react-hot-toast'
 import { useT } from '@/lib/i18n'
 
+// Paginación en el servidor: la pantalla nunca carga todos los clientes, solo la página actual (tabla y tarjetas comparten estos datos).
+const PAGE_SIZE = 25
+const SEARCH_DEBOUNCE_MS = 350
+
 const ClientsPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchInput, setSearchInput] = useState('')   // lo que se escribe
+  const [searchTerm, setSearchTerm] = useState('')     // lo que se consulta (con debounce)
   const [scoreFilter, setScoreFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [isLoading, setIsLoading] = useState(true)     // solo la primera carga bloquea la pantalla
+  const [isFetching, setIsFetching] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const requestId = useRef(0)
   const [exporting, setExporting] = useState<'xlsx' | 'pdf' | null>(null)
   const navigate = useNavigate()
   const { can } = usePermission()
@@ -39,43 +52,50 @@ const ClientsPage: React.FC = () => {
     }
   }
 
+  // Búsqueda con debounce: al cambiar el término se vuelve a la página 1 (un solo cambio de estado → un solo fetch)
   useEffect(() => {
-    const fetchClients = async () => {
-      try {
-        const response = await api.get('/clients?limit=200')
-        setClients(response.data.data || [])
-      } catch (error) {
-        if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error(t('cli.load_error'))
-      } finally {
-        setIsLoading(false)
-      }
-    }
+    if (searchInput === searchTerm) return
+    const h = setTimeout(() => { setSearchTerm(searchInput.trim()); setPage(1) }, SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(h)
+  }, [searchInput, searchTerm])
 
-    fetchClients()
-  }, [])
+  // Un único efecto consulta el servidor (página + búsqueda + filtros). Una respuesta vieja nunca pisa a una más reciente.
+  useEffect(() => {
+    const id = ++requestId.current
+    setIsFetching(true)
+    setLoadError(false)
+    const params: Record<string, string | number> = { page, pageSize: PAGE_SIZE }
+    if (searchTerm) params.search = searchTerm
+    if (statusFilter) params.is_active = statusFilter === 'active' ? 'true' : 'false'
+    if (scoreFilter) params.score_band = scoreFilter
+    api.get('/clients', { params })
+      .then((res) => {
+        if (id !== requestId.current) return
+        const d = res.data || {}
+        setClients(d.items || d.data || [])
+        setTotal(d.total || 0)
+        setTotalPages(d.totalPages || 1)
+        // el servidor acota páginas fuera de rango (p. ej. tras borrar clientes): se vuelve a la última válida
+        if (d.page && d.page !== page) setPage(d.page)
+      })
+      .catch((error) => {
+        if (id !== requestId.current) return
+        setLoadError(true)
+        if (!isAccessDenied(error) && !isSubscriptionExpired(error)) toast.error(t('cli.load_error'))
+      })
+      .finally(() => {
+        if (id !== requestId.current) return
+        setIsFetching(false)
+        setIsLoading(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm, statusFilter, scoreFilter, reloadKey])
 
   if (isLoading) {
     return <PageLoadingState />
   }
 
-  const filteredClients = clients.filter((c) => {
-    const name = c.firstName && c.lastName ? `${c.firstName} ${c.lastName}` : (c as any).fullName || ''
-    const matchSearch =
-      name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ((c as any).idNumber || c.documentNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ((c as any).phonePersonal || c.phone || '').includes(searchTerm)
-    const matchScore = !scoreFilter || (() => {
-      const sc = Number((c as any).score ?? c.score ?? 0)
-      if (scoreFilter === 'excelente') return sc >= 85
-      if (scoreFilter === 'muy_bueno') return sc >= 70 && sc < 85
-      if (scoreFilter === 'bueno')     return sc >= 50 && sc < 70
-      if (scoreFilter === 'regular')   return sc >= 30 && sc < 50
-      if (scoreFilter === 'deficiente') return sc < 30
-      return true
-    })()
-    const matchStatus = !statusFilter || (statusFilter === 'active' ? (c as any).isActive !== 0 : (c as any).isActive === 0)
-    return matchSearch && matchScore && matchStatus
-  })
+  const filteredClients = clients   // el filtrado (búsqueda, score, estado) ya lo hizo el servidor
 
   return (
     <div className="space-y-6">
@@ -109,13 +129,13 @@ const ClientsPage: React.FC = () => {
           <Input
             type="text"
             placeholder={t('cli.search_ph')}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="md:col-span-1"
           />
           <select
             value={scoreFilter}
-            onChange={(e) => setScoreFilter(e.target.value)}
+            onChange={(e) => { setScoreFilter(e.target.value); setPage(1) }}
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">{t('cli.all_scores')}</option>
@@ -127,7 +147,7 @@ const ClientsPage: React.FC = () => {
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
             className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">{t('cli.all_status')}</option>
@@ -138,8 +158,17 @@ const ClientsPage: React.FC = () => {
       </Card>
 
       {/* Clients Table */}
-      {filteredClients.length > 0 ? (
+      {loadError && filteredClients.length === 0 ? (
         <Card>
+          <div className="text-center py-8" role="alert" data-testid="clients-error">
+            <p className="text-slate-700 font-medium">{t('cli.load_error')}</p>
+            <Button className="mt-3" variant="outline" onClick={() => setReloadKey(k => k + 1)}>{t('cli.retry')}</Button>
+          </div>
+        </Card>
+      ) : filteredClients.length === 0 && isFetching ? (
+        <Card><p className="text-center text-slate-500 py-8" aria-live="polite">{t('common.loading')}</p></Card>
+      ) : filteredClients.length > 0 ? (
+        <Card className={isFetching ? 'opacity-60 transition-opacity' : ''} aria-busy={isFetching}>
           {/* Móvil: tarjetas (la tabla de 7 columnas partía nombres y cédulas en varias líneas) */}
           <ul className="md:hidden -mx-2 divide-y divide-slate-100" data-testid="clients-mobile-list">
             {filteredClients.map((client) => {
@@ -202,7 +231,7 @@ const ClientsPage: React.FC = () => {
                   const isActive = c.isActive !== 0
                   return (
                   <tr key={client.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-3 px-4 text-slate-500">#{idx + 1}</td>
+                    <td className="py-3 px-4 text-slate-500">#{(page - 1) * PAGE_SIZE + idx + 1}</td>
                     <td className="py-3 px-4 font-medium text-slate-900">{name}</td>
                     <td className="py-3 px-4">{idNum}</td>
                     <td className="py-3 px-4">{phone}</td>
@@ -240,6 +269,7 @@ const ClientsPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} disabled={isFetching} />
         </Card>
       ) : (
         <EmptyState

@@ -38,21 +38,60 @@ router.get('/export', authenticate, requireTenant, requirePermission('clients.vi
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to export clients' }); }
 });
 
+// Listado paginado en el servidor (SELECT con LIMIT/OFFSET + COUNT, siempre acotado por tenant_id).
+//  - Paginación: `page` (>=1) y `pageSize` (default 25, máx. 100). `limit` se mantiene como alias HEREDADO para los selectores
+//    que piden listas largas (WhatsApp, tareas, nuevo préstamo); admite hasta 500 para no recortarles lo que ya recibían.
+//  - Filtros: `search` (nombre, documento, teléfono), `is_active` (true/false) y `score_band`.
+//  - Respuesta: items/total/page/pageSize/totalPages (+ `data` y `limit`, que usan otras pantallas).
+const CLIENTS_PAGE_SIZE_DEFAULT = 25;
+const CLIENTS_PAGE_SIZE_MAX = 100;
+const CLIENTS_LEGACY_LIMIT_MAX = 500;
+// Rangos de score de la pantalla de Clientes (mismos umbrales que el filtro del frontend)
+const SCORE_BANDS: Record<string, [number | null, number | null]> = {
+  excelente: [85, null], muy_bueno: [70, 85], bueno: [50, 70], regular: [30, 50], deficiente: [null, 30],
+};
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, ch => '\\' + ch);
+/** El LIKE de SQLite solo ignora mayúsculas en ASCII: se prueban también las variantes en minúscula y mayúscula (acentos). */
+const likeVariants = (term: string) => [...new Set([term, term.toLowerCase(), term.toUpperCase()])].map(v => `%${escapeLike(v)}%`);
+
 router.get('/', authenticate, requireTenant, requirePermission('clients.view'), (req: AuthRequest, res: Response) => {
   try {
-    const { search, is_active, page = '1', limit = '20' } = req.query as any;
-    const skip = (parseInt(page)-1) * parseInt(limit);
+    const { search, is_active, score_band } = req.query as any;
+    const toInt = (v: any) => { const n = parseInt(String(v), 10); return Number.isFinite(n) ? n : NaN; };
+
+    // tamaño de página: valor no numérico o < 1 → por defecto; por encima del máximo → se limita al máximo
+    const sizeFrom = (v: any, max: number) => { const n = toInt(v); return n >= 1 ? Math.min(max, n) : CLIENTS_PAGE_SIZE_DEFAULT; };
+    const pageSize = req.query.pageSize !== undefined ? sizeFrom(req.query.pageSize, CLIENTS_PAGE_SIZE_MAX)
+      : req.query.limit !== undefined ? sizeFrom(req.query.limit, CLIENTS_LEGACY_LIMIT_MAX)
+      : CLIENTS_PAGE_SIZE_DEFAULT;
+
     const db = getDb();
     let where = 'WHERE c.tenant_id = ?';
     const params: any[] = [req.tenant.id];
     if (is_active !== undefined) { where += ' AND c.is_active = ?'; params.push(is_active === 'true' ? 1 : 0); }
-    if (search) { where += ' AND (c.full_name LIKE ? OR c.id_number LIKE ? OR c.phone_personal LIKE ?)'; const s = `%${search}%`; params.push(s,s,s); }
-    const total = (db.prepare(`SELECT COUNT(*) as c FROM clients c ${where}`).get(...params) as any).c;
-    const data = db.prepare(`
+    const term = typeof search === 'string' ? search.trim() : '';
+    if (term) {
+      const vs = likeVariants(term);
+      const cols = ['c.full_name', 'c.id_number', 'c.phone_personal'];
+      where += ' AND (' + cols.flatMap(col => vs.map(() => `${col} LIKE ? ESCAPE '\\'`)).join(' OR ') + ')';
+      for (const _ of cols) params.push(...vs);
+    }
+    const band = typeof score_band === 'string' ? SCORE_BANDS[score_band] : undefined;
+    if (band) {
+      if (band[0] !== null) { where += ' AND COALESCE(c.score, 0) >= ?'; params.push(band[0]); }
+      if (band[1] !== null) { where += ' AND COALESCE(c.score, 0) < ?';  params.push(band[1]); }
+    }
+
+    const total = (db.prepare(`SELECT COUNT(*) as c FROM clients c ${where}`).get(...params) as any).c as number;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    // página inválida (no numérica, < 1 o más allá de la última) → se acota a una página válida; la respuesta dice cuál
+    const requested = toInt(req.query.page);
+    const page = Math.min(totalPages, Math.max(1, Number.isFinite(requested) ? requested : 1));
+    const items = db.prepare(`
       SELECT c.*, (SELECT COUNT(*) FROM loans WHERE client_id=c.id AND tenant_id=c.tenant_id) as loan_count
-      FROM clients c ${where} ORDER BY c.created_at DESC LIMIT ? OFFSET ?
-    `).all(...params, parseInt(limit), skip);
-    res.json({ data, total, page: parseInt(page), limit: parseInt(limit) });
+      FROM clients c ${where} ORDER BY c.created_at DESC, c.id ASC LIMIT ? OFFSET ?
+    `).all(...params, pageSize, (page - 1) * pageSize);
+    res.json({ items, data: items, total, page, pageSize, limit: pageSize, totalPages });
   } catch(e) { console.error(e); res.status(500).json({ error: 'Failed to get clients' }); }
 });
 
