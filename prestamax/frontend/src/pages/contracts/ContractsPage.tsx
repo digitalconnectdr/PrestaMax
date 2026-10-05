@@ -13,6 +13,7 @@ import api, { isAccessDenied, isSubscriptionExpired } from '@/lib/api'
 import toast from 'react-hot-toast'
 import { useT } from '@/lib/i18n'
 import { escapeHtml } from '@/lib/htmlSafe'
+import { sanitizeContractHtml } from '@/lib/sanitizeContract'
 
 interface Contract {
   id: string
@@ -116,9 +117,11 @@ const ContractsPage: React.FC = () => {
 
     // Use the embedded content if it has @page rules already (e.g., Pagaré Notarial template)
     // Otherwise wrap with a generic legal-paper shell
-    const hasPageRule = contract.content.includes('@page')
+    // El contenido almacenado (incluidos los contratos históricos) se sanitiza ANTES de escribirlo en la ventana de impresión.
+    const safeContent = sanitizeContractHtml(contract.content)
+    const hasPageRule = safeContent.includes('@page')
     const html = hasPageRule
-      ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(contract.contractNumber)}</title></head><body>${contract.content}</body></html>`
+      ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(contract.contractNumber)}</title></head><body>${safeContent}</body></html>`
       : `<!DOCTYPE html><html><head>
 <meta charset="UTF-8">
 <title>${escapeHtml(contract.contractNumber)}</title>
@@ -130,7 +133,7 @@ const ContractsPage: React.FC = () => {
   td, th { padding: 4px 8px; }
   @media screen { body { padding: 2rem; max-width: 900px; margin: auto; } }
 </style>
-</head><body>${contract.content}</body></html>`
+</head><body>${safeContent}</body></html>`
 
     win.document.open()
     win.document.write(html)
@@ -380,7 +383,7 @@ const ContractsPage: React.FC = () => {
               {showContentModal.content ? (
                 <div
                   className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap font-mono text-xs leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: showContentModal.content.replace(/\n/g, '<br/>') }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeContractHtml(showContentModal.content.replace(/\n/g, '<br/>')) }}
                 />
               ) : (
                 <div className="flex items-center justify-center h-32 text-slate-400">

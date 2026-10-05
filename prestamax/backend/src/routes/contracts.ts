@@ -233,9 +233,12 @@ router.post('/', authenticate, requireTenant, requirePermission('contracts.creat
 router.post('/:id/sign', authenticate, requireTenant, requirePermission('contracts.sign'), (req: AuthRequest, res: Response) => {
   try {
     const db = getDb();
-    db.prepare('UPDATE contracts SET status=?,signed_at=?,signed_by=?,signature_evidence_url=? WHERE id=?')
-      .run('signed', now(), req.body.signed_by || null, req.body.signature_evidence_url || null, req.params.id);
-    res.json(db.prepare('SELECT * FROM contracts WHERE id=?').get(req.params.id));
+    // Solo el contrato de ESTE tenant: uno inexistente y uno de otro tenant responden igual (404), sin revelar que existe.
+    const contract = db.prepare('SELECT id FROM contracts WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id);
+    if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+    db.prepare('UPDATE contracts SET status=?,signed_at=?,signed_by=?,signature_evidence_url=? WHERE id=? AND tenant_id=?')
+      .run('signed', now(), req.body.signed_by || null, req.body.signature_evidence_url || null, req.params.id, req.tenant.id);
+    res.json(db.prepare('SELECT * FROM contracts WHERE id=? AND tenant_id=?').get(req.params.id, req.tenant.id));
   } catch(e) { res.status(500).json({ error: 'Failed' }); }
 });
 
