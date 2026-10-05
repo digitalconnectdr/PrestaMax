@@ -792,8 +792,7 @@ router.put('/:id', authenticate, requireTenant, requirePermission('payments.edit
         payment_method = COALESCE(?, payment_method),
         bank_account_id = ?,
        reference = COALESCE(?, reference),
-        notes = COALESCE(?, notes),
-        updated_at = ?
+        notes = COALESCE(?, notes)
       WHERE id = ? AND tenant_id = ?
     `).run(
       d.paymentDate || d.payment_date || null,
@@ -801,8 +800,9 @@ router.put('/:id', authenticate, requireTenant, requirePermission('payments.edit
       d.bankAccountId !== undefined ? (d.bankAccountId || d.bank_account_id || null) : payment.bank_account_id,
       d.reference !== undefined ? (d.reference || null) : payment.reference,
       d.notes !== undefined ? (d.notes || null) : payment.notes,
-      now(), req.params.id, req.tenant.id
+      req.params.id, req.tenant.id
     );
+    // payments no tiene columna updated_at (solo created_at): la trazabilidad de la edición la da el audit_log de abajo.
 
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,changes) VALUES (?,?,?,?,?,?,?,?,?)').run(
       uuid(), req.tenant.id, req.user.id, req.user.full_name, 'payment_updated', 'payment', req.params.id,
