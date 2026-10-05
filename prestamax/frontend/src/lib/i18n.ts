@@ -2617,6 +2617,7 @@ const TR: Record<string, Tri> = {
   'prom.visit_notes_ph': { es: '¿Qué ocurrió en la visita?', en: 'What happened during the visit?', pt: 'O que aconteceu na visita?' },
   'col.number':         { es: 'Número', en: 'Number', pt: 'Número' },
   'col.bank':           { es: 'Cuenta Bancaria', en: 'Bank Account', pt: 'Conta Bancária' },
+  'pay.edit_account_locked': { es: 'La cuenta no se puede cambiar: el saldo de la cuenta ya se acreditó al registrar el pago. Para corregirla, anula el pago y regístralo de nuevo.', en: 'The account cannot be changed: the account balance was already credited when the payment was recorded. To fix it, void the payment and record it again.', pt: 'A conta não pode ser alterada: o saldo da conta já foi creditado ao registrar o pagamento. Para corrigir, anule o pagamento e registre-o novamente.' },
   'col.method':         { es: 'Método', en: 'Method', pt: 'Método' },
   'col.registered_by':  { es: 'Registrado por', en: 'Registered by', pt: 'Registrado por' },
 

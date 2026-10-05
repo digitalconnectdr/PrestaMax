@@ -775,8 +775,33 @@ router.put('/:id', authenticate, requireTenant, requirePermission('payments.edit
       return res.status(403).json({ error: 'No tienes permisos para editar pagos. Comunícate con tu encargado.' });
     }
 
-    const d = req.body;
-    const { payment_date, payment_method, bank_account_id, reference, notes } = req.body;
+    const d = req.body || {};
+    const has = (k: string) => Object.prototype.hasOwnProperty.call(d, k);
+
+    // ── Cuenta bancaria: NO editable ─────────────────────────────────────────
+    // Al registrar el pago se acredita el saldo de ESA cuenta (current_balance / loaned_balance) y al anularlo se revierte
+    // sobre la cuenta guardada en el pago. Cambiar payments.bank_account_id sin mover el saldo dejaría el movimiento en una
+    // cuenta y la reversa en otra. Un valor igual al actual (lo que envía la UI) es inofensivo; uno distinto se rechaza.
+    const normId = (v: any) => (v === undefined || v === null || v === '') ? null : String(v);
+    for (const key of ['bank_account_id', 'bankAccountId']) {
+      if (has(key) && normId(d[key]) !== normId(payment.bank_account_id)) {
+        return res.status(409).json({
+          error: 'La cuenta bancaria de un pago no se puede cambiar: el saldo de la cuenta ya se acreditó al registrarlo. Anula el pago y regístralo de nuevo con la cuenta correcta.',
+          code: 'PAYMENT_BANK_ACCOUNT_LOCKED',
+        });
+      }
+    }
+
+    // ── Método de pago ───────────────────────────────────────────────────────
+    // El método no mueve saldos (el crédito depende de bank_account_id), pero un método que exige cuenta (transferencia,
+    // cheque, tarjeta) no puede quedar en un pago sin cuenta, y la cuenta no se puede agregar aquí.
+    const newMethod: string | null = d.paymentMethod || d.payment_method || null;
+    if (newMethod && newMethod !== payment.payment_method && newMethod !== 'cash' && !payment.bank_account_id) {
+      return res.status(409).json({
+        error: 'Este pago se registró sin cuenta bancaria, así que no puede cambiarse a un método que requiere cuenta. Anúlalo y regístralo de nuevo.',
+        code: 'PAYMENT_METHOD_REQUIRES_ACCOUNT',
+      });
+    }
 
     const old = {
       payment_date: payment.payment_date,
@@ -786,30 +811,22 @@ router.put('/:id', authenticate, requireTenant, requirePermission('payments.edit
       notes: payment.notes,
     };
 
-    db.prepare(`
-      UPDATE payments SET
-        payment_date = COALESCE(?, payment_date),
-        payment_method = COALESCE(?, payment_method),
-        bank_account_id = ?,
-       reference = COALESCE(?, reference),
-        notes = COALESCE(?, notes)
-      WHERE id = ? AND tenant_id = ?
-    `).run(
-      d.paymentDate || d.payment_date || null,
-      d.paymentMethod || d.payment_method || null,
-      d.bankAccountId !== undefined ? (d.bankAccountId || d.bank_account_id || null) : payment.bank_account_id,
-      d.reference !== undefined ? (d.reference || null) : payment.reference,
-      d.notes !== undefined ? (d.notes || null) : payment.notes,
-      req.params.id, req.tenant.id
-    );
+    // reference / notes: ausente → se conserva; presente con null o "" → se limpia (NULL); presente con texto → se guarda.
+    const textOrNull = (v: any): string | null => (v === null || v === undefined || String(v).trim() === '') ? null : String(v);
+    const sets: string[] = ['payment_date = COALESCE(?, payment_date)', 'payment_method = COALESCE(?, payment_method)'];
+    const vals: any[] = [d.paymentDate || d.payment_date || null, newMethod];
+    if (has('reference')) { sets.push('reference = ?'); vals.push(textOrNull(d.reference)); }
+    if (has('notes'))     { sets.push('notes = ?');     vals.push(textOrNull(d.notes)); }
+    db.prepare(`UPDATE payments SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...vals, req.params.id, req.tenant.id);
     // payments no tiene columna updated_at (solo created_at): la trazabilidad de la edición la da el audit_log de abajo.
 
+    const updated = db.prepare('SELECT * FROM payments WHERE id=?').get(req.params.id) as any;
     db.prepare('INSERT INTO audit_logs (id,tenant_id,user_id,user_name,action,entity_type,entity_id,description,changes) VALUES (?,?,?,?,?,?,?,?,?)').run(
       uuid(), req.tenant.id, req.user.id, req.user.full_name, 'payment_updated', 'payment', req.params.id,
       `Modificó datos del pago ${req.params.id.slice(-8)}`,
-      JSON.stringify({ old, new: { payment_date: d.paymentDate||d.payment_date, payment_method: d.paymentMethod||d.payment_method } })
+      JSON.stringify({ old, new: { payment_date: updated.payment_date, payment_method: updated.payment_method, reference: updated.reference, notes: updated.notes } })
     );
-    res.json(db.prepare('SELECT * FROM payments WHERE id=?').get(req.params.id));
+    res.json(updated);
   } catch(e:any) { console.error(e); res.status(500).json({ error: e.message || 'Failed' }); }
 });
 

@@ -138,7 +138,8 @@ const PaymentsPage: React.FC = () => {
 
   // Edit payment state
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
-  const [editForm, setEditForm] = useState({ paymentDate: '', paymentMethod: 'cash', bankAccountId: '', reference: '', notes: '' })
+  // La cuenta bancaria NO es editable (el saldo de esa cuenta ya se acreditó al registrar el pago): no forma parte del formulario.
+  const [editForm, setEditForm] = useState({ paymentDate: '', paymentMethod: 'cash', reference: '', notes: '' })
   const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   // Void payment state
@@ -210,7 +211,6 @@ const PaymentsPage: React.FC = () => {
     setEditForm({
       paymentDate: payment.paymentDate ? payment.paymentDate.slice(0, 10) : '',
       paymentMethod: payment.paymentMethod || 'cash',
-      bankAccountId: payment.bankAccountId || '',
       reference: payment.reference || '',
       notes: payment.notes || '',
     })
@@ -223,7 +223,7 @@ const PaymentsPage: React.FC = () => {
       await api.put(`/payments/${editingPayment.id}`, {
         paymentDate: editForm.paymentDate,
         paymentMethod: editForm.paymentMethod,
-        bankAccountId: editForm.bankAccountId || null,
+        // reference / notes se envían siempre: "" los limpia en el servidor
         reference: editForm.reference,
         notes: editForm.notes,
       })
@@ -978,30 +978,29 @@ const PaymentsPage: React.FC = () => {
                 <select
                   className="input-field"
                   value={editForm.paymentMethod}
-                  onChange={e => setEditForm(f => ({ ...f, paymentMethod: e.target.value, bankAccountId: e.target.value === 'cash' ? '' : f.bankAccountId }))}
+                  onChange={e => setEditForm(f => ({ ...f, paymentMethod: e.target.value }))}
                 >
+                  {/* Un pago registrado sin cuenta bancaria no puede pasar a un método que exige cuenta (la cuenta no se puede agregar aquí) */}
                   <option value="cash">{t('method.cash')}</option>
-                  <option value="transfer">{t('method.transfer')}</option>
-                  <option value="check">{t('method.check')}</option>
-                  <option value="card">{t('method.card')}</option>
+                  {([['transfer', 'method.transfer'], ['check', 'method.check'], ['card', 'method.card']] as const).map(([v, k]) => (
+                    <option key={v} value={v} disabled={!editingPayment.bankAccountId && editingPayment.paymentMethod !== v}>{t(k)}</option>
+                  ))}
                 </select>
               </div>
 
-              {/* Bank account */}
+              {/* Bank account — solo lectura */}
               <div>
-                <label className="form-label">
-                  {t('col.bank')}{editForm.paymentMethod !== 'cash' ? ` ${t('pay.receiver')}` : ` (${t('common.optional')})`}
-                </label>
-                <select
-                  className="input-field"
-                  value={editForm.bankAccountId}
-                  onChange={e => setEditForm(f => ({ ...f, bankAccountId: e.target.value }))}
+                <label className="form-label">{t('col.bank')}</label>
+                <div
+                  className="input-field bg-slate-50 text-slate-600 cursor-not-allowed"
+                  aria-readonly="true"
+                  data-testid="edit-payment-bank-readonly"
                 >
-                  <option value="">{editForm.paymentMethod === 'cash' ? t('pay.no_account') : t('pay.select_account')}</option>
-                  {bankAccounts.map(ba => (
-                    <option key={ba.id} value={ba.id}>{ba.bankName} – {ba.accountNumber}</option>
-                  ))}
-                </select>
+                  {editingPayment.bankAccountName
+                    ? `${editingPayment.bankAccountName}${(editingPayment as any).bankAccountNumber ? ` – ${(editingPayment as any).bankAccountNumber}` : ''}`
+                    : t('pay.no_account')}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">{t('pay.edit_account_locked')}</p>
               </div>
 
               {/* Reference */}
