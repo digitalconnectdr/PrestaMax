@@ -76,7 +76,8 @@ app.use(helmet({
 
 const ALLOWED_ORIGINS = [
   FRONTEND_ORIGIN,
-  'https://credytek.vercel.app',
+  'https://credytek.digitalconnectdr.com',
+  'https://credytek.vercel.app',   // transición: Vercel deshabilitado; quitar cuando se retire
   'https://prestamax-umber.vercel.app', // transición — quitar cuando se retire el dominio viejo
   'https://credytek.com',
   'https://www.credytek.com',

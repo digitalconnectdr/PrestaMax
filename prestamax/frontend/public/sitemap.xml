@@ -2,29 +2,29 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://credytek.vercel.app/</loc>
-    <xhtml:link rel="alternate" hreflang="es" href="https://credytek.vercel.app/?lang=es"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://credytek.vercel.app/?lang=en"/>
-    <xhtml:link rel="alternate" hreflang="pt" href="https://credytek.vercel.app/?lang=pt"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://credytek.vercel.app/"/>
+    <loc>https://credytek.digitalconnectdr.com/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://credytek.digitalconnectdr.com/?lang=es"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://credytek.digitalconnectdr.com/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://credytek.digitalconnectdr.com/?lang=pt"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://credytek.digitalconnectdr.com/"/>
     <lastmod>2026-06-21</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/contact</loc>
+    <loc>https://credytek.digitalconnectdr.com/contact</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/terms</loc>
+    <loc>https://credytek.digitalconnectdr.com/terms</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/privacy</loc>
+    <loc>https://credytek.digitalconnectdr.com/privacy</loc>
     <lastmod>2026-06-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
@@ -34,55 +34,55 @@
        artículo o página nueva (ver frontend/src/lib/resources.ts y
        seoContent.ts para el registro de contenido). -->
   <url>
-    <loc>https://credytek.vercel.app/software-prestamos-republica-dominicana</loc>
+    <loc>https://credytek.digitalconnectdr.com/software-prestamos-republica-dominicana</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/software-para-prestamistas</loc>
+    <loc>https://credytek.digitalconnectdr.com/software-para-prestamistas</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/control-prestamos-cobros</loc>
+    <loc>https://credytek.digitalconnectdr.com/control-prestamos-cobros</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/alternativa-excel-prestamos</loc>
+    <loc>https://credytek.digitalconnectdr.com/alternativa-excel-prestamos</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/calculadora-prestamos</loc>
+    <loc>https://credytek.digitalconnectdr.com/calculadora-prestamos</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/recursos</loc>
+    <loc>https://credytek.digitalconnectdr.com/recursos</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/recursos/como-llevar-control-de-prestamos</loc>
+    <loc>https://credytek.digitalconnectdr.com/recursos/como-llevar-control-de-prestamos</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/recursos/como-organizar-cartera-de-prestamos</loc>
+    <loc>https://credytek.digitalconnectdr.com/recursos/como-organizar-cartera-de-prestamos</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://credytek.vercel.app/recursos/como-controlar-cobros-y-pagos</loc>
+    <loc>https://credytek.digitalconnectdr.com/recursos/como-controlar-cobros-y-pagos</loc>
     <lastmod>2026-09-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>

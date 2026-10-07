@@ -5,8 +5,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Share2, Link2, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useT } from '@/lib/i18n'
+import { SITE_URL } from '@/lib/site'
 
-const SHARE_URL = 'https://credytek.vercel.app/'
+const SHARE_URL = `${SITE_URL}/`
 
 // Iconos de marca (simple-icons paths) — lucide ya no incluye logos de marca.
 const Icon = {

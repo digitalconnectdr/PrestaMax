@@ -38,10 +38,10 @@ Prestamistas individuales, financieras, cooperativas de ahorro y crédito, casas
 
 ## Enlaces
 
-- [Sitio web](https://credytek.vercel.app/): página principal de CredyTek
-- [Contacto / solicitar plan](https://credytek.vercel.app/contact): formulario para pedir una demo o activar un plan
-- [Términos de servicio](https://credytek.vercel.app/terms): condiciones de uso
-- [Política de privacidad](https://credytek.vercel.app/privacy): tratamiento de datos personales
+- [Sitio web](https://credytek.digitalconnectdr.com/): página principal de CredyTek
+- [Contacto / solicitar plan](https://credytek.digitalconnectdr.com/contact): formulario para pedir una demo o activar un plan
+- [Términos de servicio](https://credytek.digitalconnectdr.com/terms): condiciones de uso
+- [Política de privacidad](https://credytek.digitalconnectdr.com/privacy): tratamiento de datos personales
 - [Ventas](mailto:credytek@digitalconnectdr.com): correo de ventas
 - [Soporte](mailto:credyteksupport@digitalconnectdr.com): correo de soporte técnico
 

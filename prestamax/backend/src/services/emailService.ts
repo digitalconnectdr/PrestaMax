@@ -13,7 +13,7 @@
 //   ADMIN_EMAIL=jcpenalo@gmail.com           — destinatario(s), separados por coma
 //   ADMIN_WHATSAPP=18095551234               — solo digitos, para wa.me link
 //   FROM_EMAIL=CredyTek <noreply@prestamax.com>   — opcional, default usa onboarding@resend.dev
-//   FRONTEND_URL=https://credytek.vercel.app — para link al admin
+//   FRONTEND_URL=https://credytek.digitalconnectdr.com — para link al admin
 
 // Escapa texto que puede venir de formularios publicos o de usuarios antes de
 // interpolarlo en HTML de email (evita inyeccion de enlaces/markup en el buzon).
@@ -85,7 +85,7 @@ function buildHtml(p: InquiryPayload): string {
   const sizeLbl    = SIZE_LABELS[p.portfolio_size || ''] || p.portfolio_size || '—';
   const sourceLbl  = SOURCE_LABELS[p.source || ''] || p.source || '—';
   const countryLbl = COUNTRY_LABELS[p.country] || p.country;
-  const frontUrl   = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const frontUrl   = process.env.FRONTEND_URL || 'https://credytek.digitalconnectdr.com';
   const waLink     = buildWaLink(p.whatsapp, p.full_name, p.plan_interest);
 
   return `
@@ -211,7 +211,7 @@ interface WelcomePayload {
 }
 
 function buildWelcomeHtml(p: WelcomePayload): string {
-  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.digitalconnectdr.com';
   const firstName = esc((p.adminName || '').trim().split(/\s+/)[0] || p.adminName);
   const intro = p.trialDays > 0
     ? `Tu cuenta de <strong>${esc(p.tenantName)}</strong> ya está activa, con ${p.trialDays} días de prueba gratis y sin tarjeta de crédito.`
@@ -240,7 +240,7 @@ function buildWelcomeHtml(p: WelcomePayload): string {
 }
 
 function buildWelcomeText(p: WelcomePayload): string {
-  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.digitalconnectdr.com';
   const firstName = (p.adminName || '').trim().split(/\s+/)[0] || p.adminName;
   const intro = p.trialDays > 0
     ? `Tu cuenta de ${p.tenantName} ya esta activa, con ${p.trialDays} dias de prueba gratis y sin tarjeta de credito.`
@@ -287,7 +287,7 @@ function trialHeadline(p: TrialReminderPayload, plain: boolean): string {
 }
 
 function buildTrialReminderHtml(p: TrialReminderPayload): string {
-  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.digitalconnectdr.com';
   const headline = trialHeadline(p, false);
   return `
 <!DOCTYPE html>
@@ -308,7 +308,7 @@ function buildTrialReminderHtml(p: TrialReminderPayload): string {
 }
 
 function buildTrialReminderText(p: TrialReminderPayload): string {
-  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.digitalconnectdr.com';
   const headline = trialHeadline(p, true);
   return [
     headline.toUpperCase(),
@@ -362,7 +362,7 @@ export async function sendPasswordResetEmail(p: { toEmail: string; fullName: str
 // ─── Alerta de inicio de sesion desde ubicacion nueva ────────────────────
 export async function sendNewLoginAlertEmail(p: { toEmail: string; fullName: string; city: string | null; country: string | null; ip: string | null }): Promise<boolean> {
   if (!p.toEmail) return false;
-  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.digitalconnectdr.com';
   const where = [p.city, p.country].filter(Boolean).join(', ') || 'una ubicación desconocida';
   const html = `
 <!DOCTYPE html>
@@ -408,7 +408,7 @@ function buildDigestRow(label: string, value: string): string {
 
 export async function sendDashboardDigestEmail(p: DashboardDigestPayload): Promise<boolean> {
   if (!p.toEmail) return false;
-  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+  const frontUrl = process.env.FRONTEND_URL || 'https://credytek.digitalconnectdr.com';
   const freqLabel: Record<string, string> = { daily: 'diario', weekly: 'semanal', monthly: 'mensual' };
   const fmt = (n: number) => `RD$${(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   const subject = `Tu resumen ${freqLabel[p.frequency] || ''} de CredyTek — ${p.tenantName}`;

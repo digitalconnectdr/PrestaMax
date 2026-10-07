@@ -4,8 +4,9 @@
 // ejecuta JavaScript (Googlebot, según la auditoría de Fase 1). No resuelve
 // indexación para crawlers que NO ejecutan JS — ver el reporte de Fase 4.
 import { useEffect } from 'react'
+import { SITE_URL } from '@/lib/site'
 
-const SITE = 'https://credytek.vercel.app'
+const SITE = SITE_URL
 
 function upsertMeta(attr: 'name' | 'property', key: string, content: string) {
   let el = document.querySelector(`meta[${attr}="${key}"]`) as HTMLMetaElement | null

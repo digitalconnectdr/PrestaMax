@@ -340,7 +340,7 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
       const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
       const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
       db.prepare('INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES (?,?,?,?)').run(uuid(), user.id, tokenHash, expiresAt);
-      const frontUrl = process.env.FRONTEND_URL || 'https://credytek.vercel.app';
+      const frontUrl = process.env.FRONTEND_URL || 'https://credytek.digitalconnectdr.com';
       const resetUrl = `${frontUrl}/reset-password?token=${rawToken}`;
       sendPasswordResetEmail({ toEmail: user.email, fullName: user.full_name, resetUrl }).catch(() => {});
     }

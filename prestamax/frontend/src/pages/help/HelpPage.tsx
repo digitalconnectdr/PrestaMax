@@ -168,7 +168,7 @@ const GUIDES: { section: string; items: Guide[] }[] = [
         shortcutLabel: 'Ir a Solicitudes',
         requiredPermission: 'requests.view',
         steps: [
-          { title: 'Abre Solicitudes y obtén tu enlace', description: 'En el menú lateral entra a "Solicitudes" y pulsa el botón "Link del Portal". Se muestra el enlace único de tu empresa (ej. https://credytek.vercel.app/apply/abc123); usa "Copiar" para copiarlo.', tip: 'Si pulsas "Nuevo link", se genera otro enlace y el anterior deja de funcionar.' },
+          { title: 'Abre Solicitudes y obtén tu enlace', description: 'En el menú lateral entra a "Solicitudes" y pulsa el botón "Link del Portal". Se muestra el enlace único de tu empresa (ej. https://credytek.digitalconnectdr.com/apply/abc123); usa "Copiar" para copiarlo.', tip: 'Si pulsas "Nuevo link", se genera otro enlace y el anterior deja de funcionar.' },
           { title: 'Comparte el enlace', description: 'Por WhatsApp, en tu Instagram bio, código QR en tu local, etc. Cualquier persona puede llenar la solicitud desde el celular sin estar registrada en tu sistema.' },
           { title: 'Revisa solicitudes entrantes', description: 'En "Solicitudes" verás todas las solicitudes nuevas. Cada una con datos del solicitante: nombre, cédula, teléfono, monto solicitado, plazo deseado.' },
           { title: 'Aprueba o rechaza', description: 'Revisa la solicitud y decide. Si apruebas, puedes convertirla directamente en préstamo: rellena los campos faltantes (cuenta de desembolso, fecha primer pago) y al guardar se crea cliente + préstamo en un solo paso.', tip: 'Si rechazas, puedes agregar una nota explicando por qué (sirve para auditoría interna).' },

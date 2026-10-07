@@ -32,7 +32,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const DIST = path.join(ROOT, 'dist')
 const TMP = path.join(ROOT, 'node_modules', '.prerender-tmp')
-const SITE = 'https://credytek.vercel.app'
+const SITE = 'https://credytek.digitalconnectdr.com'
 
 function loadDataModule(srcRelPath) {
   const src = path.join(ROOT, 'src', srcRelPath)

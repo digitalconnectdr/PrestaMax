@@ -37,4 +37,4 @@ Disallow: /portal
 Disallow: /admin
 Disallow: /apply
 
-Sitemap: https://credytek.vercel.app/sitemap.xml
+Sitemap: https://credytek.digitalconnectdr.com/sitemap.xml

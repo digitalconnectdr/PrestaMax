@@ -9,8 +9,9 @@ import SeoHead from '@/components/public/SeoHead'
 import { getArticleBySlug, ARTICLES } from '@/lib/resources'
 import { getSeoPageBySlug } from '@/lib/seoContent'
 import { trackResourceView, trackSeoCtaClick } from '@/lib/analytics'
+import { SITE_URL } from '@/lib/site'
 
-const SITE = 'https://credytek.vercel.app'
+const SITE = SITE_URL
 
 const ResourceArticlePage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>()
