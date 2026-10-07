@@ -20,6 +20,19 @@ describe('.htaccess (Hostinger) equivale a vercel.json', () => {
     expect(htaccess).toContain('RewriteCond %{REQUEST_URI} !^/assets/');
     expect(htaccess).toContain('RewriteRule ^ /index.html [L]');
   });
+  it('las páginas prerenderizadas se sirven sin 301 a la barra final y la regla va antes del fallback SPA', () => {
+    const rule = 'RewriteRule ^(.+?)/?$ /$1/index.html [L]';
+    expect(htaccess).toContain('RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f');
+    expect(htaccess).toContain(rule);
+    expect(htaccess.indexOf(rule)).toBeLessThan(htaccess.indexOf('RewriteRule ^ /index.html [L]'));
+    expect(htaccess.indexOf('RewriteRule ^assets/ - [E=CT_ASSET:1]')).toBeLessThan(htaccess.indexOf(rule));
+    // no depende de directivas que algunos servidores no aceptan en .htaccess
+    expect(htaccess).not.toMatch(/DirectorySlash/i);
+    // el sitemap y el canonical de cada página prerenderizada no llevan barra final
+    const sm = fs.readFileSync(path.join(FE, 'public/sitemap.xml'), 'utf8');
+    const locs = [...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]).filter(l => l.split('/').length > 4);
+    for (const l of locs) expect(l.endsWith('/'), l).toBe(false);
+  });
   it('HTTPS forzado, caché inmutable en /assets y HTML siempre revalidado', () => {
     expect(htaccess).toContain('RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]');
     expect(htaccess).toContain('Header set Cache-Control "public, max-age=31536000, immutable" env=CT_ASSET');

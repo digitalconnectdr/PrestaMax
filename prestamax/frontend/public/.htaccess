@@ -13,6 +13,12 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 # 2) /assets/* es inmutable (hash en el nombre): un archivo que no existe responde 404 real, no index.html
 RewriteRule ^assets/ - [E=CT_ASSET:1]
 
+# 2b) Paginas prerenderizadas (carpeta con index.html, p. ej. /recursos): se sirven directo SIN el 301 a /recursos/ que hace
+#     Apache con las carpetas, para que canonical y sitemap (sin barra final) apunten a una URL que responde 200
+RewriteCond %{REQUEST_URI} !^/assets/
+RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
+RewriteRule ^(.+?)/?$ /$1/index.html [L]
+
 # 3) SPA: lo que no sea un archivo o carpeta real (incluye las paginas prerenderizadas, que son carpetas con index.html)
 #    se sirve con index.html y React Router resuelve la ruta (/loans, /clients/123, ...)
 RewriteCond %{REQUEST_URI} !^/assets/
